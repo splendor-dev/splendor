@@ -35,6 +35,22 @@ def load_source_record(path: Path) -> SourceRecord:
     return SourceRecord.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def resolve_manifest_storage_path(root: Path, stored_path_value: str) -> Path:
+    stored_path = Path(stored_path_value)
+    if stored_path.is_absolute() or ".." in stored_path.parts:
+        msg = f"Stored source path escapes workspace root: {stored_path_value}"
+        raise ValueError(msg)
+
+    resolved = (root / stored_path).resolve()
+    workspace_root = root.resolve()
+    try:
+        resolved.relative_to(workspace_root)
+    except ValueError as exc:
+        msg = f"Stored source path escapes workspace root: {stored_path_value}"
+        raise ValueError(msg) from exc
+    return resolved
+
+
 def register_source(root: Path, source_path: Path) -> RegisteredSource:
     candidate = source_path.expanduser().resolve()
     if not candidate.exists():
@@ -62,7 +78,7 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
                 f"expected {existing.checksum}, got {checksum}"
             )
             raise ValueError(msg)
-        existing_stored_path = root / Path(existing.path)
+        existing_stored_path = resolve_manifest_storage_path(root, existing.path)
         return RegisteredSource(
             record=existing,
             manifest_path=manifest_path,
@@ -72,6 +88,13 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
         )
 
     copied = copy_file_if_missing(candidate, stored_path)
+    stored_checksum = sha256_file(stored_path)
+    if stored_checksum != checksum:
+        msg = (
+            f"Stored source checksum mismatch for {stored_path}: "
+            f"expected {checksum}, got {stored_checksum}"
+        )
+        raise ValueError(msg)
     record = SourceRecord(
         source_id=source_id,
         title=candidate.stem.replace("_", " ").replace("-", " ").strip() or candidate.name,

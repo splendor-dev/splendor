@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from splendor.config import default_config, load_config, write_config
+from splendor.config import config_path_for, default_config, load_config, write_config
 from splendor.layout import INDEX_TEMPLATE, LOG_TEMPLATE, required_directories, resolve_layout
 from splendor.utils.fs import ensure_directory, write_if_missing
 
@@ -46,7 +46,7 @@ class InitResult:
 
 
 def initialize_workspace(root: Path) -> InitResult:
-    config_path = root / "splendor.yaml"
+    config_path = config_path_for(root)
     config = load_config(root) if config_path.exists() else default_config(project_name=root.name)
     if not config.project_name:
         config = config.model_copy(update={"project_name": root.name})
