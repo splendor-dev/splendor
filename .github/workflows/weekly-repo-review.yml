@@ -1,0 +1,20 @@
+name: weekly-repo-review
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  security-events: read
+
+jobs:
+  weekly-review:
+    uses: shaypal5/repo-review-automation/.github/workflows/repo-review.yml@v1.0.2
+    with:
+      create_issues: true
+      config_path: .github/repo-review.yml
+    secrets: inherit
