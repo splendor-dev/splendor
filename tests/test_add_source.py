@@ -97,3 +97,15 @@ def test_add_source_rejects_corrupted_existing_stored_copy(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="Stored source checksum mismatch"):
         add_source(tmp_path, source)
+
+
+def test_add_source_rejects_missing_existing_stored_copy(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "notes.txt"
+    source.write_text("same-content\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    first.stored_path.unlink()
+
+    with pytest.raises(FileNotFoundError, match="Stored source copy is missing"):
+        add_source(tmp_path, source)

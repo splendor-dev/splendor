@@ -38,3 +38,20 @@ def test_cli_add_source_resolves_relative_paths_against_root(tmp_path: Path, cap
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "Registered source" in captured.out
+
+
+def test_cli_add_source_expands_user_paths(tmp_path: Path, capsys, monkeypatch) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    source = fake_home / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    main(["--root", str(repo_root), "init"])
+    exit_code = main(["--root", str(repo_root), "add-source", "~/brief.md"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Registered source" in captured.out

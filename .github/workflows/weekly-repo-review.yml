@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   weekly-review:
+    if: ${{ secrets.OPENAI_API_KEY != '' }}
     uses: shaypal5/repo-review-automation/.github/workflows/repo-review.yml@v1.0.2
     with:
       create_issues: true

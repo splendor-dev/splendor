@@ -79,6 +79,16 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
             )
             raise ValueError(msg)
         existing_stored_path = resolve_manifest_storage_path(root, existing.path)
+        if not existing_stored_path.exists():
+            msg = f"Stored source copy is missing for existing manifest: {existing_stored_path}"
+            raise FileNotFoundError(msg)
+        existing_stored_checksum = sha256_file(existing_stored_path)
+        if existing_stored_checksum != existing.checksum:
+            msg = (
+                f"Stored source checksum mismatch for existing manifest {manifest_path}: "
+                f"expected {existing.checksum}, got {existing_stored_checksum}"
+            )
+            raise ValueError(msg)
         return RegisteredSource(
             record=existing,
             manifest_path=manifest_path,

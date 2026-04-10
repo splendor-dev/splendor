@@ -38,7 +38,8 @@ def handle_init(args: argparse.Namespace) -> int:
 
 def handle_add_source(args: argparse.Namespace) -> int:
     root = args.root.resolve()
-    source_path = args.path if args.path.is_absolute() else root / args.path
+    candidate_path = args.path.expanduser()
+    source_path = candidate_path if candidate_path.is_absolute() else root / candidate_path
     result = add_source(root, source_path)
     action = "Already registered" if result.already_registered else "Registered"
     print(f"{action} source {result.source_id}")
