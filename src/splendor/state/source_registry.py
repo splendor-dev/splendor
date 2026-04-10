@@ -51,6 +51,24 @@ def resolve_manifest_storage_path(root: Path, stored_path_value: str) -> Path:
     return resolved
 
 
+def validate_stored_source_location(
+    stored_path: Path, raw_sources_dir: Path, source_id: str, stored_path_value: str
+) -> None:
+    raw_sources_root = raw_sources_dir.resolve()
+    try:
+        relative_path = stored_path.relative_to(raw_sources_root)
+    except ValueError as exc:
+        msg = (
+            "Stored source path is outside the configured raw source storage area: "
+            f"{stored_path_value}"
+        )
+        raise ValueError(msg) from exc
+
+    if not relative_path.parts or relative_path.parts[0] != source_id:
+        msg = f"Stored source path is outside the expected source directory: {stored_path_value}"
+        raise ValueError(msg)
+
+
 def register_source(root: Path, source_path: Path) -> RegisteredSource:
     candidate = source_path.expanduser().resolve()
     if not candidate.exists():
@@ -79,6 +97,12 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
             )
             raise ValueError(msg)
         existing_stored_path = resolve_manifest_storage_path(root, existing.path)
+        validate_stored_source_location(
+            existing_stored_path,
+            layout.raw_sources_dir,
+            source_id,
+            existing.path,
+        )
         if not existing_stored_path.exists():
             msg = f"Stored source copy is missing for existing manifest: {existing_stored_path}"
             raise FileNotFoundError(msg)

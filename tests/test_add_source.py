@@ -86,6 +86,40 @@ def test_add_source_rejects_manifest_path_outside_workspace(tmp_path: Path) -> N
         add_source(tmp_path, source)
 
 
+def test_add_source_rejects_manifest_path_outside_raw_sources_dir(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "notes.txt"
+    source.write_text("same-content\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
+    manifest["path"] = "wiki/index.md"
+    first.manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="outside the configured raw source storage area"):
+        add_source(tmp_path, source)
+
+
+def test_add_source_rejects_manifest_path_for_wrong_source_dir(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "notes.txt"
+    source.write_text("same-content\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
+    manifest["path"] = "raw/sources/src-other/notes.txt"
+    first.manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="outside the expected source directory"):
+        add_source(tmp_path, source)
+
+
 def test_add_source_rejects_corrupted_existing_stored_copy(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "notes.txt"
