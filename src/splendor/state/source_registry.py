@@ -56,7 +56,13 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
 
     if manifest_path.exists():
         existing = load_source_record(manifest_path)
-        existing_stored_path = root / existing.path
+        if existing.checksum != checksum:
+            msg = (
+                f"Checksum mismatch for existing source manifest {manifest_path}: "
+                f"expected {existing.checksum}, got {checksum}"
+            )
+            raise ValueError(msg)
+        existing_stored_path = root / Path(existing.path)
         return RegisteredSource(
             record=existing,
             manifest_path=manifest_path,
@@ -70,7 +76,7 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
         source_id=source_id,
         title=candidate.stem.replace("_", " ").replace("-", " ").strip() or candidate.name,
         source_type=candidate.suffix.lstrip(".") or "file",
-        path=str(stored_path.relative_to(root)),
+        path=stored_path.relative_to(root).as_posix(),
         checksum=checksum,
         added_at=utc_now_iso(),
         pipeline_version=__version__,
