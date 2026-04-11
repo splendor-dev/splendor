@@ -111,6 +111,25 @@ def test_ingest_source_recreates_missing_page_without_duplicate_index_entries(
     assert log_content.count(f"Ingested source `{added.source_id}`") == 2
 
 
+def test_ingest_source_no_op_uses_configured_wiki_layout(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        "schema_version: '1'\nproject_name: custom\nlayout:\n  wiki_dir: knowledge\n",
+        encoding="utf-8",
+    )
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    first = ingest_source(tmp_path, added.source_id)
+    second = ingest_source(tmp_path, added.source_id)
+
+    assert first.page_path == tmp_path / "knowledge" / "sources" / f"{added.source_id}.md"
+    assert second.no_op is True
+    source_record = load_source_record(added.manifest_path)
+    assert f"knowledge/sources/{added.source_id}.md" in source_record.linked_pages
+
+
 def test_ingest_source_rejects_unsupported_type(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "diagram.bin"
@@ -150,6 +169,38 @@ def test_ingest_source_rejects_invalid_utf8_text(tmp_path: Path) -> None:
     assert load_run_record(run_paths[0]).status == "failed"
 
 
+def test_ingest_source_requires_workspace_index_file(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    (tmp_path / "wiki" / "index.md").unlink()
+
+    with pytest.raises(RuntimeError, match="missing required wiki files"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "registered"
+    assert list((tmp_path / "state" / "queue").glob("*.json")) == []
+    assert list((tmp_path / "state" / "runs").glob("*.json")) == []
+
+
+def test_ingest_source_requires_workspace_log_file(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    (tmp_path / "wiki" / "log.md").unlink()
+
+    with pytest.raises(RuntimeError, match="missing required wiki files"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "registered"
+    assert list((tmp_path / "state" / "queue").glob("*.json")) == []
+    assert list((tmp_path / "state" / "runs").glob("*.json")) == []
+
+
 def test_ingest_source_missing_source_id_does_not_create_runtime_state(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
 
@@ -171,3 +222,55 @@ def test_ingest_source_validates_stored_copy_checksum(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Stored source checksum mismatch"):
         ingest_source(tmp_path, added.source_id)
+
+
+def test_ingest_source_extract_uses_safe_fence_for_backticks(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\n```python\nprint('hi')\n```\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    page_content = result.page_path.read_text(encoding="utf-8")
+    assert "````text" in page_content
+    assert "\n````\n\n## Provenance" in page_content
+
+
+def test_ingest_source_rolls_back_wiki_on_success_commit_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    original_index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+    original_log = (tmp_path / "wiki" / "log.md").read_text(encoding="utf-8")
+
+    import splendor.commands.ingest as ingest_module
+
+    original_write_source_record = ingest_module.write_source_record
+
+    def fail_on_success_write(path: Path, record) -> Path:
+        if getattr(record, "status", None) == "ingested":
+            raise OSError("disk full")
+        return original_write_source_record(path, record)
+
+    monkeypatch.setattr(ingest_module, "write_source_record", fail_on_success_write)
+
+    with pytest.raises(RuntimeError, match="committing outputs"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "registered"
+    assert source_record.last_run_id is None
+    assert (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8") == original_index
+    assert (tmp_path / "wiki" / "log.md").read_text(encoding="utf-8") == original_log
+    assert not (tmp_path / "wiki" / "sources" / f"{added.source_id}.md").exists()
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert load_queue_item(queue_path).status == "failed"
+    assert len(run_paths) == 1
+    assert load_run_record(run_paths[0]).status == "failed"

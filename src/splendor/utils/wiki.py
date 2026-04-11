@@ -24,6 +24,20 @@ def render_frontmatter(record: KnowledgePageFrontmatter) -> str:
     return yaml.safe_dump(record.model_dump(mode="json"), sort_keys=False).strip()
 
 
+def _fenced_extract_block(extract: str) -> str:
+    max_backtick_run = 0
+    current_run = 0
+    for char in extract:
+        if char == "`":
+            current_run += 1
+            max_backtick_run = max(max_backtick_run, current_run)
+        else:
+            current_run = 0
+
+    fence = "`" * max(3, max_backtick_run + 1)
+    return f"{fence}text\n{extract}\n{fence}"
+
+
 def render_source_summary_page(
     frontmatter: KnowledgePageFrontmatter,
     *,
@@ -45,9 +59,7 @@ def render_source_summary_page(
         "## Key Facts\n\n"
         f"{key_fact_lines}\n\n"
         "## Extract\n\n"
-        "```text\n"
-        f"{extract}\n"
-        "```\n\n"
+        f"{_fenced_extract_block(extract)}\n\n"
         "## Provenance\n\n"
         f"{provenance_lines}\n"
     )

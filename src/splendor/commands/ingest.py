@@ -111,11 +111,11 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     if source.status != "ingested" or not source.last_run_id:
         return False
 
-    page_relpath = f"wiki/sources/{source.source_id}.md"
+    page_path = _page_path_for(layout.wiki_sources_dir, source.source_id)
+    page_relpath = _relative_to_root(root, page_path)
     if page_relpath not in source.linked_pages:
         return False
 
-    page_path = root / page_relpath
     if not page_path.exists():
         return False
 
@@ -127,9 +127,88 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     return run.status == "succeeded" and run.pipeline_version == __version__
 
 
+def _validate_workspace_files(layout) -> None:
+    required_files = [layout.index_file, layout.log_file]
+    missing = [path for path in required_files if not path.exists()]
+    if missing:
+        joined = ", ".join(str(path) for path in missing)
+        msg = f"Workspace is missing required wiki files: {joined}. Run `splendor init`."
+        raise RuntimeError(msg)
+
+
+def _mark_attempt_failed(
+    *,
+    queue_path: Path,
+    queue_item: QueueItemRecord,
+    run_path: Path,
+    run: RunRecord,
+    error_message: str,
+    manifest_path: Path | None = None,
+    source: SourceRecord | None = None,
+    run_id: str | None = None,
+) -> None:
+    failed_run = run.model_copy(
+        update={
+            "finished_at": utc_now_iso(),
+            "status": "failed",
+            "errors": [error_message],
+        }
+    )
+    write_run_record(run_path, failed_run)
+    failed_queue = queue_item.model_copy(
+        update={
+            "status": "failed",
+            "updated_at": utc_now_iso(),
+            "last_error": error_message,
+        }
+    )
+    write_queue_item(queue_path, failed_queue)
+    if manifest_path is not None and source is not None and run_id is not None:
+        failed_source = source.model_copy(update={"status": "failed", "last_run_id": run_id})
+        write_source_record(manifest_path, failed_source)
+
+
+def _commit_success(
+    *,
+    layout,
+    manifest_path: Path,
+    success_source: SourceRecord,
+    run_path: Path,
+    success_run: RunRecord,
+    queue_path: Path,
+    success_queue: QueueItemRecord,
+    wiki_payload: WikiUpdatePayload,
+) -> None:
+    tracked_paths = [
+        manifest_path,
+        run_path,
+        queue_path,
+        wiki_payload.page_path,
+        layout.index_file,
+        layout.log_file,
+    ]
+    previous_content: dict[Path, str | None] = {}
+    for path in tracked_paths:
+        previous_content[path] = path.read_text(encoding="utf-8") if path.exists() else None
+
+    try:
+        apply_wiki_updates(layout, wiki_payload)
+        write_source_record(manifest_path, success_source)
+        write_run_record(run_path, success_run)
+        write_queue_item(queue_path, success_queue)
+    except Exception:
+        for path, content in previous_content.items():
+            if content is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_text(content, encoding="utf-8")
+        raise
+
+
 def ingest_source(root: Path, source_id: str) -> IngestResult:
     config = load_config(root)
     layout = resolve_layout(root, config)
+    _validate_workspace_files(layout)
     manifest_path = manifest_path_for(root, source_id)
     if not manifest_path.exists():
         msg = f"Unknown source ID: {source_id}"
@@ -254,16 +333,6 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             f"- {now} Ingested source `{source_id}` via run `{run_id}` into `{page_relpath}`."
         )
         log_content = append_log_entry(layout.log_file.read_text(encoding="utf-8"), log_entry)
-        apply_wiki_updates(
-            layout,
-            WikiUpdatePayload(
-                page_path=page_path,
-                page_content=page_content,
-                index_content=index_content,
-                log_content=log_content,
-            ),
-        )
-
         updated_source = source.model_copy(
             update={
                 "status": "ingested",
@@ -283,9 +352,22 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 ],
             }
         )
-        write_run_record(run_path, run)
         queue_item = queue_item.model_copy(update={"status": "done", "updated_at": utc_now_iso()})
-        write_queue_item(queue_path, queue_item)
+        _commit_success(
+            layout=layout,
+            manifest_path=manifest_path,
+            success_source=updated_source,
+            run_path=run_path,
+            success_run=run,
+            queue_path=queue_path,
+            success_queue=queue_item,
+            wiki_payload=WikiUpdatePayload(
+                page_path=page_path,
+                page_content=page_content,
+                index_content=index_content,
+                log_content=log_content,
+            ),
+        )
         return IngestResult(
             source_id=source_id,
             run_id=run_id,
@@ -294,23 +376,24 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             page_path=page_path,
             no_op=False,
         )
-    except Exception as exc:
-        failed_source = source.model_copy(update={"status": "failed", "last_run_id": run_id})
-        write_source_record(manifest_path, failed_source)
-        failed_run = run.model_copy(
-            update={
-                "finished_at": utc_now_iso(),
-                "status": "failed",
-                "errors": [str(exc)],
-            }
+    except ValueError as exc:
+        _mark_attempt_failed(
+            queue_path=queue_path,
+            queue_item=queue_item,
+            run_path=run_path,
+            run=run,
+            error_message=str(exc),
+            manifest_path=manifest_path,
+            source=source,
+            run_id=run_id,
         )
-        write_run_record(run_path, failed_run)
-        failed_queue = queue_item.model_copy(
-            update={
-                "status": "failed",
-                "updated_at": utc_now_iso(),
-                "last_error": str(exc),
-            }
-        )
-        write_queue_item(queue_path, failed_queue)
         raise
+    except Exception as exc:
+        _mark_attempt_failed(
+            queue_path=queue_path,
+            queue_item=queue_item,
+            run_path=run_path,
+            run=run,
+            error_message=str(exc),
+        )
+        raise RuntimeError(f"Ingestion failed while committing outputs: {exc}") from exc

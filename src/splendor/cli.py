@@ -57,7 +57,7 @@ def handle_ingest(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
         result = ingest_source(root, args.source_id)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
         print(f"Error: {exc}")
         return 1
 
