@@ -146,7 +146,9 @@ def test_ingest_source_rejects_unsupported_type(tmp_path: Path) -> None:
     run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
     assert load_queue_item(queue_path).status == "failed"
     assert len(run_paths) == 1
-    assert load_run_record(run_paths[0]).status == "failed"
+    run_record = load_run_record(run_paths[0])
+    assert run_record.status == "failed"
+    assert run_record.output_refs == []
     assert not (tmp_path / "wiki" / "sources" / f"{added.source_id}.md").exists()
 
 

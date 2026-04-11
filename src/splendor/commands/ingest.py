@@ -341,7 +341,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 "linked_pages": sorted(set([*source.linked_pages, page_relpath])),
             }
         )
-        run = run.model_copy(
+        success_run = run.model_copy(
             update={
                 "finished_at": utc_now_iso(),
                 "status": "succeeded",
@@ -358,7 +358,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             manifest_path=manifest_path,
             success_source=updated_source,
             run_path=run_path,
-            success_run=run,
+            success_run=success_run,
             queue_path=queue_path,
             success_queue=queue_item,
             wiki_payload=WikiUpdatePayload(
