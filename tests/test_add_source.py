@@ -99,6 +99,23 @@ def test_add_source_raises_if_existing_manifest_checksum_mismatches(tmp_path: Pa
         add_source(tmp_path, source)
 
 
+def test_add_source_rejects_existing_manifest_source_id_mismatch(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "notes.txt"
+    source.write_text("same-content\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
+    manifest["source_id"] = "src-other"
+    first.manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Source ID mismatch"):
+        add_source(tmp_path, source)
+
+
 def test_add_source_rejects_manifest_path_outside_workspace(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "notes.txt"

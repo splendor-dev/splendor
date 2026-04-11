@@ -97,6 +97,12 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
 
     if manifest_path.exists():
         existing = load_source_record(manifest_path)
+        if existing.source_id != source_id:
+            msg = (
+                f"Source ID mismatch for existing source manifest {manifest_path}: "
+                f"expected {source_id}, got {existing.source_id}"
+            )
+            raise ValueError(msg)
         if existing.checksum != checksum:
             msg = (
                 f"Checksum mismatch for existing source manifest {manifest_path}: "
