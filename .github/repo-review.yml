@@ -1,0 +1,10 @@
+review_mode: full
+prompt_preset: python
+min_severity: medium
+max_issues: 5
+dedupe_mode: fingerprint
+issue_prefix: "[Repo Review]"
+reopen_closed_issues: true
+ignored_paths:
+  - wiki/
+  - reports/

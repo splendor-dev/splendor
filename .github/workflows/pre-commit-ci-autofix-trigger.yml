@@ -1,0 +1,38 @@
+name: pre-commit.ci autofix trigger
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  status:
+
+permissions:
+  contents: read
+  checks: read
+  statuses: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  trigger-from-pr:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      (
+        github.event.pull_request.user.type == 'Bot' ||
+        endsWith(github.event.pull_request.user.login, '[bot]')
+      )
+    uses: shaypal5/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.4
+    with:
+      checkout_ref: v1.0.4
+      pr_number: ${{ github.event.pull_request.number }}
+      bot_logins: github-copilot[bot],copilot-swe-agent,claude[bot],chatgpt,openai
+
+  trigger-from-status:
+    if: >-
+      github.event_name == 'status' &&
+      github.event.context == 'pre-commit.ci - pr' &&
+      github.event.state == 'failure'
+    uses: shaypal5/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.4
+    with:
+      checkout_ref: v1.0.4
+      head_sha: ${{ github.event.sha }}
+      bot_logins: github-copilot[bot],copilot-swe-agent,claude[bot],chatgpt,openai
