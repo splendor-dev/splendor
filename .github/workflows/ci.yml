@@ -55,7 +55,7 @@ jobs:
 
   pr-agent-context:
     name: PR agent context
-    if: ${{ always() && github.event_name == 'pull_request' }}
+    if: ${{ always() && github.event_name == 'pull_request' && needs.test.result == 'success' }}
     needs: [lint, test]
     permissions:
       contents: read

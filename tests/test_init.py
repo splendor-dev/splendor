@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from splendor.commands.init import initialize_workspace
+from splendor.config import load_config
 
 
 def test_initialize_workspace_creates_layout(tmp_path: Path) -> None:
@@ -33,3 +34,5 @@ def test_initialize_workspace_repairs_blank_project_name(tmp_path: Path) -> None
     result = initialize_workspace(tmp_path)
 
     assert result.root == tmp_path
+    assert load_config(tmp_path).project_name == tmp_path.name
+    assert "project_name: ''" not in (tmp_path / "splendor.yaml").read_text(encoding="utf-8")

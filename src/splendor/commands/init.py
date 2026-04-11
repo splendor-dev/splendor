@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from splendor.config import config_path_for, default_config, load_config, write_config
 from splendor.layout import INDEX_TEMPLATE, LOG_TEMPLATE, required_directories, resolve_layout
 from splendor.utils.fs import ensure_directory, write_if_missing
@@ -48,8 +50,10 @@ class InitResult:
 def initialize_workspace(root: Path) -> InitResult:
     config_path = config_path_for(root)
     config = load_config(root) if config_path.exists() else default_config(project_name=root.name)
-    if not config.project_name:
-        config = config.model_copy(update={"project_name": root.name})
+    should_rewrite_config = False
+    if config_path.exists():
+        raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        should_rewrite_config = not raw_config.get("project_name")
 
     layout = resolve_layout(root, config)
     created_directories: list[Path] = []
@@ -62,6 +66,8 @@ def initialize_workspace(root: Path) -> InitResult:
 
     if not config_path.exists():
         created_files.append(write_config(root, config))
+    elif should_rewrite_config:
+        write_config(root, config)
 
     if write_if_missing(layout.index_file, INDEX_TEMPLATE):
         created_files.append(layout.index_file)
