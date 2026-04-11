@@ -25,6 +25,7 @@ from splendor.state.source_registry import (
     validate_stored_source_location,
     write_source_record,
 )
+from splendor.utils.fs import write_text_atomic
 from splendor.utils.hashing import sha256_file
 from splendor.utils.time import utc_now_iso
 from splendor.utils.wiki import (
@@ -201,7 +202,7 @@ def _commit_success(
             if content is None:
                 path.unlink(missing_ok=True)
             else:
-                path.write_text(content, encoding="utf-8")
+                write_text_atomic(path, content)
         raise
 
 
@@ -217,20 +218,6 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
     source = load_source_record(manifest_path)
     if source.source_id != source_id:
         msg = f"Source manifest ID does not match requested source: {source_id}"
-        raise ValueError(msg)
-
-    stored_path = resolve_manifest_storage_path(root, source.path)
-    validate_stored_source_location(
-        stored_path,
-        layout.raw_sources_dir,
-        source.source_id,
-        source.path,
-    )
-    if not stored_path.exists():
-        msg = f"Stored source copy is missing: {stored_path}"
-        raise FileNotFoundError(msg)
-    if sha256_file(stored_path) != source.checksum:
-        msg = f"Stored source checksum mismatch for ingestion: {stored_path}"
         raise ValueError(msg)
 
     if _is_no_op(root, layout, source):
@@ -275,6 +262,20 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
     write_run_record(run_path, run)
 
     try:
+        stored_path = resolve_manifest_storage_path(root, source.path)
+        validate_stored_source_location(
+            stored_path,
+            layout.raw_sources_dir,
+            source.source_id,
+            source.path,
+        )
+        if not stored_path.exists():
+            msg = f"Stored source copy is missing: {stored_path}"
+            raise ValueError(msg)
+        if sha256_file(stored_path) != source.checksum:
+            msg = f"Stored source checksum mismatch for ingestion: {stored_path}"
+            raise ValueError(msg)
+
         if source.source_type not in SUPPORTED_SOURCE_TYPES:
             msg = f"Unsupported source type for ingestion: {source.source_type}"
             raise ValueError(msg)
@@ -340,7 +341,6 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 "linked_pages": sorted(set([*source.linked_pages, page_relpath])),
             }
         )
-        write_source_record(manifest_path, updated_source)
         run = run.model_copy(
             update={
                 "finished_at": utc_now_iso(),

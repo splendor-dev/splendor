@@ -39,4 +39,8 @@ def write_text_atomic(path: Path, content: str) -> None:
         handle.write(content)
         temp_path = Path(handle.name)
 
-    temp_path.replace(path)
+    try:
+        temp_path.replace(path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise

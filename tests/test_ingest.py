@@ -223,6 +223,37 @@ def test_ingest_source_validates_stored_copy_checksum(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Stored source checksum mismatch"):
         ingest_source(tmp_path, added.source_id)
 
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert load_queue_item(queue_path).status == "failed"
+    assert len(run_paths) == 1
+    assert load_run_record(run_paths[0]).status == "failed"
+
+
+def test_ingest_source_records_missing_stored_copy_as_failed_attempt(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    manifest = json.loads(added.manifest_path.read_text(encoding="utf-8"))
+    stored_path = tmp_path / manifest["path"]
+    stored_path.unlink()
+
+    with pytest.raises(ValueError, match="Stored source copy is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert load_queue_item(queue_path).status == "failed"
+    assert len(run_paths) == 1
+    assert load_run_record(run_paths[0]).status == "failed"
+
 
 def test_ingest_source_extract_uses_safe_fence_for_backticks(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
