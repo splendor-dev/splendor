@@ -10,7 +10,7 @@ from splendor import __version__
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
-from splendor.utils.fs import copy_file_if_missing, ensure_directory
+from splendor.utils.fs import copy_file_if_missing, ensure_directory, write_text_atomic
 from splendor.utils.hashing import sha256_file
 from splendor.utils.ids import stable_source_id
 from splendor.utils.time import utc_now_iso
@@ -33,6 +33,14 @@ def manifest_path_for(root: Path, source_id: str) -> Path:
 
 def load_source_record(path: Path) -> SourceRecord:
     return SourceRecord.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def write_source_record(path: Path, record: SourceRecord) -> Path:
+    write_text_atomic(
+        path,
+        json.dumps(record.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+    )
+    return path
 
 
 def resolve_manifest_storage_path(root: Path, stored_path_value: str) -> Path:
@@ -152,10 +160,7 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
         pipeline_version=__version__,
         original_path=manifest_original_path(root, source_path),
     )
-    manifest_path.write_text(
-        json.dumps(record.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_source_record(manifest_path, record)
     return RegisteredSource(
         record=record,
         manifest_path=manifest_path,
