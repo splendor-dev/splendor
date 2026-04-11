@@ -104,6 +104,11 @@ Required secret:
 
 - `OPENAI_API_KEY`
 
+Behavior without secret:
+
+- the workflow gates itself before invoking the reusable review job, so repositories that have not
+  configured `OPENAI_API_KEY` do not get noisy scheduled failures
+
 Optional variable:
 
 - `OPENAI_MODEL`

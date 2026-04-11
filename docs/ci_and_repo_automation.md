@@ -113,6 +113,11 @@ Required secrets:
 
 - `OPENAI_API_KEY`
 
+Behavior without secret:
+
+- the workflow still triggers, but the reusable review job is skipped cleanly when `OPENAI_API_KEY`
+  is not configured
+
 Optional repository variables:
 
 - `OPENAI_MODEL`

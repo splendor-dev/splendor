@@ -69,6 +69,13 @@ def validate_stored_source_location(
         raise ValueError(msg)
 
 
+def manifest_original_path(root: Path, source_path: Path) -> str:
+    try:
+        return source_path.expanduser().resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(source_path.expanduser())
+
+
 def register_source(root: Path, source_path: Path) -> RegisteredSource:
     candidate = source_path.expanduser().resolve()
     if not candidate.exists():
@@ -137,7 +144,7 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
         checksum=checksum,
         added_at=utc_now_iso(),
         pipeline_version=__version__,
-        original_path=str(candidate),
+        original_path=manifest_original_path(root, source_path),
     )
     manifest_path.write_text(
         json.dumps(record.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",

@@ -23,6 +23,36 @@ def test_add_source_registers_and_copies_file(tmp_path: Path) -> None:
     assert manifest["path"].endswith("note.md")
     assert "/" in manifest["path"]
     assert manifest["checksum"]
+    assert manifest["original_path"] == "note.md"
+
+
+def test_add_source_stores_workspace_relative_original_path(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    nested_dir = tmp_path / "docs"
+    nested_dir.mkdir()
+    source = nested_dir / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    result = add_source(tmp_path, source)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["original_path"] == "docs/note.md"
+
+
+def test_add_source_stores_expanded_original_path_for_external_sources(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    external_dir = tmp_path.parent / f"{tmp_path.name}-external"
+    external_dir.mkdir()
+    source = external_dir / "outside.md"
+    source.write_text("# outside\n", encoding="utf-8")
+
+    try:
+        result = add_source(tmp_path, source)
+        manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+        assert manifest["original_path"] == str(source)
+    finally:
+        source.unlink(missing_ok=True)
+        external_dir.rmdir()
 
 
 def test_add_source_is_deduplicated_by_checksum(tmp_path: Path) -> None:

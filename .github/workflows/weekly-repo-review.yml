@@ -12,8 +12,25 @@ permissions:
   security-events: read
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check automation secret availability
+        id: check
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "${OPENAI_API_KEY}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   weekly-review:
-    if: ${{ secrets.OPENAI_API_KEY != '' }}
+    needs: gate
+    if: ${{ needs.gate.outputs.enabled == 'true' }}
     uses: shaypal5/repo-review-automation/.github/workflows/repo-review.yml@v1.0.2
     with:
       create_issues: true
