@@ -11,17 +11,17 @@ planning objects inside version control instead of rebuilding context from scrat
 ## Status
 
 This repository is in the bootstrap phase. Milestone 0 is established and the earliest Milestone 1
-surface is implemented:
+surface plus the first deterministic Milestone 2 ingest path are implemented:
 
 - Python package scaffold with `src/` layout and a minimal CLI
 - `splendor init` for repository layout creation
 - `splendor add-source <path>` for deterministic source registration
+- `splendor ingest <source-id>` for deterministic single-source ingestion into `wiki/sources/`
 - Pydantic schema foundations for source, wiki, planning, queue, and run records
 - unit tests, linting, coverage, pre-commit, and GitHub Actions automation
 
 Not implemented yet:
 
-- ingestion pipeline
 - OCR and derived extraction workflows
 - query engine
 - planning-object creation commands
@@ -65,6 +65,12 @@ uv run splendor init
 uv run splendor add-source docs/splendor_product_spec.md
 ```
 
+### Ingest a registered source
+
+```bash
+uv run splendor ingest <source-id>
+```
+
 ### Run checks
 
 ```bash
@@ -86,13 +92,15 @@ uv run pre-commit run --all-files
 - `src/splendor/commands/init.py` creates the baseline Splendor layout safely and idempotently
 - `src/splendor/commands/add_source.py` registers immutable source files and writes validated
   source manifests
+- `src/splendor/commands/ingest.py` performs deterministic single-source ingestion and writes queue,
+  run, and wiki updates
 - `src/splendor/schemas/` defines the initial schema contracts
 - `.github/workflows/` contains CI, PR context, autofix-trigger, and weekly repo-review workflows
 
 ## What comes next
 
-The next milestone should add one-source-at-a-time ingestion with queue items, run records, and
-basic wiki updates rooted in the registered source manifests created here.
+The next milestone should expand deterministic ingestion into pending-queue draining, then layer on
+query and planning-object CLI support.
 
 ## Additional documentation
 

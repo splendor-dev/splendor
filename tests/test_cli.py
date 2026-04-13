@@ -55,3 +55,44 @@ def test_cli_add_source_expands_user_paths(tmp_path: Path, capsys, monkeypatch) 
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "Registered source" in captured.out
+
+
+def test_cli_ingest_command(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+
+    manifest_paths = list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source_id = manifest_paths[0].stem
+    exit_code = main(["--root", str(tmp_path), "ingest", source_id])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Ingested source" in captured.out
+
+
+def test_cli_ingest_command_no_op(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+
+    manifest_paths = list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source_id = manifest_paths[0].stem
+    main(["--root", str(tmp_path), "ingest", source_id])
+    exit_code = main(["--root", str(tmp_path), "ingest", source_id])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "already ingested" in captured.out
+
+
+def test_cli_ingest_command_reports_missing_source(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "src-missing"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Unknown source ID" in captured.out

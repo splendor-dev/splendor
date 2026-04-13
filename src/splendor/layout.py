@@ -13,7 +13,7 @@ This wiki is maintained by Splendor.
 
 ## Navigation
 
-- `wiki/sources/` for source summary pages once ingestion starts.
+- `wiki/sources/` for deterministic source summary pages.
 - `planning/` for milestones, tasks, decisions, and questions.
 - `state/` for machine-readable queue, run, and manifest records.
 """
@@ -51,6 +51,18 @@ class ResolvedLayout:
     @property
     def log_file(self) -> Path:
         return self.wiki_dir / "log.md"
+
+    @property
+    def wiki_sources_dir(self) -> Path:
+        return self.wiki_dir / "sources"
+
+    @property
+    def queue_dir(self) -> Path:
+        return self.state_dir / "queue"
+
+    @property
+    def runs_dir(self) -> Path:
+        return self.state_dir / "runs"
 
 
 def resolve_layout(root: Path, config: SplendorConfig) -> ResolvedLayout:

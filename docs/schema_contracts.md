@@ -63,10 +63,15 @@ renderers and CLI creation commands.
 
 ## Queue and run records
 
-The runtime contracts are drafted now even though the execution engine is intentionally deferred.
+The runtime contracts are now used by deterministic single-source ingestion.
 
 - `QueueItemRecord` captures item lifecycle, retries, and leases.
 - `RunRecord` captures pipeline inputs, outputs, warnings, and failures.
+
+Current persisted locations:
+
+- `state/queue/<job_id>.json`
+- `state/runs/<run_id>.json`
 
 ## Current storage decision
 
