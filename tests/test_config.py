@@ -52,6 +52,16 @@ def test_load_config_rejects_invalid_sources_values(tmp_path: Path) -> None:
         load_config(tmp_path)
 
 
+def test_load_config_rejects_unknown_sources_keys(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        ("schema_version: '1'\nproject_name: Example\nsources:\n  external_storage_mdoe: copy\n"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_config(tmp_path)
+
+
 def test_write_config_serializes_sources_block(tmp_path: Path) -> None:
     config = default_config(project_name="Example")
 

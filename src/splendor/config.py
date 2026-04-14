@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from splendor.schemas.types import StorageMode, SummaryMode
 
@@ -17,6 +17,8 @@ CONFIG_FILENAME = "splendor.yaml"
 
 
 class LayoutConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_dir: str = "raw"
     raw_sources_dir: str = "raw/sources"
     raw_assets_dir: str = "raw/assets"
@@ -34,6 +36,8 @@ class LayoutConfig(BaseModel):
 
 
 class SourcesConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     in_repo_storage_mode: StorageMode = "none"
     external_storage_mode: StorageMode = "copy"
     imported_storage_mode: StorageMode = "copy"
@@ -43,6 +47,8 @@ class SourcesConfig(BaseModel):
 
 
 class SplendorConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     schema_version: str = "1"
     project_name: str = "Splendor workspace"
     layout: LayoutConfig = Field(default_factory=LayoutConfig)
