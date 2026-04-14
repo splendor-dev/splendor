@@ -13,6 +13,9 @@ def test_initialize_workspace_creates_layout(tmp_path: Path) -> None:
     assert (tmp_path / "state" / "manifests" / "sources").exists()
     assert (tmp_path / "state" / "manifests" / ".gitkeep").exists()
     assert (tmp_path / "state" / "manifests" / "sources" / ".gitkeep").exists()
+    config = load_config(tmp_path)
+    assert config.sources.in_repo_storage_mode == "none"
+    assert config.sources.external_storage_mode == "copy"
     assert result.created_directories
     assert result.created_files
 
@@ -34,5 +37,7 @@ def test_initialize_workspace_repairs_blank_project_name(tmp_path: Path) -> None
     result = initialize_workspace(tmp_path)
 
     assert result.root == tmp_path
-    assert load_config(tmp_path).project_name == tmp_path.name
+    config = load_config(tmp_path)
+    assert config.project_name == tmp_path.name
+    assert config.sources.in_repo_storage_mode == "none"
     assert "project_name: ''" not in (tmp_path / "splendor.yaml").read_text(encoding="utf-8")
