@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field
+
 from splendor.schemas.types import StorageMode, SummaryMode
 
 CONFIG_FILENAME = "splendor.yaml"
