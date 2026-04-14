@@ -1,11 +1,17 @@
-"""Configuration loading for Splendor."""
+"""Configuration loading for Splendor.
+
+`SourcesConfig` captures policy defaults for the upcoming source-resolution model. Runtime
+registration and ingest do not consume it yet in this release.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from splendor.schemas.types import StorageMode, SummaryMode
 
 CONFIG_FILENAME = "splendor.yaml"
 
@@ -27,10 +33,22 @@ class LayoutConfig(BaseModel):
     source_records_dir: str = "state/manifests/sources"
 
 
+class SourcesConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    in_repo_storage_mode: StorageMode = "none"
+    external_storage_mode: StorageMode = "copy"
+    imported_storage_mode: StorageMode = "copy"
+    capture_source_commit: bool = True
+    summarize_in_repo_extracts_as: SummaryMode = "excerpt"
+    summarize_external_extracts_as: SummaryMode = "full"
+
+
 class SplendorConfig(BaseModel):
     schema_version: str = "1"
     project_name: str = "Splendor workspace"
     layout: LayoutConfig = Field(default_factory=LayoutConfig)
+    sources: SourcesConfig = Field(default_factory=SourcesConfig)
 
 
 def config_path_for(root: Path) -> Path:

@@ -8,6 +8,7 @@ from splendor.schemas.planning import (
 )
 from splendor.schemas.runtime import QueueItemRecord, RunRecord
 from splendor.schemas.source import SourceRecord
+from splendor.schemas.types import SourceRefKind, StorageMode, SummaryMode
 from splendor.schemas.wiki import KnowledgePageFrontmatter
 
 __all__ = [
@@ -17,6 +18,9 @@ __all__ = [
     "QuestionRecord",
     "QueueItemRecord",
     "RunRecord",
+    "SourceRefKind",
     "SourceRecord",
+    "StorageMode",
+    "SummaryMode",
     "TaskRecord",
 ]
