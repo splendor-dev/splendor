@@ -44,12 +44,7 @@ def test_load_config_applies_defaults_for_missing_sources(tmp_path: Path) -> Non
 
 def test_load_config_rejects_invalid_sources_values(tmp_path: Path) -> None:
     (tmp_path / "splendor.yaml").write_text(
-        (
-            "schema_version: '1'\n"
-            "project_name: Example\n"
-            "sources:\n"
-            "  in_repo_storage_mode: bogus\n"
-        ),
+        ("schema_version: '1'\nproject_name: Example\nsources:\n  in_repo_storage_mode: bogus\n"),
         encoding="utf-8",
     )
 
