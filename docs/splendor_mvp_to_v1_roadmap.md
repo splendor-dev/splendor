@@ -167,6 +167,19 @@ Support the first useful end-to-end ingestion flow.
 - failed ingests do not corrupt state
 - repeated ingest commands behave predictably
 
+### Follow-on architecture correction
+
+The initial MVP intentionally uses a simple copy-based source materialization model. That choice is
+acceptable for bootstrapping, but it is not the right steady-state design for repositories whose
+primary sources already live in git. The next architecture correction should split:
+
+- canonical source reference
+- storage policy
+- optional materialized artifact
+
+That refactor should happen before richer source handling expands, so all later source types build
+on the same resolver contract.
+
 ---
 
 ## Milestone 3 — MVP core: query and planning objects
@@ -301,6 +314,33 @@ This milestone is especially important for sensitive, policy-heavy, or research-
 - users can inspect why a page says what it says
 - contested knowledge is surfaced instead of silently merged
 - provenance is visible enough to support trust and debugging
+
+---
+
+## Milestone 6.5 — Post-MVP: source-resolution and storage-policy refactor
+
+### Goal
+Make source handling repo-native by default without weakening provenance for external or unstable
+sources.
+
+### Scope
+- split canonical source reference from storage realization
+- default in-repo files to workspace-backed registration
+- preserve copy, pointer, and symlink options where projects need stronger materialization
+- reduce source-summary duplication for in-repo text sources
+
+### Deliverables
+- a source resolver abstraction
+- revised source manifest schema
+- configuration for storage policy defaults
+- CLI overrides for source storage behavior
+- manifest migration path for older workspaces
+
+### Exit criteria
+- in-repo docs and code stop being duplicated into `raw/sources/` by default
+- external sources still get durable materialization when appropriate
+- ingest reads through one resolver interface regardless of source origin
+- source-summary pages remain deterministic while becoming less noisy
 
 ---
 
@@ -446,6 +486,12 @@ Expand supported source types where they materially increase product value.
 
 ### Important constraint
 Harder source formats should remain optional. The text-native path must stay strong and simple.
+
+### Dependency note
+
+This milestone should build on the source-resolution refactor rather than bypass it. PDF, OCR, and
+other richer source types should enter the system through the same `source_ref` plus `storage_mode`
+model as text-native sources.
 
 ### Exit criteria
 - PDF/image workflows exist and are clearly separated from the core text flow
