@@ -7,10 +7,10 @@ registration and ingest do not consume it yet in this release.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
+from splendor.schemas.types import StorageMode, SummaryMode
 
 CONFIG_FILENAME = "splendor.yaml"
 
@@ -33,12 +33,12 @@ class LayoutConfig(BaseModel):
 
 
 class SourcesConfig(BaseModel):
-    in_repo_storage_mode: Literal["none", "copy", "symlink", "pointer"] = "none"
-    external_storage_mode: Literal["none", "copy", "symlink", "pointer"] = "copy"
-    imported_storage_mode: Literal["none", "copy", "symlink", "pointer"] = "copy"
+    in_repo_storage_mode: StorageMode = "none"
+    external_storage_mode: StorageMode = "copy"
+    imported_storage_mode: StorageMode = "copy"
     capture_source_commit: bool = True
-    summarize_in_repo_extracts_as: Literal["none", "excerpt", "full"] = "excerpt"
-    summarize_external_extracts_as: Literal["none", "excerpt", "full"] = "full"
+    summarize_in_repo_extracts_as: SummaryMode = "excerpt"
+    summarize_external_extracts_as: SummaryMode = "full"
 
 
 class SplendorConfig(BaseModel):

@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import Field
 
 from splendor.schemas.common import StrictRecord
+from splendor.schemas.types import SourceRefKind, StorageMode
 
 
 class SourceRecord(StrictRecord):
@@ -31,10 +32,8 @@ class SourceRecord(StrictRecord):
     origin_url: str | None = None
     original_path: str | None = None
     source_ref: str | None = None
-    source_ref_kind: (
-        Literal["workspace_path", "external_path", "url", "imported", "stored_artifact"] | None
-    ) = None
-    storage_mode: Literal["none", "copy", "symlink", "pointer"] | None = None
+    source_ref_kind: SourceRefKind | None = None
+    storage_mode: StorageMode | None = None
     storage_path: str | None = None
     materialized_at: str | None = None
     source_commit: str | None = None

@@ -40,4 +40,6 @@ def test_initialize_workspace_repairs_blank_project_name(tmp_path: Path) -> None
     config = load_config(tmp_path)
     assert config.project_name == tmp_path.name
     assert config.sources.in_repo_storage_mode == "none"
-    assert "project_name: ''" not in (tmp_path / "splendor.yaml").read_text(encoding="utf-8")
+    assert "project_name: ''" not in (tmp_path / "splendor.yaml").read_text(
+        encoding="utf-8"
+    )

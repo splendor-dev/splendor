@@ -1,5 +1,6 @@
 """Schema exports."""
 
+from splendor.schemas.types import SourceRefKind, StorageMode, SummaryMode
 from splendor.schemas.planning import (
     DecisionRecord,
     MilestoneRecord,
@@ -17,6 +18,9 @@ __all__ = [
     "QuestionRecord",
     "QueueItemRecord",
     "RunRecord",
+    "SourceRefKind",
     "SourceRecord",
+    "StorageMode",
+    "SummaryMode",
     "TaskRecord",
 ]
