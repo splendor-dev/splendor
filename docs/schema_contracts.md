@@ -96,7 +96,7 @@ Proposed fields:
 - `source_commit`
   - Optional git commit SHA captured for clean tracked workspace files.
 
-### Default policy encoded by the schema
+### Recommended default policy
 
 Recommended defaults:
 

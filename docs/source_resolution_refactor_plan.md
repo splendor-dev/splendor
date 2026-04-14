@@ -102,7 +102,7 @@ The resolved object should answer:
 
 ## 6. Proposed Schema Changes
 
-## 6.1 `SourceRecord`
+### 6.1 `SourceRecord`
 
 Current fields to keep:
 
@@ -137,7 +137,7 @@ Compatibility plan:
 - treat old `path` as a legacy storage path
 - migrate on write once the new resolver is implemented
 
-## 6.2 Proposed field definitions
+### 6.2 Proposed field definitions
 
 ### `source_ref`
 
@@ -205,7 +205,7 @@ sources:
   summarize_external_extracts_as: full
 ```
 
-## 7.1 Config semantics
+### 7.1 Config semantics
 
 - `in_repo_storage_mode`
   - Default policy for repo-relative files.
@@ -223,7 +223,7 @@ sources:
 
 ## 8. Proposed CLI Changes
 
-## 8.1 `splendor add-source`
+### 8.1 `splendor add-source`
 
 Current:
 
@@ -247,7 +247,7 @@ Behavior:
 - if the requested mode conflicts with source kind or platform constraints:
   - fail with a clear validation error
 
-## 8.2 `splendor ingest`
+### 8.2 `splendor ingest`
 
 Current:
 
@@ -262,7 +262,7 @@ Proposed internal behavior changes:
 - ingest must call the shared resolver and record the resolved input in run metadata
 - ingest should warn clearly if a workspace-backed source no longer matches the registered checksum
 
-## 8.3 Optional future command
+### 8.3 Optional future command
 
 Not required in Phase 1, but likely useful later:
 
@@ -293,7 +293,7 @@ This keeps `wiki/sources/` useful without turning it into a second docs tree.
 
 The work should proceed in two phases. Each phase may span multiple PRs.
 
-## Phase 1 — Introduce the source-resolution model
+### 10.1 Phase 1 — Introduce the source-resolution model
 
 ### Goal
 
@@ -379,7 +379,7 @@ Exit criteria:
 - older workspaces continue to ingest cleanly
 - the new behavior is documented and tested
 
-## Phase 2 — Reduce rendered duplication and add optional materialization paths
+### 10.2 Phase 2 — Reduce rendered duplication and add optional materialization paths
 
 ### Goal
 
