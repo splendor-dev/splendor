@@ -17,8 +17,6 @@ CONFIG_FILENAME = "splendor.yaml"
 
 
 class LayoutConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     raw_dir: str = "raw"
     raw_sources_dir: str = "raw/sources"
     raw_assets_dir: str = "raw/assets"
@@ -47,8 +45,6 @@ class SourcesConfig(BaseModel):
 
 
 class SplendorConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     schema_version: str = "1"
     project_name: str = "Splendor workspace"
     layout: LayoutConfig = Field(default_factory=LayoutConfig)

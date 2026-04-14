@@ -62,6 +62,42 @@ def test_load_config_rejects_unknown_sources_keys(tmp_path: Path) -> None:
         load_config(tmp_path)
 
 
+def test_load_config_accepts_unknown_top_level_keys(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        (
+            "schema_version: '1'\n"
+            "project_name: Example\n"
+            "experimental_flag: true\n"
+            "sources:\n"
+            "  in_repo_storage_mode: none\n"
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.project_name == "Example"
+    assert config.sources.in_repo_storage_mode == "none"
+
+
+def test_load_config_accepts_unknown_layout_keys(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        (
+            "schema_version: '1'\n"
+            "project_name: Example\n"
+            "layout:\n"
+            "  raw_dir: raw\n"
+            "  extra_layout_experiment: true\n"
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.project_name == "Example"
+    assert config.layout.raw_dir == "raw"
+
+
 def test_write_config_serializes_sources_block(tmp_path: Path) -> None:
     config = default_config(project_name="Example")
 
