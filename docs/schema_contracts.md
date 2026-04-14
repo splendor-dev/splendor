@@ -14,7 +14,7 @@ Milestone 1. The implementation lives in `src/splendor/schemas/` and currently u
 
 Stored today as JSON sidecars under `state/manifests/sources/`.
 
-Core fields:
+Current implementation fields:
 
 - `schema_version`
 - `kind: source`
@@ -32,6 +32,93 @@ Core fields:
 - `review_state`
 - `origin_url`
 - `original_path`
+
+### Planned source-record evolution
+
+The current single-`path` contract is sufficient for the initial copy-everything MVP, but it
+mixes together three different concerns:
+
+- the canonical source the user wants tracked
+- the storage mechanism Splendor used to make it available
+- the current location from which ingest reads bytes
+
+The next source-record revision should split those concerns explicitly.
+
+Proposed fields:
+
+- `schema_version`
+- `kind: source`
+- `source_id`
+- `title`
+- `source_type`
+- `source_ref`
+- `source_ref_kind`
+- `storage_mode`
+- `storage_path`
+- `checksum`
+- `added_at`
+- `status`
+- `pipeline_version`
+- `derived_artifacts`
+- `linked_pages`
+- `last_run_id`
+- `review_state`
+- `origin_url`
+- `original_path`
+- `materialized_at`
+- `source_commit`
+
+### Proposed field semantics
+
+- `source_ref`
+  - Canonical source identifier.
+  - Examples:
+    - `docs/spec.md`
+    - `/Users/alice/Desktop/notes.md`
+    - `https://example.com/spec`
+- `source_ref_kind`
+  - One of:
+    - `workspace_path`
+    - `external_path`
+    - `url`
+    - `imported`
+    - `stored_artifact`
+- `storage_mode`
+  - One of:
+    - `none`
+    - `copy`
+    - `symlink`
+    - `pointer`
+- `storage_path`
+  - Optional path under `raw/sources/` when Splendor materializes an artifact.
+- `materialized_at`
+  - Timestamp indicating when `storage_path` was created or last refreshed.
+- `source_commit`
+  - Optional git commit SHA captured for clean tracked workspace files.
+
+### Default policy encoded by the schema
+
+Recommended defaults:
+
+- workspace file inside repo:
+  - `source_ref_kind: workspace_path`
+  - `storage_mode: none`
+  - `storage_path: null`
+- external local file:
+  - `source_ref_kind: external_path`
+  - `storage_mode: copy`
+- URL/imported source:
+  - `storage_mode: copy` or `pointer`, depending on downloader semantics
+
+### Migration note
+
+The easiest migration path is:
+
+1. Continue reading existing manifests with `path`.
+2. Introduce compatibility mapping:
+   - old `path` -> `storage_path`
+   - old `original_path` -> `source_ref` when it is repo-relative or otherwise available
+3. Write only the new fields once the resolver layer is in place.
 
 ## Knowledge page frontmatter
 
@@ -79,3 +166,7 @@ The schemas are implemented as Python-native models first, with JSON sidecars fo
 to exist before markdown renderers and richer file contracts are ready. That keeps the initial
 implementation small while preserving deterministic validation and future compatibility with YAML
 frontmatter or richer sidecar layouts.
+
+The next storage-oriented schema change should preserve that philosophy: keep manifests
+filesystem-native and explicit, but make source resolution policy first-class instead of baking a
+copy-under-`raw/sources/` assumption into a single `path` field.

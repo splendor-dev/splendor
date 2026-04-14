@@ -77,6 +77,16 @@ Examples:
 
 The source layer is append-oriented. Sources are not mutated by LLM workflows.
 
+In the initial MVP, Splendor materializes registered sources under `raw/sources/`. That behavior is
+useful for external and unstable inputs, but it is too blunt for repositories whose markdown, code,
+and configuration files already live inside git. The long-term source model must therefore
+distinguish between:
+
+- the **canonical source reference** the user means Splendor to track
+- the **storage policy** Splendor applies to make that source available to the pipeline
+- any optional **materialized snapshot or pointer artifact** Splendor creates for provenance,
+  portability, or repairability
+
 ### 4.2 Derived Extraction Artifacts
 
 Machine-generated extraction outputs derived from raw sources.
@@ -190,6 +200,7 @@ Splendor starts **without** a required SQLite database or local index database. 
 - **Repo truth first**
 - **File-based state first**
 - **Optional caches/indexes later**
+- **Canonical source reference first; snapshot second**
 
 ### 8.3 Why no SQLite in the initial core
 
@@ -198,6 +209,33 @@ Splendor starts **without** a required SQLite database or local index database. 
 - better git transparency
 - lower implementation weight
 - better fit for agent use and PR workflows
+
+### 8.4 Source-resolution model
+
+Splendor should treat source registration as a two-part contract:
+
+1. **Canonical reference**
+   - The repo-relative path, local external path, URL, or imported identifier that names the source
+     the user wants tracked.
+
+2. **Optional storage realization**
+   - A copy, symlink, pointer file, or no stored artifact at all, depending on policy and source
+     type.
+
+This is especially important for in-repo text sources. When the source already lives inside the git
+workspace, the default behavior should be to track that repo file directly rather than duplicate it
+into `raw/sources/`. Splendor should still be able to materialize a snapshot when the project
+explicitly opts in or when the source is external to the workspace.
+
+### 8.5 Default storage policy
+
+Recommended defaults:
+
+- **In-repo sources:** track the workspace file directly; do not copy by default
+- **External local files:** copy into `raw/sources/` by default
+- **Remote imports / fetched content:** materialize a local stored artifact by default
+- **Project override:** allow repositories to opt into copying in-repo files when strict snapshot
+  capture is preferred over tree cleanliness
 
 ## 9. Suggested Repository Layout
 
@@ -286,7 +324,7 @@ These remain markdown-first, but include standardized frontmatter for discoverab
 
 ## 11.1 Source record
 
-Purpose: identify an immutable source and its ingestion status.
+Purpose: identify a source, its canonical reference, its storage policy, and its ingestion status.
 
 Suggested fields:
 - `schema_version`
@@ -294,7 +332,10 @@ Suggested fields:
 - `source_id`
 - `title`
 - `source_type`
-- `path`
+- `source_ref`
+- `source_ref_kind`
+- `storage_mode`
+- `storage_path` (optional)
 - `origin_url` (optional)
 - `checksum`
 - `added_at`
@@ -304,6 +345,23 @@ Suggested fields:
 - `linked_pages`
 - `last_run_id`
 - `review_state`
+- `materialized_at` (optional)
+- `source_commit` (optional)
+
+Field meanings:
+
+- `source_ref`
+  - Canonical identifier for the source the user registered.
+  - For in-repo files this should usually be a repo-relative path.
+- `source_ref_kind`
+  - Expected initial values: `workspace_path`, `external_path`, `url`, `imported`, `stored_artifact`.
+- `storage_mode`
+  - Expected initial values: `none`, `copy`, `symlink`, `pointer`.
+- `storage_path`
+  - Optional path to the materialized artifact under `raw/sources/` when one exists.
+- `source_commit`
+  - Optional git commit SHA captured for clean tracked workspace files when the project wants
+    stronger repo-native provenance.
 
 ## 11.2 Knowledge page frontmatter
 
@@ -499,15 +557,17 @@ Not the preferred primary runtime for:
 
 ## 14.1 Core ingestion flow
 
-1. Source enters `raw/`
+1. Source is resolved to a canonical `source_ref`
 2. Source manifest/record is created
-3. A queue item is created
-4. A worker claims the job
-5. Optional extraction happens
-6. Relevant wiki pages are created/updated
-7. Index/log are updated
-8. Run record is written
-9. Job is marked complete or failed
+3. Optional storage realization happens according to `storage_mode`
+4. A queue item is created
+5. A worker claims the job
+6. Source content is resolved through a common source-resolution layer
+7. Optional extraction happens
+8. Relevant wiki pages are created/updated
+9. Index/log are updated
+10. Run record is written
+11. Job is marked complete or failed
 
 ## 14.2 Ingestion granularity
 
@@ -522,13 +582,38 @@ Initial preferred formats:
 - YAML/JSON
 - HTML saved locally
 
+## 14.4 In-repo source handling
+
+For in-repo text sources, Splendor should default to:
+
+- manifesting the repo-relative source path as the canonical `source_ref`
+- reading from the workspace path during ingest
+- validating that the current file still matches the registered checksum
+- optionally recording the current git commit when available
+- skipping `raw/sources/` duplication unless the project explicitly requests snapshot materialization
+
+This keeps the repository readable while preserving deterministic provenance.
+
+## 14.5 Source summary page policy
+
+Source-summary pages should remain deterministic, but the rendered markdown should avoid
+needlessly reproducing the full source text for files that already live in the same repository.
+
+Recommended default behavior:
+
+- include source metadata and provenance
+- include a short preview or bounded excerpt
+- link to the canonical source path
+- reserve full extracted text for cases where the source is external, transformed, or otherwise not
+  directly readable from the repository
+
 Later optional support:
 - PDF
 - image-based sources
 - OCR-derived flows
 - audio/transcript flows
 
-### 14.4 OCR/LLM-assisted extraction
+### 14.6 OCR/LLM-assisted extraction
 
 For harder formats, ingestion may optionally invoke:
 - OCR
