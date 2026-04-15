@@ -108,11 +108,4 @@ def resolve_source_content(
     if source.storage_mode == "copy":
         return _resolve_copied_source(root, source, raw_sources_dir)
 
-    return ResolvedSource(
-        canonical_ref=source.original_path or source.path,
-        canonical_ref_kind="stored_artifact",
-        storage_mode="copy",
-        resolved_path=_resolve_copied_source(root, source, raw_sources_dir).resolved_path,
-        resolved_ref=source.path,
-        content_origin_label="Stored source",
-    )
+    return _resolve_copied_source(root, source, raw_sources_dir)
