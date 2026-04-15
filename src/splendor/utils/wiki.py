@@ -44,11 +44,14 @@ def render_source_summary_page(
     source_section: str,
     summary: str,
     key_facts: list[str],
-    extract: str,
+    extract: str | None,
     provenance: list[str],
 ) -> str:
     key_fact_lines = "\n".join(f"- {line}" for line in key_facts)
     provenance_lines = "\n".join(f"- {line}" for line in provenance)
+    extract_section = ""
+    if extract is not None:
+        extract_section = f"## Extract\n\n{_fenced_extract_block(extract)}\n\n"
     return (
         f"---\n{render_frontmatter(frontmatter)}\n---\n\n"
         f"# {frontmatter.title}\n\n"
@@ -58,8 +61,7 @@ def render_source_summary_page(
         f"{summary}\n\n"
         "## Key Facts\n\n"
         f"{key_fact_lines}\n\n"
-        "## Extract\n\n"
-        f"{_fenced_extract_block(extract)}\n\n"
+        f"{extract_section}"
         "## Provenance\n\n"
         f"{provenance_lines}\n"
     )

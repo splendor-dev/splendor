@@ -335,6 +335,8 @@ sources.
 - configuration for storage policy defaults
 - CLI overrides for source storage behavior
 - manifest migration path for older workspaces
+- config-driven source-summary rendering that defaults in-repo text sources to excerpts and
+  external/copied text sources to fuller extracts
 
 ### Exit criteria
 - in-repo docs and code stop being duplicated into `raw/sources/` by default

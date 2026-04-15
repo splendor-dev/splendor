@@ -10,6 +10,7 @@ from splendor import __version__
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord, SourceRecord
+from splendor.schemas.types import SummaryMode
 from splendor.state.runtime import (
     load_queue_item,
     load_run_record,
@@ -20,6 +21,7 @@ from splendor.state.runtime import (
 )
 from splendor.state.source_compat import (
     canonical_source_ref,
+    effective_source_ref_kind,
     effective_storage_mode,
     effective_stored_path,
 )
@@ -101,6 +103,23 @@ def _build_extract(text: str) -> str:
         char_count = projected_count
 
     return "\n".join(extract_lines).rstrip()
+
+
+def _summary_mode_for(config, source: SourceRecord) -> SummaryMode:
+    if (
+        effective_storage_mode(source) == "none"
+        and effective_source_ref_kind(source) == "workspace_path"
+    ):
+        return config.sources.summarize_in_repo_extracts_as
+    return config.sources.summarize_external_extracts_as
+
+
+def _rendered_extract(text: str, mode: SummaryMode) -> str | None:
+    if mode == "none":
+        return None
+    if mode == "excerpt":
+        return _build_extract(text)
+    return text
 
 
 def _build_summary(source: SourceRecord) -> str:
@@ -294,6 +313,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
         except UnicodeDecodeError as exc:
             msg = f"Source file is not valid UTF-8 text: {resolved_source.resolved_path}"
             raise ValueError(msg) from exc
+        extract_mode = _summary_mode_for(config, source)
 
         page_path = _page_path_for(layout.wiki_sources_dir, source_id)
         page_relpath = _relative_to_root(root, page_path)
@@ -315,6 +335,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                     f"- Source ID: `{source.source_id}`",
                     f"- Source type: `{source.source_type}`",
                     f"- Registered path: `{registered_path}`",
+                    f"- Source file: `{resolved_source.resolved_ref}`",
                 ]
             ),
             summary=_build_summary(source),
@@ -326,7 +347,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 f"Added at: `{source.added_at}`",
                 f"Ingested at: `{now}`",
             ],
-            extract=_build_extract(source_text),
+            extract=_rendered_extract(source_text, extract_mode),
             provenance=[
                 f"Manifest: `{_relative_to_root(root, manifest_path)}`",
                 f"{resolved_source.content_origin_label}: `{resolved_source.resolved_ref}`",
