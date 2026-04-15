@@ -335,7 +335,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                     f"- Source ID: `{source.source_id}`",
                     f"- Source type: `{source.source_type}`",
                     f"- Registered path: `{registered_path}`",
-                    f"- Source file: `{registered_path}`",
+                    f"- Source file: `{resolved_source.resolved_ref}`",
                 ]
             ),
             summary=_build_summary(source),

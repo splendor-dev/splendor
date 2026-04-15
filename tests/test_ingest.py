@@ -9,6 +9,7 @@ from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.config import load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
+from splendor.schemas.types import SummaryMode
 from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_registry import load_source_record, write_source_record
 
@@ -22,7 +23,10 @@ def parse_frontmatter(page_path: Path) -> tuple[KnowledgePageFrontmatter, str]:
 
 
 def update_summary_modes(
-    root: Path, *, in_repo: str | None = None, external: str | None = None
+    root: Path,
+    *,
+    in_repo: SummaryMode | None = None,
+    external: SummaryMode | None = None,
 ) -> None:
     config = load_config(root)
     if in_repo is not None:
