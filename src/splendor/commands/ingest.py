@@ -106,6 +106,10 @@ def _build_summary(source: SourceRecord) -> str:
     )
 
 
+def _best_available_source_ref(source: SourceRecord) -> str:
+    return source.source_ref or source.storage_path or source.path
+
+
 def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     if source.status != "ingested" or not source.last_run_id:
         return False
@@ -254,7 +258,10 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
         job_type="ingest_source",
         started_at=now,
         status="running",
-        input_refs=[_relative_to_root(root, manifest_path)],
+        input_refs=[
+            _relative_to_root(root, manifest_path),
+            _best_available_source_ref(source),
+        ],
         pipeline_version=__version__,
     )
     write_run_record(run_path, run)
