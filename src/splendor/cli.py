@@ -31,19 +31,20 @@ def build_parser() -> argparse.ArgumentParser:
         choices=STORAGE_MODES,
         help="Override the configured storage mode for this source.",
     )
-    add_source_parser.add_argument(
+    capture_group = add_source_parser.add_mutually_exclusive_group()
+    capture_group.add_argument(
         "--capture-source-commit",
         dest="capture_source_commit",
         action="store_true",
-        default=None,
         help="Capture the current HEAD commit for clean tracked workspace files.",
     )
-    add_source_parser.add_argument(
+    capture_group.add_argument(
         "--no-capture-source-commit",
         dest="capture_source_commit",
         action="store_false",
         help="Do not capture git provenance for this registration.",
     )
+    add_source_parser.set_defaults(capture_source_commit=None)
     add_source_parser.set_defaults(handler=handle_add_source)
 
     ingest_parser = subparsers.add_parser("ingest", help="Ingest a registered source into the wiki")

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from splendor.cli import main
+from splendor.cli import build_parser, main
 
 
 def test_cli_init_command(tmp_path: Path, capsys) -> None:
@@ -10,6 +10,18 @@ def test_cli_init_command(tmp_path: Path, capsys) -> None:
     assert (tmp_path / "wiki" / "index.md").exists()
     captured = capsys.readouterr()
     assert "Initialized Splendor workspace" in captured.out
+
+
+def test_cli_add_source_capture_source_commit_flags_are_tri_state() -> None:
+    parser = build_parser()
+
+    no_flag = parser.parse_args(["add-source", "brief.md"])
+    yes_flag = parser.parse_args(["add-source", "--capture-source-commit", "brief.md"])
+    no_capture_flag = parser.parse_args(["add-source", "--no-capture-source-commit", "brief.md"])
+
+    assert no_flag.capture_source_commit is None
+    assert yes_flag.capture_source_commit is True
+    assert no_capture_flag.capture_source_commit is False
 
 
 def test_cli_add_source_command_reports_workspace_backed_registration(

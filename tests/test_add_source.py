@@ -176,7 +176,10 @@ def test_add_source_existing_workspace_manifest_missing_file_fails(tmp_path: Pat
     replacement = tmp_path / "replacement.txt"
     replacement.write_text("same-content\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Workspace source is missing"):
+    with pytest.raises(
+        ValueError,
+        match="Existing source manifest could not be validated during add-source",
+    ):
         add_source(tmp_path, replacement)
 
     manifest = load_source_record(first.manifest_path)
@@ -193,7 +196,10 @@ def test_add_source_existing_workspace_manifest_checksum_drift_fails(tmp_path: P
     replacement = tmp_path / "replacement.txt"
     replacement.write_text("same-content\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Workspace source checksum mismatch"):
+    with pytest.raises(
+        ValueError,
+        match="Existing source manifest could not be validated during add-source",
+    ):
         add_source(tmp_path, replacement)
 
     manifest = load_source_record(first.manifest_path)

@@ -168,7 +168,14 @@ def _validated_existing_registration(
 ) -> tuple[Path | None, StorageMode, str]:
     from splendor.state.source_resolver import resolve_source_content
 
-    resolved = resolve_source_content(root, existing, layout.raw_sources_dir)
+    try:
+        resolved = resolve_source_content(root, existing, layout.raw_sources_dir)
+    except ValueError as exc:
+        msg = (
+            "Existing source manifest could not be validated during add-source "
+            f"for source {existing.source_id}: {exc}"
+        )
+        raise ValueError(msg) from exc
     stored_path = resolved.resolved_path if resolved.storage_mode == "copy" else None
     source_ref = existing.source_ref or existing.original_path or existing.path
     return stored_path, resolved.storage_mode, source_ref
