@@ -21,12 +21,10 @@ from splendor.state.runtime import (
 from splendor.state.source_registry import (
     load_source_record,
     manifest_path_for,
-    resolve_manifest_storage_path,
-    validate_stored_source_location,
     write_source_record,
 )
+from splendor.state.source_resolver import resolve_source_content
 from splendor.utils.fs import write_text_atomic
-from splendor.utils.hashing import sha256_file
 from splendor.utils.time import utc_now_iso
 from splendor.utils.wiki import (
     WikiUpdatePayload,
@@ -101,7 +99,7 @@ def _build_extract(text: str) -> str:
 
 
 def _build_summary(source: SourceRecord) -> str:
-    path_fragment = source.original_path or source.path
+    path_fragment = source.source_ref or source.original_path or source.path
     return (
         f"This page records deterministic ingestion output for source `{source.source_id}`, "
         f"a `{source.source_type}` file registered from `{path_fragment}`."
@@ -256,38 +254,36 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
         job_type="ingest_source",
         started_at=now,
         status="running",
-        input_refs=[_relative_to_root(root, manifest_path), source.path],
+        input_refs=[_relative_to_root(root, manifest_path)],
         pipeline_version=__version__,
     )
     write_run_record(run_path, run)
 
     try:
-        stored_path = resolve_manifest_storage_path(root, source.path)
-        validate_stored_source_location(
-            stored_path,
-            layout.raw_sources_dir,
-            source.source_id,
-            source.path,
+        resolved_source = resolve_source_content(root, source, layout.raw_sources_dir)
+        run = run.model_copy(
+            update={
+                "input_refs": [
+                    _relative_to_root(root, manifest_path),
+                    resolved_source.resolved_ref,
+                ]
+            }
         )
-        if not stored_path.exists():
-            msg = f"Stored source copy is missing: {stored_path}"
-            raise ValueError(msg)
-        if sha256_file(stored_path) != source.checksum:
-            msg = f"Stored source checksum mismatch for ingestion: {stored_path}"
-            raise ValueError(msg)
+        write_run_record(run_path, run)
 
         if source.source_type not in SUPPORTED_SOURCE_TYPES:
             msg = f"Unsupported source type for ingestion: {source.source_type}"
             raise ValueError(msg)
 
         try:
-            source_text = stored_path.read_text(encoding="utf-8")
+            source_text = resolved_source.resolved_path.read_text(encoding="utf-8")
         except UnicodeDecodeError as exc:
-            msg = f"Source file is not valid UTF-8 text: {stored_path}"
+            msg = f"Source file is not valid UTF-8 text: {resolved_source.resolved_path}"
             raise ValueError(msg) from exc
 
         page_path = _page_path_for(layout.wiki_sources_dir, source_id)
         page_relpath = _relative_to_root(root, page_path)
+        registered_path = source.source_ref or source.original_path or source.path
         frontmatter = KnowledgePageFrontmatter(
             kind="source-summary",
             title=source.title,
@@ -304,7 +300,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 [
                     f"- Source ID: `{source.source_id}`",
                     f"- Source type: `{source.source_type}`",
-                    f"- Registered path: `{source.original_path or source.path}`",
+                    f"- Registered path: `{registered_path}`",
                 ]
             ),
             summary=_build_summary(source),
@@ -319,7 +315,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             extract=_build_extract(source_text),
             provenance=[
                 f"Manifest: `{_relative_to_root(root, manifest_path)}`",
-                f"Stored source: `{source.path}`",
+                f"{resolved_source.content_origin_label}: `{resolved_source.resolved_ref}`",
                 f"Run ID: `{run_id}`",
                 f"Pipeline version: `{__version__}`",
             ],

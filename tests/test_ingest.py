@@ -9,7 +9,7 @@ from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
 from splendor.state.runtime import load_queue_item, load_run_record
-from splendor.state.source_registry import load_source_record
+from splendor.state.source_registry import load_source_record, write_source_record
 
 
 def parse_frontmatter(page_path: Path) -> tuple[KnowledgePageFrontmatter, str]:
@@ -302,6 +302,120 @@ def test_ingest_source_rolls_back_wiki_on_success_commit_failure(
     assert (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8") == original_index
     assert (tmp_path / "wiki" / "log.md").read_text(encoding="utf-8") == original_log
     assert not (tmp_path / "wiki" / "sources" / f"{added.source_id}.md").exists()
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert load_queue_item(queue_path).status == "failed"
+    assert len(run_paths) == 1
+    assert load_run_record(run_paths[0]).status == "failed"
+
+
+def test_ingest_source_workspace_backed_manifest_happy_path(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "source_ref": "brief.md",
+            "source_ref_kind": "workspace_path",
+            "storage_mode": "none",
+            "storage_path": None,
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "Workspace source: `brief.md`" in body
+    assert "registered from `brief.md`" in body
+    run_record = load_run_record(result.run_path)
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        "brief.md",
+    ]
+
+
+def test_ingest_source_workspace_backed_manifest_missing_file(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "source_ref": "brief.md",
+            "source_ref_kind": "workspace_path",
+            "storage_mode": "none",
+            "storage_path": None,
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+    source.unlink()
+
+    with pytest.raises(ValueError, match="Workspace source is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert load_queue_item(queue_path).status == "failed"
+    assert len(run_paths) == 1
+    assert load_run_record(run_paths[0]).status == "failed"
+
+
+def test_ingest_source_workspace_backed_manifest_checksum_drift(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "source_ref": "brief.md",
+            "source_ref_kind": "workspace_path",
+            "storage_mode": "none",
+            "storage_path": None,
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+    source.write_text("# Brief\n\nchanged\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Workspace source checksum mismatch"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert load_queue_item(queue_path).status == "failed"
+    assert len(run_paths) == 1
+    assert load_run_record(run_paths[0]).status == "failed"
+
+
+@pytest.mark.parametrize("mode", ["pointer", "symlink"])
+def test_ingest_source_rejects_unsupported_storage_mode(tmp_path: Path, mode: str) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "source_ref": "brief.md",
+            "source_ref_kind": "workspace_path",
+            "storage_mode": mode,
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    with pytest.raises(ValueError, match=f"Unsupported storage mode for ingestion: {mode}"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
     queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
     run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
     assert load_queue_item(queue_path).status == "failed"
