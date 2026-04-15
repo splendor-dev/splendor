@@ -232,7 +232,12 @@ def test_ingest_source_validates_stored_copy_checksum(tmp_path: Path) -> None:
     run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
     assert load_queue_item(queue_path).status == "failed"
     assert len(run_paths) == 1
-    assert load_run_record(run_paths[0]).status == "failed"
+    run_record = load_run_record(run_paths[0])
+    assert run_record.status == "failed"
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        manifest["path"],
+    ]
 
 
 def test_ingest_source_records_missing_stored_copy_as_failed_attempt(tmp_path: Path) -> None:
@@ -254,7 +259,42 @@ def test_ingest_source_records_missing_stored_copy_as_failed_attempt(tmp_path: P
     run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
     assert load_queue_item(queue_path).status == "failed"
     assert len(run_paths) == 1
-    assert load_run_record(run_paths[0]).status == "failed"
+    run_record = load_run_record(run_paths[0])
+    assert run_record.status == "failed"
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        manifest["path"],
+    ]
+
+
+def test_ingest_source_explicit_copy_manifest_failure_uses_storage_path(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    manifest = json.loads(added.manifest_path.read_text(encoding="utf-8"))
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "source_ref": "brief.md",
+            "source_ref_kind": "workspace_path",
+            "storage_mode": "copy",
+            "storage_path": manifest["path"],
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+    (tmp_path / manifest["path"]).unlink()
+
+    with pytest.raises(ValueError, match="Stored source copy is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert len(run_paths) == 1
+    run_record = load_run_record(run_paths[0])
+    assert run_record.status == "failed"
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        manifest["path"],
+    ]
 
 
 def test_ingest_source_extract_uses_safe_fence_for_backticks(tmp_path: Path) -> None:
@@ -279,6 +319,7 @@ def test_ingest_source_rolls_back_wiki_on_success_commit_failure(
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
     added = add_source(tmp_path, source)
+    manifest = json.loads(added.manifest_path.read_text(encoding="utf-8"))
     original_index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
     original_log = (tmp_path / "wiki" / "log.md").read_text(encoding="utf-8")
 
@@ -306,7 +347,12 @@ def test_ingest_source_rolls_back_wiki_on_success_commit_failure(
     run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
     assert load_queue_item(queue_path).status == "failed"
     assert len(run_paths) == 1
-    assert load_run_record(run_paths[0]).status == "failed"
+    run_record = load_run_record(run_paths[0])
+    assert run_record.status == "failed"
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        manifest["path"],
+    ]
 
 
 def test_ingest_source_workspace_backed_manifest_happy_path(tmp_path: Path) -> None:
