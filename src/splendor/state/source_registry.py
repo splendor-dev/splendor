@@ -10,7 +10,9 @@ from splendor import __version__
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
+from splendor.schemas.types import StorageMode
 from splendor.utils.fs import copy_file_if_missing, ensure_directory, write_text_atomic
+from splendor.utils.git import captured_source_commit
 from splendor.utils.hashing import sha256_file
 from splendor.utils.ids import stable_source_id
 from splendor.utils.time import utc_now_iso
@@ -20,7 +22,9 @@ from splendor.utils.time import utc_now_iso
 class RegisteredSource:
     record: SourceRecord
     manifest_path: Path
-    stored_path: Path
+    stored_path: Path | None
+    storage_mode: StorageMode
+    source_ref: str
     copied: bool
     already_registered: bool
 
@@ -84,7 +88,106 @@ def manifest_original_path(root: Path, source_path: Path) -> str:
         return str(source_path.expanduser())
 
 
-def register_source(root: Path, source_path: Path) -> RegisteredSource:
+def _title_for(candidate: Path) -> str:
+    return candidate.stem.replace("_", " ").replace("-", " ").strip() or candidate.name
+
+
+def _source_reference(root: Path, candidate: Path) -> tuple[str, str]:
+    try:
+        return candidate.relative_to(root.resolve()).as_posix(), "workspace_path"
+    except ValueError:
+        return str(candidate), "external_path"
+
+
+def _effective_storage_mode(
+    *,
+    source_ref_kind: str,
+    configured_storage_mode: StorageMode,
+) -> StorageMode:
+    if source_ref_kind == "workspace_path":
+        if configured_storage_mode in {"none", "copy"}:
+            return configured_storage_mode
+        msg = (
+            f"Storage mode {configured_storage_mode!r} is not implemented yet for workspace sources"
+        )
+        raise ValueError(msg)
+
+    if configured_storage_mode == "copy":
+        return "copy"
+    if configured_storage_mode in {"pointer", "symlink"}:
+        msg = (
+            f"Storage mode {configured_storage_mode!r} is not implemented yet for external sources"
+        )
+        raise ValueError(msg)
+    msg = f"Storage mode {configured_storage_mode!r} is not supported for external sources"
+    raise ValueError(msg)
+
+
+def _storage_mode_for_source(
+    *,
+    source_ref_kind: str,
+    config,
+    storage_mode_override: StorageMode | None,
+) -> StorageMode:
+    configured = (
+        storage_mode_override
+        if storage_mode_override is not None
+        else (
+            config.sources.in_repo_storage_mode
+            if source_ref_kind == "workspace_path"
+            else config.sources.external_storage_mode
+        )
+    )
+    return _effective_storage_mode(
+        source_ref_kind=source_ref_kind,
+        configured_storage_mode=configured,
+    )
+
+
+def _source_commit_for_registration(
+    *,
+    root: Path,
+    candidate: Path,
+    source_ref_kind: str,
+    capture_source_commit_enabled: bool,
+) -> str | None:
+    if not capture_source_commit_enabled or source_ref_kind != "workspace_path":
+        return None
+    return captured_source_commit(root, candidate)
+
+
+def _stored_path_for(layout, source_id: str, candidate: Path) -> Path:
+    return layout.raw_sources_dir / source_id / candidate.name
+
+
+def _validated_existing_registration(
+    *,
+    root: Path,
+    layout,
+    existing: SourceRecord,
+) -> tuple[Path | None, StorageMode, str]:
+    from splendor.state.source_resolver import resolve_source_content
+
+    try:
+        resolved = resolve_source_content(root, existing, layout.raw_sources_dir)
+    except ValueError as exc:
+        msg = (
+            "Existing source manifest could not be validated during add-source "
+            f"for source {existing.source_id}: {exc}"
+        )
+        raise ValueError(msg) from exc
+    stored_path = resolved.resolved_path if resolved.storage_mode == "copy" else None
+    source_ref = existing.source_ref or existing.original_path or existing.path
+    return stored_path, resolved.storage_mode, source_ref
+
+
+def register_source(
+    root: Path,
+    source_path: Path,
+    *,
+    storage_mode: StorageMode | None = None,
+    capture_source_commit: bool | None = None,
+) -> RegisteredSource:
     candidate = source_path.expanduser().resolve()
     if not candidate.exists():
         msg = f"Source path does not exist: {source_path}"
@@ -101,7 +204,26 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
     checksum = sha256_file(candidate)
     source_id = stable_source_id(checksum)
     manifest_path = layout.source_records_dir / f"{source_id}.json"
-    stored_path = layout.raw_sources_dir / source_id / candidate.name
+    source_ref, source_ref_kind = _source_reference(root, candidate)
+    selected_storage_mode = _storage_mode_for_source(
+        source_ref_kind=source_ref_kind,
+        config=config,
+        storage_mode_override=storage_mode,
+    )
+    capture_commit_enabled = (
+        capture_source_commit
+        if capture_source_commit is not None
+        else config.sources.capture_source_commit
+    )
+    source_commit = _source_commit_for_registration(
+        root=root,
+        candidate=candidate,
+        source_ref_kind=source_ref_kind,
+        capture_source_commit_enabled=capture_commit_enabled,
+    )
+    stored_path = (
+        _stored_path_for(layout, source_id, candidate) if selected_storage_mode == "copy" else None
+    )
 
     if manifest_path.exists():
         existing = load_source_record(manifest_path)
@@ -117,54 +239,56 @@ def register_source(root: Path, source_path: Path) -> RegisteredSource:
                 f"expected {existing.checksum}, got {checksum}"
             )
             raise ValueError(msg)
-        existing_stored_path = resolve_manifest_storage_path(root, existing.path)
-        validate_stored_source_location(
-            existing_stored_path,
-            layout.raw_sources_dir,
-            source_id,
-            existing.path,
+        existing_stored_path, existing_storage_mode, existing_source_ref = (
+            _validated_existing_registration(root=root, layout=layout, existing=existing)
         )
-        if not existing_stored_path.exists():
-            msg = f"Stored source copy is missing for existing manifest: {existing_stored_path}"
-            raise FileNotFoundError(msg)
-        existing_stored_checksum = sha256_file(existing_stored_path)
-        if existing_stored_checksum != existing.checksum:
-            msg = (
-                f"Stored source checksum mismatch for existing manifest {manifest_path}: "
-                f"expected {existing.checksum}, got {existing_stored_checksum}"
-            )
-            raise ValueError(msg)
         return RegisteredSource(
             record=existing,
             manifest_path=manifest_path,
             stored_path=existing_stored_path,
+            storage_mode=existing_storage_mode,
+            source_ref=existing_source_ref,
             copied=False,
             already_registered=True,
         )
 
-    copied = copy_file_if_missing(candidate, stored_path)
-    stored_checksum = sha256_file(stored_path)
-    if stored_checksum != checksum:
-        msg = (
-            f"Stored source checksum mismatch for {stored_path}: "
-            f"expected {checksum}, got {stored_checksum}"
-        )
-        raise ValueError(msg)
+    copied = False
+    if stored_path is not None:
+        copied = copy_file_if_missing(candidate, stored_path)
+        stored_checksum = sha256_file(stored_path)
+        if stored_checksum != checksum:
+            msg = (
+                f"Stored source checksum mismatch for {stored_path}: "
+                f"expected {checksum}, got {stored_checksum}"
+            )
+            raise ValueError(msg)
+
+    added_at = utc_now_iso()
     record = SourceRecord(
         source_id=source_id,
-        title=candidate.stem.replace("_", " ").replace("-", " ").strip() or candidate.name,
+        title=_title_for(candidate),
         source_type=candidate.suffix.lstrip(".") or "file",
-        path=stored_path.relative_to(root).as_posix(),
+        path=(stored_path.relative_to(root).as_posix() if stored_path is not None else source_ref),
         checksum=checksum,
-        added_at=utc_now_iso(),
+        added_at=added_at,
         pipeline_version=__version__,
         original_path=manifest_original_path(root, source_path),
+        source_ref=source_ref,
+        source_ref_kind=source_ref_kind,
+        storage_mode=selected_storage_mode,
+        storage_path=(
+            stored_path.relative_to(root).as_posix() if stored_path is not None else None
+        ),
+        materialized_at=(added_at if stored_path is not None else None),
+        source_commit=source_commit,
     )
     write_source_record(manifest_path, record)
     return RegisteredSource(
         record=record,
         manifest_path=manifest_path,
         stored_path=stored_path,
+        storage_mode=selected_storage_mode,
+        source_ref=source_ref,
         copied=copied,
         already_registered=False,
     )

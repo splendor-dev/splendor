@@ -8,6 +8,7 @@ from pathlib import Path
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
+from splendor.schemas.types import STORAGE_MODES
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,6 +26,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_source_parser = subparsers.add_parser("add-source", help="Register a new immutable source")
     add_source_parser.add_argument("path", type=Path, help="Path to the source file to register")
+    add_source_parser.add_argument(
+        "--storage-mode",
+        choices=STORAGE_MODES,
+        help="Override the configured storage mode for this source.",
+    )
+    capture_group = add_source_parser.add_mutually_exclusive_group()
+    capture_group.add_argument(
+        "--capture-source-commit",
+        dest="capture_source_commit",
+        action="store_true",
+        help="Capture the current HEAD commit for clean tracked workspace files.",
+    )
+    capture_group.add_argument(
+        "--no-capture-source-commit",
+        dest="capture_source_commit",
+        action="store_false",
+        help="Do not capture git provenance for this registration.",
+    )
+    add_source_parser.set_defaults(capture_source_commit=None)
     add_source_parser.set_defaults(handler=handle_add_source)
 
     ingest_parser = subparsers.add_parser("ingest", help="Ingest a registered source into the wiki")
@@ -45,11 +65,23 @@ def handle_add_source(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     candidate_path = args.path.expanduser()
     source_path = candidate_path if candidate_path.is_absolute() else root / candidate_path
-    result = add_source(root, source_path)
+    try:
+        result = add_source(
+            root,
+            source_path,
+            storage_mode=args.storage_mode,
+            capture_source_commit=args.capture_source_commit,
+        )
+    except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
+        print(f"Error: {exc}")
+        return 1
     action = "Already registered" if result.already_registered else "Registered"
     print(f"{action} source {result.source_id}")
     print(f"Manifest: {result.manifest_path}")
-    print(f"Stored copy: {result.stored_path}")
+    print(f"Source ref: {result.source_ref}")
+    print(f"Storage mode: {result.storage_mode}")
+    if result.stored_path is not None:
+        print(f"Stored copy: {result.stored_path}")
     return 0
 
 

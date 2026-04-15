@@ -1,7 +1,6 @@
 """Configuration loading for Splendor.
 
-`SourcesConfig` captures policy defaults for the upcoming source-resolution model. Runtime
-registration and ingest do not consume it yet in this release.
+`SourcesConfig` captures source-registration defaults and source-summary rendering policy.
 """
 
 from __future__ import annotations

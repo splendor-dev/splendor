@@ -24,7 +24,7 @@ def test_ingest_source_happy_path(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
 
     result = ingest_source(tmp_path, added.source_id)
 
@@ -73,7 +73,7 @@ def test_ingest_source_is_idempotent_when_current_pipeline_already_succeeded(
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
 
     first = ingest_source(tmp_path, added.source_id)
     second = ingest_source(tmp_path, added.source_id)
@@ -95,7 +95,7 @@ def test_ingest_source_recreates_missing_page_without_duplicate_index_entries(
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
 
     first = ingest_source(tmp_path, added.source_id)
     assert first.page_path is not None
@@ -119,7 +119,7 @@ def test_ingest_source_no_op_uses_configured_wiki_layout(tmp_path: Path) -> None
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
 
     first = ingest_source(tmp_path, added.source_id)
     second = ingest_source(tmp_path, added.source_id)
@@ -217,7 +217,7 @@ def test_ingest_source_validates_stored_copy_checksum(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
     manifest = json.loads(added.manifest_path.read_text(encoding="utf-8"))
     stored_path = tmp_path / manifest["path"]
     stored_path.write_text("tampered\n", encoding="utf-8")
@@ -244,7 +244,7 @@ def test_ingest_source_records_missing_stored_copy_as_failed_attempt(tmp_path: P
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
     manifest = json.loads(added.manifest_path.read_text(encoding="utf-8"))
     stored_path = tmp_path / manifest["path"]
     stored_path.unlink()
@@ -271,17 +271,8 @@ def test_ingest_source_explicit_copy_manifest_failure_uses_storage_path(tmp_path
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
     manifest = json.loads(added.manifest_path.read_text(encoding="utf-8"))
-    source_record = load_source_record(added.manifest_path).model_copy(
-        update={
-            "source_ref": "brief.md",
-            "source_ref_kind": "workspace_path",
-            "storage_mode": "copy",
-            "storage_path": manifest["path"],
-        }
-    )
-    write_source_record(added.manifest_path, source_record)
     (tmp_path / manifest["path"]).unlink()
 
     with pytest.raises(ValueError, match="Stored source copy is missing"):
@@ -301,7 +292,7 @@ def test_ingest_source_extract_uses_safe_fence_for_backticks(tmp_path: Path) -> 
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\n```python\nprint('hi')\n```\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
+    added = add_source(tmp_path, source, storage_mode="copy")
 
     result = ingest_source(tmp_path, added.source_id)
 
