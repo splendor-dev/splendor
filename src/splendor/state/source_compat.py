@@ -24,6 +24,18 @@ def effective_stored_path(source: SourceRecord) -> str | None:
     return source.storage_path or source.path
 
 
+def effective_materialized_path(source: SourceRecord) -> str | None:
+    if effective_storage_mode(source) not in {"copy", "pointer"}:
+        return None
+    return source.storage_path or source.path
+
+
+def pointer_source_error_label(source: SourceRecord) -> str:
+    if is_legacy_copied_manifest(source):
+        return "Legacy stored source pointer"
+    return "Source pointer artifact"
+
+
 def is_legacy_copied_manifest(source: SourceRecord) -> bool:
     return source.storage_mode is None and source.source_ref is None
 

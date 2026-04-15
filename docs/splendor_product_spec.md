@@ -357,8 +357,14 @@ Field meanings:
   - Expected initial values: `workspace_path`, `external_path`, `url`, `imported`, `stored_artifact`.
 - `storage_mode`
   - Expected initial values: `none`, `copy`, `symlink`, `pointer`.
+  - Current runtime support:
+    - `none` for workspace-backed sources
+    - `copy` for workspace-backed and external local sources
+    - `pointer` for workspace-backed sources via `raw/sources/<source_id>/pointer.json`
+    - `symlink` remains schema-visible but unimplemented
 - `storage_path`
   - Optional path to the materialized artifact under `raw/sources/` when one exists.
+  - Pointer-backed sources use `raw/sources/<source_id>/pointer.json`.
 - `source_commit`
   - Optional git commit SHA captured for clean tracked workspace files when the project wants
     stronger repo-native provenance.

@@ -11,6 +11,7 @@ from splendor.config import load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
 from splendor.schemas.types import SummaryMode
 from splendor.state.runtime import load_queue_item, load_run_record
+from splendor.state.source_pointer import load_source_pointer, write_source_pointer
 from splendor.state.source_registry import load_source_record, write_source_record
 
 
@@ -34,6 +35,20 @@ def update_summary_modes(
     if external is not None:
         config.sources.summarize_external_extracts_as = external
     write_config(root, config)
+
+
+def rewrite_pointer(
+    root: Path,
+    source_id: str,
+    *,
+    source_ref: str = "brief.md",
+    checksum: str,
+) -> Path:
+    pointer_path = root / "raw" / "sources" / source_id / "pointer.json"
+    artifact = load_source_pointer(pointer_path)
+    updated = artifact.model_copy(update={"source_ref": source_ref, "checksum": checksum})
+    write_source_pointer(pointer_path, updated)
+    return pointer_path
 
 
 def test_ingest_source_happy_path(tmp_path: Path) -> None:
@@ -526,10 +541,13 @@ def test_ingest_source_supports_mixed_manifest_workspace(tmp_path: Path) -> None
     workspace_source.write_text("# Workspace\n\nnew world\n", encoding="utf-8")
     copied_source = tmp_path / "copied.md"
     copied_source.write_text("# Copied\n\nstored world\n", encoding="utf-8")
+    pointer_source = tmp_path / "pointer.md"
+    pointer_source.write_text("# Pointer\n\npointer world\n", encoding="utf-8")
 
     legacy_added = add_source(tmp_path, legacy_source, storage_mode="copy")
     workspace_added = add_source(tmp_path, workspace_source)
     copied_added = add_source(tmp_path, copied_source, storage_mode="copy")
+    pointer_added = add_source(tmp_path, pointer_source, storage_mode="pointer")
 
     legacy_manifest = load_source_record(legacy_added.manifest_path).model_copy(
         update={
@@ -546,6 +564,7 @@ def test_ingest_source_supports_mixed_manifest_workspace(tmp_path: Path) -> None
     legacy_result = ingest_source(tmp_path, legacy_added.source_id)
     workspace_result = ingest_source(tmp_path, workspace_added.source_id)
     copied_result = ingest_source(tmp_path, copied_added.source_id)
+    pointer_result = ingest_source(tmp_path, pointer_added.source_id)
 
     legacy_body = legacy_result.page_path.read_text(encoding="utf-8")
     assert "Stored source:" in legacy_body
@@ -573,6 +592,15 @@ def test_ingest_source_supports_mixed_manifest_workspace(tmp_path: Path) -> None
     assert copied_run.input_refs == [
         copied_added.manifest_path.relative_to(tmp_path).as_posix(),
         copied_manifest.storage_path,
+    ]
+
+    pointer_body = pointer_result.page_path.read_text(encoding="utf-8")
+    assert "Workspace source: `pointer.md`" in pointer_body
+    assert "registered from `pointer.md`" in pointer_body
+    pointer_run = load_run_record(pointer_result.run_path)
+    assert pointer_run.input_refs == [
+        pointer_added.manifest_path.relative_to(tmp_path).as_posix(),
+        "pointer.md",
     ]
 
 
@@ -634,8 +662,110 @@ def test_ingest_source_workspace_backed_manifest_checksum_drift(tmp_path: Path) 
     assert load_run_record(run_paths[0]).status == "failed"
 
 
-@pytest.mark.parametrize("mode", ["pointer", "symlink"])
-def test_ingest_source_rejects_unsupported_storage_mode(tmp_path: Path, mode: str) -> None:
+def test_ingest_source_pointer_backed_happy_path(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="pointer")
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "Workspace source: `brief.md`" in body
+    assert "Source file: `brief.md`" in body
+    run_record = load_run_record(result.run_path)
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        "brief.md",
+    ]
+
+
+def test_ingest_source_pointer_backed_missing_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="pointer")
+    assert added.stored_path is not None
+    added.stored_path.unlink()
+
+    with pytest.raises(ValueError, match="Pointer artifact is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_pointer_backed_malformed_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="pointer")
+    assert added.stored_path is not None
+    added.stored_path.write_text("{not-json}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Pointer artifact is not valid JSON"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_pointer_backed_mismatched_source_ref(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="pointer")
+    rewrite_pointer(
+        tmp_path,
+        added.source_id,
+        source_ref="other.md",
+        checksum=load_source_record(added.manifest_path).checksum,
+    )
+
+    with pytest.raises(ValueError, match="Pointer artifact source_ref mismatch"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_pointer_backed_missing_workspace_target(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="pointer")
+    source.unlink()
+
+    with pytest.raises(ValueError, match="Workspace source is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_pointer_backed_checksum_drift(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="pointer")
+    source.write_text("# Brief\n\nchanged\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Workspace source checksum mismatch"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_rejects_unsupported_symlink_storage_mode(
+    tmp_path: Path,
+) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
@@ -644,12 +774,12 @@ def test_ingest_source_rejects_unsupported_storage_mode(tmp_path: Path, mode: st
         update={
             "source_ref": "brief.md",
             "source_ref_kind": "workspace_path",
-            "storage_mode": mode,
+            "storage_mode": "symlink",
         }
     )
     write_source_record(added.manifest_path, source_record)
 
-    with pytest.raises(ValueError, match=f"Unsupported storage mode for ingestion: {mode}"):
+    with pytest.raises(ValueError, match="Unsupported storage mode for ingestion: symlink"):
         ingest_source(tmp_path, added.source_id)
 
     source_record = load_source_record(added.manifest_path)

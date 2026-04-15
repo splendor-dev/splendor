@@ -91,6 +91,23 @@ def test_cli_add_source_supports_explicit_copy_for_workspace_files(tmp_path: Pat
     assert "Stored copy:" in captured.out
 
 
+def test_cli_add_source_supports_pointer_for_workspace_files(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+
+    exit_code = main(
+        ["--root", str(tmp_path), "add-source", "--storage-mode", "pointer", str(source)]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Source ref: brief.md" in captured.out
+    assert "Storage mode: pointer" in captured.out
+    assert "Pointer artifact:" in captured.out
+    assert "Stored copy:" not in captured.out
+
+
 def test_cli_add_source_reports_unsupported_mode_combinations(tmp_path: Path, capsys) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
@@ -107,6 +124,26 @@ def test_cli_add_source_reports_unsupported_mode_combinations(tmp_path: Path, ca
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "not supported for external sources" in captured.out
+
+
+def test_cli_add_source_reports_pointer_as_unsupported_for_external_files(
+    tmp_path: Path, capsys
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    source = fake_home / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+
+    main(["--root", str(repo_root), "init"])
+    exit_code = main(
+        ["--root", str(repo_root), "add-source", "--storage-mode", "pointer", str(source)]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "not implemented yet for external sources" in captured.out
 
 
 def test_cli_ingest_command(tmp_path: Path, capsys) -> None:

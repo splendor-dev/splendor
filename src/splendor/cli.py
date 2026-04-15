@@ -81,7 +81,10 @@ def handle_add_source(args: argparse.Namespace) -> int:
     print(f"Source ref: {result.source_ref}")
     print(f"Storage mode: {result.storage_mode}")
     if result.stored_path is not None:
-        print(f"Stored copy: {result.stored_path}")
+        if result.storage_mode == "pointer":
+            print(f"Pointer artifact: {result.stored_path}")
+        else:
+            print(f"Stored copy: {result.stored_path}")
     return 0
 
 
