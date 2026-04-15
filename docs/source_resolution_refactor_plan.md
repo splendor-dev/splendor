@@ -309,7 +309,11 @@ Make the core source manifest and ingest path understand canonical references an
 
 ### Recommended PR breakdown
 
-#### PR 1 — Docs and contract alignment
+Planning note:
+
+- the rollout steps below use `SR-n` labels (`Source Resolution`) to distinguish plan items from GitHub PR numbers
+
+#### SR-1 — Docs and contract alignment
 
 Scope:
 
@@ -322,7 +326,7 @@ Exit criteria:
 
 - docs agree on the target architecture before code changes begin
 
-#### PR 2 — Schema and config scaffolding
+#### SR-2 — Schema and config scaffolding
 
 Scope:
 
@@ -336,7 +340,7 @@ Exit criteria:
 - manifests can express source reference and storage policy
 - config defaults can encode workspace-vs-external behavior
 
-#### PR 3 — Source resolver abstraction
+#### SR-3 — Source resolver abstraction
 
 Scope:
 
@@ -351,7 +355,7 @@ Exit criteria:
 
 - ingest no longer assumes `raw/sources/` is always the place to read bytes from
 
-#### PR 4 — `add-source` default behavior switch
+#### SR-4 — `add-source` default behavior switch
 
 Scope:
 
@@ -365,7 +369,7 @@ Exit criteria:
 - in-repo files stop being copied by default
 - explicit overrides still work
 
-#### PR 5 — Migration and polish
+#### SR-5 — Migration and polish
 
 Scope:
 
@@ -393,7 +397,11 @@ Make the wiki output and storage options match the new source model ergonomicall
 
 ### Recommended PR breakdown
 
-#### PR 6 — Source-summary rendering policy
+Planning note:
+
+- phase 2 continues the same `SR-n` sequence rather than restarting with GitHub PR numbers
+
+#### SR-6 — Source-summary rendering policy
 
 Scope:
 
@@ -406,7 +414,7 @@ Exit criteria:
 
 - `wiki/sources/` becomes materially less noisy for in-repo docs and code
 
-#### PR 7 — Pointer storage mode
+#### SR-7 — Pointer storage mode
 
 Scope:
 
@@ -418,7 +426,7 @@ Exit criteria:
 
 - projects have a cross-platform materialization alternative that does not duplicate bytes
 
-#### PR 8 — Optional symlink mode
+#### SR-8 — Optional symlink mode
 
 Scope:
 
@@ -430,7 +438,7 @@ Exit criteria:
 
 - projects that prefer filesystem-level mirroring can opt in knowingly
 
-#### PR 9 — Materialization workflow polish
+#### SR-9 — Materialization workflow polish
 
 Scope:
 
