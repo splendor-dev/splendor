@@ -12,7 +12,9 @@ def test_cli_init_command(tmp_path: Path, capsys) -> None:
     assert "Initialized Splendor workspace" in captured.out
 
 
-def test_cli_add_source_command(tmp_path: Path, capsys) -> None:
+def test_cli_add_source_command_reports_workspace_backed_registration(
+    tmp_path: Path, capsys
+) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
     source.write_text("hello\n", encoding="utf-8")
@@ -22,6 +24,9 @@ def test_cli_add_source_command(tmp_path: Path, capsys) -> None:
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "Registered source" in captured.out
+    assert "Source ref: brief.md" in captured.out
+    assert "Storage mode: none" in captured.out
+    assert "Stored copy:" not in captured.out
 
 
 def test_cli_add_source_resolves_relative_paths_against_root(tmp_path: Path, capsys) -> None:
@@ -37,7 +42,8 @@ def test_cli_add_source_resolves_relative_paths_against_root(tmp_path: Path, cap
 
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Registered source" in captured.out
+    assert "Source ref: docs/brief.md" in captured.out
+    assert "Storage mode: none" in captured.out
 
 
 def test_cli_add_source_expands_user_paths(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -55,6 +61,40 @@ def test_cli_add_source_expands_user_paths(tmp_path: Path, capsys, monkeypatch) 
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "Registered source" in captured.out
+    assert "Storage mode: copy" in captured.out
+    assert "Stored copy:" in captured.out
+
+
+def test_cli_add_source_supports_explicit_copy_for_workspace_files(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "add-source", "--storage-mode", "copy", str(source)])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Source ref: brief.md" in captured.out
+    assert "Storage mode: copy" in captured.out
+    assert "Stored copy:" in captured.out
+
+
+def test_cli_add_source_reports_unsupported_mode_combinations(tmp_path: Path, capsys) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    source = fake_home / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+
+    main(["--root", str(repo_root), "init"])
+    exit_code = main(
+        ["--root", str(repo_root), "add-source", "--storage-mode", "none", str(source)]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "not supported for external sources" in captured.out
 
 
 def test_cli_ingest_command(tmp_path: Path, capsys) -> None:

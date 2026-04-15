@@ -1,13 +1,35 @@
-import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
+from splendor.state.source_registry import load_source_record, write_source_record
 
 
-def test_add_source_registers_and_copies_file(tmp_path: Path) -> None:
+def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def init_git_repo(root: Path) -> None:
+    git(root, "init")
+    git(root, "config", "user.name", "Test User")
+    git(root, "config", "user.email", "test@example.com")
+
+
+def commit_all(root: Path, message: str) -> None:
+    git(root, "add", ".")
+    git(root, "commit", "-m", message)
+
+
+def test_add_source_registers_workspace_file_without_copy_by_default(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "note.md"
     source.write_text("# note\n", encoding="utf-8")
@@ -16,17 +38,23 @@ def test_add_source_registers_and_copies_file(tmp_path: Path) -> None:
 
     assert result.source_id.startswith("src-")
     assert result.manifest_path.exists()
-    assert result.stored_path.exists()
+    assert result.stored_path is None
+    assert result.storage_mode == "none"
+    assert result.source_ref == "note.md"
 
-    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["kind"] == "source"
-    assert manifest["path"].endswith("note.md")
-    assert "/" in manifest["path"]
-    assert manifest["checksum"]
-    assert manifest["original_path"] == "note.md"
+    manifest = load_source_record(result.manifest_path)
+    assert manifest.kind == "source"
+    assert manifest.path == "note.md"
+    assert manifest.source_ref == "note.md"
+    assert manifest.source_ref_kind == "workspace_path"
+    assert manifest.storage_mode == "none"
+    assert manifest.storage_path is None
+    assert manifest.materialized_at is None
+    assert manifest.original_path == "note.md"
+    assert not (tmp_path / "raw" / "sources" / result.source_id).exists()
 
 
-def test_add_source_stores_workspace_relative_original_path(tmp_path: Path) -> None:
+def test_add_source_stores_workspace_relative_source_ref_for_nested_sources(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     nested_dir = tmp_path / "docs"
     nested_dir.mkdir()
@@ -35,11 +63,13 @@ def test_add_source_stores_workspace_relative_original_path(tmp_path: Path) -> N
 
     result = add_source(tmp_path, source)
 
-    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["original_path"] == "docs/note.md"
+    manifest = load_source_record(result.manifest_path)
+    assert result.source_ref == "docs/note.md"
+    assert manifest.source_ref == "docs/note.md"
+    assert manifest.original_path == "docs/note.md"
 
 
-def test_add_source_stores_expanded_original_path_for_external_sources(tmp_path: Path) -> None:
+def test_add_source_registers_external_sources_as_copies_by_default(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     external_dir = tmp_path.parent / f"{tmp_path.name}-external"
     external_dir.mkdir()
@@ -48,14 +78,67 @@ def test_add_source_stores_expanded_original_path_for_external_sources(tmp_path:
 
     try:
         result = add_source(tmp_path, source)
-        manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-        assert manifest["original_path"] == str(source)
+        manifest = load_source_record(result.manifest_path)
+        assert result.stored_path is not None and result.stored_path.exists()
+        assert result.storage_mode == "copy"
+        assert result.source_ref == str(source.resolve())
+        assert manifest.path == manifest.storage_path
+        assert manifest.source_ref == str(source.resolve())
+        assert manifest.source_ref_kind == "external_path"
+        assert manifest.storage_mode == "copy"
+        assert manifest.original_path == str(source)
+        assert manifest.materialized_at is not None
     finally:
         source.unlink(missing_ok=True)
         external_dir.rmdir()
 
 
-def test_add_source_is_deduplicated_by_checksum(tmp_path: Path) -> None:
+def test_add_source_supports_explicit_copy_for_workspace_sources(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    result = add_source(tmp_path, source, storage_mode="copy")
+
+    manifest = load_source_record(result.manifest_path)
+    assert result.stored_path is not None and result.stored_path.exists()
+    assert result.storage_mode == "copy"
+    assert result.source_ref == "note.md"
+    assert manifest.path.startswith(f"raw/sources/{result.source_id}/")
+    assert manifest.storage_path == manifest.path
+    assert manifest.source_ref == "note.md"
+    assert manifest.source_ref_kind == "workspace_path"
+    assert manifest.storage_mode == "copy"
+
+
+def test_add_source_rejects_external_none_storage_mode(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    external_dir = tmp_path.parent / f"{tmp_path.name}-external"
+    external_dir.mkdir()
+    source = external_dir / "outside.md"
+    source.write_text("# outside\n", encoding="utf-8")
+
+    try:
+        with pytest.raises(ValueError, match="not supported for external sources"):
+            add_source(tmp_path, source, storage_mode="none")
+    finally:
+        source.unlink(missing_ok=True)
+        external_dir.rmdir()
+
+
+@pytest.mark.parametrize("storage_mode", ["pointer", "symlink"])
+def test_add_source_rejects_unimplemented_storage_modes(tmp_path: Path, storage_mode: str) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not implemented yet"):
+        add_source(tmp_path, source, storage_mode=storage_mode)
+
+
+def test_add_source_is_deduplicated_by_checksum_for_workspace_backed_sources(
+    tmp_path: Path,
+) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "notes.txt"
     source.write_text("same-content\n", encoding="utf-8")
@@ -65,128 +148,145 @@ def test_add_source_is_deduplicated_by_checksum(tmp_path: Path) -> None:
 
     assert first.source_id == second.source_id
     assert second.already_registered is True
+    assert second.storage_mode == "none"
+    assert second.stored_path is None
 
 
-def test_add_source_reuses_existing_stored_copy_for_same_content(tmp_path: Path) -> None:
+def test_add_source_is_deduplicated_by_checksum_for_copied_sources(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
-    first_source = tmp_path / "notes.txt"
-    second_source = tmp_path / "renamed-notes.txt"
-    first_source.write_text("same-content\n", encoding="utf-8")
-    second_source.write_text("same-content\n", encoding="utf-8")
+    source = tmp_path / "notes.txt"
+    source.write_text("same-content\n", encoding="utf-8")
 
-    first = add_source(tmp_path, first_source)
-    second = add_source(tmp_path, second_source)
+    first = add_source(tmp_path, source, storage_mode="copy")
+    second = add_source(tmp_path, source, storage_mode="copy")
 
     assert first.source_id == second.source_id
+    assert second.already_registered is True
+    assert second.storage_mode == "copy"
     assert second.stored_path == first.stored_path
-    assert not (tmp_path / "raw" / "sources" / first.source_id / "renamed-notes.txt").exists()
 
 
-def test_add_source_raises_if_existing_manifest_checksum_mismatches(tmp_path: Path) -> None:
+def test_add_source_existing_workspace_manifest_missing_file_fails(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "notes.txt"
     source.write_text("same-content\n", encoding="utf-8")
 
     first = add_source(tmp_path, source)
-    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
-    manifest["checksum"] = "b" * 64
-    first.manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    source.unlink()
+    replacement = tmp_path / "replacement.txt"
+    replacement.write_text("same-content\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Workspace source is missing"):
+        add_source(tmp_path, replacement)
+
+    manifest = load_source_record(first.manifest_path)
+    assert manifest.storage_mode == "none"
+
+
+def test_add_source_existing_workspace_manifest_checksum_drift_fails(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "notes.txt"
+    source.write_text("same-content\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    source.write_text("changed\n", encoding="utf-8")
+    replacement = tmp_path / "replacement.txt"
+    replacement.write_text("same-content\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Workspace source checksum mismatch"):
+        add_source(tmp_path, replacement)
+
+    manifest = load_source_record(first.manifest_path)
+    assert manifest.storage_mode == "none"
+
+
+def test_add_source_captures_head_for_clean_tracked_workspace_file(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    init_git_repo(tmp_path)
+    commit_all(tmp_path, "initial")
+    head = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+
+    result = add_source(tmp_path, source)
+
+    manifest = load_source_record(result.manifest_path)
+    assert manifest.source_commit == head
+
+
+def test_add_source_leaves_source_commit_null_for_untracked_workspace_file(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    init_git_repo(tmp_path)
+    commit_all(tmp_path, "initial")
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    result = add_source(tmp_path, source)
+
+    manifest = load_source_record(result.manifest_path)
+    assert manifest.source_commit is None
+
+
+def test_add_source_leaves_source_commit_null_for_dirty_tracked_workspace_file(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    init_git_repo(tmp_path)
+    commit_all(tmp_path, "initial")
+    source.write_text("# changed\n", encoding="utf-8")
+
+    result = add_source(tmp_path, source)
+
+    manifest = load_source_record(result.manifest_path)
+    assert manifest.source_commit is None
+
+
+def test_add_source_leaves_source_commit_null_for_external_file(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    init_git_repo(tmp_path)
+    commit_all(tmp_path, "initial")
+    external_dir = tmp_path.parent / f"{tmp_path.name}-external"
+    external_dir.mkdir()
+    source = external_dir / "outside.md"
+    source.write_text("# outside\n", encoding="utf-8")
+
+    try:
+        result = add_source(tmp_path, source)
+        manifest = load_source_record(result.manifest_path)
+        assert manifest.source_commit is None
+    finally:
+        source.unlink(missing_ok=True)
+        external_dir.rmdir()
+
+
+def test_add_source_no_capture_override_suppresses_source_commit(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    init_git_repo(tmp_path)
+    commit_all(tmp_path, "initial")
+
+    result = add_source(tmp_path, source, capture_source_commit=False)
+
+    manifest = load_source_record(result.manifest_path)
+    assert manifest.source_commit is None
+
+
+def test_add_source_reuses_existing_manifest_authoritatively(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source, storage_mode="copy")
+    manifest = load_source_record(first.manifest_path).model_copy(
+        update={"source_ref": "docs/custom.md"}
     )
+    write_source_record(first.manifest_path, manifest)
 
-    with pytest.raises(ValueError, match="Checksum mismatch"):
-        add_source(tmp_path, source)
+    second = add_source(tmp_path, source)
 
-
-def test_add_source_rejects_existing_manifest_source_id_mismatch(tmp_path: Path) -> None:
-    initialize_workspace(tmp_path)
-    source = tmp_path / "notes.txt"
-    source.write_text("same-content\n", encoding="utf-8")
-
-    first = add_source(tmp_path, source)
-    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
-    manifest["source_id"] = "src-other"
-    first.manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="Source ID mismatch"):
-        add_source(tmp_path, source)
-
-
-def test_add_source_rejects_manifest_path_outside_workspace(tmp_path: Path) -> None:
-    initialize_workspace(tmp_path)
-    source = tmp_path / "notes.txt"
-    source.write_text("same-content\n", encoding="utf-8")
-
-    first = add_source(tmp_path, source)
-    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
-    manifest["path"] = "../escape.txt"
-    first.manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="escapes workspace root"):
-        add_source(tmp_path, source)
-
-
-def test_add_source_rejects_manifest_path_outside_raw_sources_dir(tmp_path: Path) -> None:
-    initialize_workspace(tmp_path)
-    source = tmp_path / "notes.txt"
-    source.write_text("same-content\n", encoding="utf-8")
-
-    first = add_source(tmp_path, source)
-    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
-    manifest["path"] = "wiki/index.md"
-    first.manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="outside the configured raw source storage area"):
-        add_source(tmp_path, source)
-
-
-def test_add_source_rejects_manifest_path_for_wrong_source_dir(tmp_path: Path) -> None:
-    initialize_workspace(tmp_path)
-    source = tmp_path / "notes.txt"
-    source.write_text("same-content\n", encoding="utf-8")
-
-    first = add_source(tmp_path, source)
-    manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
-    manifest["path"] = "raw/sources/src-other/notes.txt"
-    first.manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="outside the expected source directory"):
-        add_source(tmp_path, source)
-
-
-def test_add_source_rejects_corrupted_existing_stored_copy(tmp_path: Path) -> None:
-    initialize_workspace(tmp_path)
-    source = tmp_path / "notes.txt"
-    source.write_text("same-content\n", encoding="utf-8")
-
-    first = add_source(tmp_path, source)
-    first.stored_path.write_text("tampered\n", encoding="utf-8")
-    first.manifest_path.unlink()
-
-    with pytest.raises(ValueError, match="Stored source checksum mismatch"):
-        add_source(tmp_path, source)
-
-
-def test_add_source_rejects_missing_existing_stored_copy(tmp_path: Path) -> None:
-    initialize_workspace(tmp_path)
-    source = tmp_path / "notes.txt"
-    source.write_text("same-content\n", encoding="utf-8")
-
-    first = add_source(tmp_path, source)
-    first.stored_path.unlink()
-
-    with pytest.raises(FileNotFoundError, match="Stored source copy is missing"):
-        add_source(tmp_path, source)
+    assert second.already_registered is True
+    assert second.source_ref == "docs/custom.md"
+    assert second.storage_mode == "copy"
