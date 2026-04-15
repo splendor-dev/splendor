@@ -107,7 +107,9 @@ def _build_summary(source: SourceRecord) -> str:
 
 
 def _best_available_source_ref(source: SourceRecord) -> str:
-    return source.source_ref or source.storage_path or source.path
+    if source.storage_mode == "none":
+        return source.source_ref or source.storage_path or source.path
+    return source.storage_path or source.path or source.source_ref
 
 
 def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
