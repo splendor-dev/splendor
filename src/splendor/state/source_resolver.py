@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from splendor.schemas import SourceRecord
+from splendor.state.source_compat import (
+    canonical_source_ref,
+    copied_source_error_label,
+    effective_source_ref_kind,
+    effective_storage_mode,
+    effective_stored_path,
+)
 from splendor.state.source_registry import (
     resolve_manifest_storage_path,
     validate_stored_source_location,
@@ -70,7 +77,10 @@ def _resolve_workspace_source(root: Path, source: SourceRecord) -> ResolvedSourc
 def _resolve_copied_source(
     root: Path, source: SourceRecord, raw_sources_dir: Path
 ) -> ResolvedSource:
-    stored_path_value = source.storage_path or source.path
+    stored_path_value = effective_stored_path(source)
+    if stored_path_value is None:
+        msg = f"Copied source is missing a stored path: {source.source_id}"
+        raise ValueError(msg)
     resolved_path = resolve_manifest_storage_path(root, stored_path_value)
     validate_stored_source_location(
         resolved_path,
@@ -78,16 +88,17 @@ def _resolve_copied_source(
         source.source_id,
         stored_path_value,
     )
+    source_label = copied_source_error_label(source)
     if not resolved_path.exists():
-        msg = f"Stored source copy is missing: {resolved_path}"
+        msg = f"{source_label} is missing: {resolved_path}"
         raise ValueError(msg)
     if sha256_file(resolved_path) != source.checksum:
-        msg = f"Stored source checksum mismatch for ingestion: {resolved_path}"
+        msg = f"{source_label} checksum mismatch for ingestion: {resolved_path}"
         raise ValueError(msg)
 
     return ResolvedSource(
-        canonical_ref=source.source_ref or source.original_path or source.path,
-        canonical_ref_kind=source.source_ref_kind or "stored_artifact",
+        canonical_ref=canonical_source_ref(source),
+        canonical_ref_kind=effective_source_ref_kind(source),
         storage_mode="copy",
         resolved_path=resolved_path,
         resolved_ref=stored_path_value,
@@ -98,14 +109,12 @@ def _resolve_copied_source(
 def resolve_source_content(
     root: Path, source: SourceRecord, raw_sources_dir: Path
 ) -> ResolvedSource:
-    if source.storage_mode in {"symlink", "pointer"}:
-        msg = f"Unsupported storage mode for ingestion: {source.storage_mode}"
+    storage_mode = effective_storage_mode(source)
+    if storage_mode in {"symlink", "pointer"}:
+        msg = f"Unsupported storage mode for ingestion: {storage_mode}"
         raise ValueError(msg)
 
-    if source.storage_mode == "none":
+    if storage_mode == "none":
         return _resolve_workspace_source(root, source)
-
-    if source.storage_mode == "copy":
-        return _resolve_copied_source(root, source, raw_sources_dir)
 
     return _resolve_copied_source(root, source, raw_sources_dir)

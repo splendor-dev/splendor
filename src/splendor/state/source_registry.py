@@ -11,6 +11,7 @@ from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
 from splendor.schemas.types import StorageMode
+from splendor.state.source_compat import canonical_source_ref
 from splendor.utils.fs import copy_file_if_missing, ensure_directory, write_text_atomic
 from splendor.utils.git import captured_source_commit
 from splendor.utils.hashing import sha256_file
@@ -177,7 +178,7 @@ def _validated_existing_registration(
         )
         raise ValueError(msg) from exc
     stored_path = resolved.resolved_path if resolved.storage_mode == "copy" else None
-    source_ref = existing.source_ref or existing.original_path or existing.path
+    source_ref = canonical_source_ref(existing)
     return stored_path, resolved.storage_mode, source_ref
 
 

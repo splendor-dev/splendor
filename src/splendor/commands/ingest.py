@@ -18,6 +18,11 @@ from splendor.state.runtime import (
     write_queue_item,
     write_run_record,
 )
+from splendor.state.source_compat import (
+    canonical_source_ref,
+    effective_storage_mode,
+    effective_stored_path,
+)
 from splendor.state.source_registry import (
     load_source_record,
     manifest_path_for,
@@ -99,7 +104,7 @@ def _build_extract(text: str) -> str:
 
 
 def _build_summary(source: SourceRecord) -> str:
-    path_fragment = source.source_ref or source.original_path or source.path
+    path_fragment = canonical_source_ref(source)
     return (
         f"This page records deterministic ingestion output for source `{source.source_id}`, "
         f"a `{source.source_type}` file registered from `{path_fragment}`."
@@ -107,9 +112,9 @@ def _build_summary(source: SourceRecord) -> str:
 
 
 def _best_available_source_ref(source: SourceRecord) -> str:
-    if source.storage_mode == "none":
-        return source.source_ref or source.storage_path or source.path
-    return source.storage_path or source.path or source.source_ref
+    if effective_storage_mode(source) == "none":
+        return canonical_source_ref(source)
+    return effective_stored_path(source) or canonical_source_ref(source)
 
 
 def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
@@ -292,7 +297,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
 
         page_path = _page_path_for(layout.wiki_sources_dir, source_id)
         page_relpath = _relative_to_root(root, page_path)
-        registered_path = source.source_ref or source.original_path or source.path
+        registered_path = canonical_source_ref(source)
         frontmatter = KnowledgePageFrontmatter(
             kind="source-summary",
             title=source.title,
@@ -317,7 +322,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 f"Source ID: `{source.source_id}`",
                 f"Source type: `{source.source_type}`",
                 f"Checksum: `{source.checksum}`",
-                f"Original path: `{source.original_path or source.path}`",
+                f"Source ref: `{canonical_source_ref(source)}`",
                 f"Added at: `{source.added_at}`",
                 f"Ingested at: `{now}`",
             ],

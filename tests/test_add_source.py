@@ -296,3 +296,48 @@ def test_add_source_reuses_existing_manifest_authoritatively(tmp_path: Path) -> 
     assert second.already_registered is True
     assert second.source_ref == "docs/custom.md"
     assert second.storage_mode == "copy"
+
+
+def test_add_source_reuses_mixed_manifest_shapes_authoritatively(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+
+    legacy_source = tmp_path / "legacy.md"
+    legacy_source.write_text("# legacy\n", encoding="utf-8")
+    workspace_source = tmp_path / "workspace.md"
+    workspace_source.write_text("# workspace\n", encoding="utf-8")
+    copied_source = tmp_path / "copied.md"
+    copied_source.write_text("# copied\n", encoding="utf-8")
+
+    legacy_added = add_source(tmp_path, legacy_source, storage_mode="copy")
+    add_source(tmp_path, workspace_source)
+    add_source(tmp_path, copied_source, storage_mode="copy")
+
+    legacy_manifest = load_source_record(legacy_added.manifest_path).model_copy(
+        update={
+            "source_ref": None,
+            "source_ref_kind": None,
+            "storage_mode": None,
+            "storage_path": None,
+            "materialized_at": None,
+            "source_commit": None,
+        }
+    )
+    write_source_record(legacy_added.manifest_path, legacy_manifest)
+
+    legacy_repeat = add_source(tmp_path, legacy_source)
+    workspace_repeat = add_source(tmp_path, workspace_source, storage_mode="copy")
+    copied_repeat = add_source(tmp_path, copied_source)
+
+    assert legacy_repeat.already_registered is True
+    assert legacy_repeat.source_ref == "legacy.md"
+    assert legacy_repeat.storage_mode == "copy"
+
+    assert workspace_repeat.already_registered is True
+    assert workspace_repeat.source_ref == "workspace.md"
+    assert workspace_repeat.storage_mode == "none"
+    assert workspace_repeat.stored_path is None
+
+    assert copied_repeat.already_registered is True
+    assert copied_repeat.source_ref == "copied.md"
+    assert copied_repeat.storage_mode == "copy"
+    assert copied_repeat.stored_path is not None

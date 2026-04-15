@@ -1,7 +1,8 @@
 """Source schemas.
 
-`path` remains the active runtime field in this release. The additional source-resolution fields are
-schema scaffolding for the upcoming resolver-based migration.
+`path` remains a required compatibility field in this release. New registrations now also write the
+source-resolution fields, while older manifests that only carry `path` remain supported at read
+time.
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ class SourceRecord(StrictRecord):
     source_id: str
     title: str
     source_type: str
-    # Legacy runtime field. Current registration and ingest still read from `path`.
+    # Compatibility field. For copied sources it is the stored artifact path; for workspace-backed
+    # sources it temporarily mirrors `source_ref`.
     path: str
     checksum: str = Field(min_length=64, max_length=64)
     added_at: str

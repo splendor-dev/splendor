@@ -222,7 +222,7 @@ def test_ingest_source_validates_stored_copy_checksum(tmp_path: Path) -> None:
     stored_path = tmp_path / manifest["path"]
     stored_path.write_text("tampered\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Stored source checksum mismatch"):
+    with pytest.raises(ValueError, match="Stored source copy checksum mismatch"):
         ingest_source(tmp_path, added.source_id)
 
     source_record = load_source_record(added.manifest_path)
@@ -264,6 +264,45 @@ def test_ingest_source_records_missing_stored_copy_as_failed_attempt(tmp_path: P
     assert run_record.input_refs == [
         added.manifest_path.relative_to(tmp_path).as_posix(),
         manifest["path"],
+    ]
+
+
+def test_ingest_source_legacy_manifest_missing_stored_copy_is_shape_specific(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "legacy.md"
+    source.write_text("# Legacy\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="copy")
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "source_ref": None,
+            "source_ref_kind": None,
+            "storage_mode": None,
+            "storage_path": None,
+            "materialized_at": None,
+            "source_commit": None,
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+    stored_path = tmp_path / source_record.path
+    stored_path.unlink()
+
+    with pytest.raises(ValueError, match="Legacy stored source copy is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
+    assert load_queue_item(queue_path).status == "failed"
+    assert len(run_paths) == 1
+    run_record = load_run_record(run_paths[0])
+    assert run_record.status == "failed"
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        source_record.path,
     ]
 
 
@@ -371,6 +410,65 @@ def test_ingest_source_workspace_backed_manifest_happy_path(tmp_path: Path) -> N
     assert run_record.input_refs == [
         added.manifest_path.relative_to(tmp_path).as_posix(),
         "brief.md",
+    ]
+
+
+def test_ingest_source_supports_mixed_manifest_workspace(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+
+    legacy_source = tmp_path / "legacy.md"
+    legacy_source.write_text("# Legacy\n\nold world\n", encoding="utf-8")
+    workspace_source = tmp_path / "workspace.md"
+    workspace_source.write_text("# Workspace\n\nnew world\n", encoding="utf-8")
+    copied_source = tmp_path / "copied.md"
+    copied_source.write_text("# Copied\n\nstored world\n", encoding="utf-8")
+
+    legacy_added = add_source(tmp_path, legacy_source, storage_mode="copy")
+    workspace_added = add_source(tmp_path, workspace_source)
+    copied_added = add_source(tmp_path, copied_source, storage_mode="copy")
+
+    legacy_manifest = load_source_record(legacy_added.manifest_path).model_copy(
+        update={
+            "source_ref": None,
+            "source_ref_kind": None,
+            "storage_mode": None,
+            "storage_path": None,
+            "materialized_at": None,
+            "source_commit": None,
+        }
+    )
+    write_source_record(legacy_added.manifest_path, legacy_manifest)
+
+    legacy_result = ingest_source(tmp_path, legacy_added.source_id)
+    workspace_result = ingest_source(tmp_path, workspace_added.source_id)
+    copied_result = ingest_source(tmp_path, copied_added.source_id)
+
+    legacy_body = legacy_result.page_path.read_text(encoding="utf-8")
+    assert "Stored source:" in legacy_body
+    assert "registered from `legacy.md`" in legacy_body
+    legacy_run = load_run_record(legacy_result.run_path)
+    assert legacy_run.input_refs == [
+        legacy_added.manifest_path.relative_to(tmp_path).as_posix(),
+        legacy_manifest.path,
+    ]
+
+    workspace_body = workspace_result.page_path.read_text(encoding="utf-8")
+    assert "Workspace source: `workspace.md`" in workspace_body
+    assert "registered from `workspace.md`" in workspace_body
+    workspace_run = load_run_record(workspace_result.run_path)
+    assert workspace_run.input_refs == [
+        workspace_added.manifest_path.relative_to(tmp_path).as_posix(),
+        "workspace.md",
+    ]
+
+    copied_manifest = load_source_record(copied_added.manifest_path)
+    copied_body = copied_result.page_path.read_text(encoding="utf-8")
+    assert "Stored source:" in copied_body
+    assert "registered from `copied.md`" in copied_body
+    copied_run = load_run_record(copied_result.run_path)
+    assert copied_run.input_refs == [
+        copied_added.manifest_path.relative_to(tmp_path).as_posix(),
+        copied_manifest.storage_path,
     ]
 
 
