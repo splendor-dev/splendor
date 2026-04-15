@@ -32,19 +32,22 @@ Current implementation fields:
 - `review_state`
 - `origin_url`
 - `original_path`
+- `source_ref`
+- `source_ref_kind`
+- `storage_mode`
+- `storage_path`
+- `materialized_at`
+- `source_commit`
 
-### Planned source-record evolution
+### Current source-record shape
 
-The current single-`path` contract is sufficient for the initial copy-everything MVP, but it
-mixes together three different concerns:
+The source record now splits three concerns explicitly:
 
 - the canonical source the user wants tracked
 - the storage mechanism Splendor used to make it available
 - the current location from which ingest reads bytes
 
-The next source-record revision should split those concerns explicitly.
-
-Proposed fields:
+Implemented fields:
 
 - `schema_version`
 - `kind: source`
@@ -66,9 +69,8 @@ Proposed fields:
 - `origin_url`
 - `original_path`
 - `materialized_at`
-- `source_commit`
 
-### Proposed field semantics
+### Field semantics
 
 - `source_ref`
   - Canonical source identifier.
@@ -110,15 +112,20 @@ Recommended defaults:
 - URL/imported source:
   - `storage_mode: copy` or `pointer`, depending on downloader semantics
 
-### Migration note
+### Compatibility note
 
-The easiest migration path is:
+Splendor currently supports both:
 
-1. Continue reading existing manifests with `path`.
-2. Introduce compatibility mapping:
-   - old `path` -> `storage_path`
-   - old `original_path` -> `source_ref` when it is repo-relative or otherwise available
-3. Write only the new fields once the resolver layer is in place.
+1. legacy manifests that only have `path` and are treated as copied-source records at read time
+2. new manifests that write `source_ref`, `source_ref_kind`, `storage_mode`, `storage_path`,
+   `materialized_at`, and `source_commit`
+
+In this release:
+
+- `path` remains required for compatibility
+- copied sources still use `path` as the stored artifact path
+- workspace-backed sources temporarily mirror `source_ref` into `path`
+- no automatic manifest rewrite or schema-version bump is performed yet
 
 ## Knowledge page frontmatter
 

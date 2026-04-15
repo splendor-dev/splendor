@@ -135,7 +135,9 @@ Compatibility plan:
 
 - keep reading old manifests that only have `path`
 - treat old `path` as a legacy storage path
-- migrate on write once the new resolver is implemented
+- keep `path` as a compatibility field while new registrations also write the explicit
+  source-resolution fields
+- defer any manifest rewrite or schema-version bump to a later release
 
 ### 6.2 Proposed field definitions
 

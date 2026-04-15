@@ -77,10 +77,10 @@ Examples:
 
 The source layer is append-oriented. Sources are not mutated by LLM workflows.
 
-In the initial MVP, Splendor materializes registered sources under `raw/sources/`. That behavior is
-useful for external and unstable inputs, but it is too blunt for repositories whose markdown, code,
-and configuration files already live inside git. The long-term source model must therefore
-distinguish between:
+Splendor now defaults to workspace-backed registration for in-repo files and materialized copies
+for external local files. Materialization under `raw/sources/` remains useful for external and
+unstable inputs, but it is too blunt for repositories whose markdown, code, and configuration files
+already live inside git. The source model therefore distinguishes between:
 
 - the **canonical source reference** the user means Splendor to track
 - the **storage policy** Splendor applies to make that source available to the pipeline
