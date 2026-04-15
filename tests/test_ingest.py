@@ -7,6 +7,7 @@ import yaml
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
+from splendor.config import load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
 from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_registry import load_source_record, write_source_record
@@ -18,6 +19,17 @@ def parse_frontmatter(page_path: Path) -> tuple[KnowledgePageFrontmatter, str]:
     frontmatter_text, body = raw.removeprefix("---\n").split("\n---\n", maxsplit=1)
     frontmatter = KnowledgePageFrontmatter.model_validate(yaml.safe_load(frontmatter_text))
     return frontmatter, body
+
+
+def update_summary_modes(
+    root: Path, *, in_repo: str | None = None, external: str | None = None
+) -> None:
+    config = load_config(root)
+    if in_repo is not None:
+        config.sources.summarize_in_repo_extracts_as = in_repo
+    if external is not None:
+        config.sources.summarize_external_extracts_as = external
+    write_config(root, config)
 
 
 def test_ingest_source_happy_path(tmp_path: Path) -> None:
@@ -339,6 +351,94 @@ def test_ingest_source_extract_uses_safe_fence_for_backticks(tmp_path: Path) -> 
     page_content = result.page_path.read_text(encoding="utf-8")
     assert "````text" in page_content
     assert "\n````\n\n## Provenance" in page_content
+
+
+def test_ingest_source_workspace_backed_default_uses_excerpt(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text(
+        "# Brief\n\n" + "\n".join(f"line {i}" for i in range(120)),
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "## Extract" in body
+    assert "line 10" in body
+    assert "line 119" not in body
+
+
+def test_ingest_source_workspace_backed_none_omits_extract_section(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    update_summary_modes(tmp_path, in_repo="none")
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "## Extract" not in body
+    assert "Workspace source: `brief.md`" in body
+    assert "Source file: `brief.md`" in body
+
+
+def test_ingest_source_workspace_backed_full_renders_full_text(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    update_summary_modes(tmp_path, in_repo="full")
+    source = tmp_path / "brief.md"
+    source.write_text(
+        "# Brief\n\n" + "\n".join(f"line {i}" for i in range(120)),
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "## Extract" in body
+    assert "line 119" in body
+
+
+def test_ingest_source_copied_default_renders_full_text(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text(
+        "# Brief\n\n" + "\n".join(f"line {i}" for i in range(120)),
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source, storage_mode="copy")
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "## Extract" in body
+    assert "line 119" in body
+
+
+def test_ingest_source_external_excerpt_override_uses_bounded_preview(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    update_summary_modes(tmp_path, external="excerpt")
+    source = tmp_path / "brief.md"
+    source.write_text(
+        "# Brief\n\n" + "\n".join(f"line {i}" for i in range(120)),
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source, storage_mode="copy")
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "## Extract" in body
+    assert "line 10" in body
+    assert "line 119" not in body
 
 
 def test_ingest_source_rolls_back_wiki_on_success_commit_failure(

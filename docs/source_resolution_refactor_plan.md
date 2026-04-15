@@ -407,8 +407,8 @@ Planning note:
 
 Scope:
 
-- add config for excerpt strategy
-- default in-repo summaries to short excerpt or none
+- activate config-driven extract strategy during ingest
+- default in-repo summaries to short excerpts
 - preserve fuller extracts for external or transformed sources
 - update tests for deterministic page rendering
 

@@ -607,6 +607,13 @@ Recommended default behavior:
 - reserve full extracted text for cases where the source is external, transformed, or otherwise not
   directly readable from the repository
 
+Current implementation:
+
+- workspace-backed in-repo text sources default to `excerpt`
+- copied or external text sources default to `full`
+- projects may set either class to `none`, `excerpt`, or `full` through `sources.*extracts_as`
+- when the mode is `none`, the `## Extract` section is omitted entirely
+
 Later optional support:
 - PDF
 - image-based sources
