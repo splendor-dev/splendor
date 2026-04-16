@@ -681,6 +681,24 @@ def test_ingest_source_pointer_backed_happy_path(tmp_path: Path) -> None:
     ]
 
 
+def test_ingest_source_pointer_backed_default_uses_excerpt(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text(
+        "# Brief\n\n" + "\n".join(f"line {i}" for i in range(120)),
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source, storage_mode="pointer")
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "## Extract" in body
+    assert "line 10" in body
+    assert "line 119" not in body
+
+
 def test_ingest_source_pointer_backed_missing_artifact(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
