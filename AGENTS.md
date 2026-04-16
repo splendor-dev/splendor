@@ -13,7 +13,7 @@
 - Format check: `uv run ruff format --check .`
 - Lint: `uv run ruff check .`
 - Tests: `uv run pytest`
-- Full CI-equivalent test command: `uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml`
+- CI test-job command (with coverage): `uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml`
 - Pre-commit sweep: `uv run pre-commit run --all-files`
 
 ## Branch and Commit Rules
