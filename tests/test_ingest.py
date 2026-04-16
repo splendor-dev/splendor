@@ -51,6 +51,15 @@ def rewrite_pointer(
     return pointer_path
 
 
+def rewrite_symlink(root: Path, source_id: str, target: Path) -> Path:
+    symlink_path = root / "raw" / "sources" / source_id / "brief.md"
+    if symlink_path.exists() or symlink_path.is_symlink():
+        symlink_path.unlink()
+    symlink_path.parent.mkdir(parents=True, exist_ok=True)
+    symlink_path.symlink_to(target)
+    return symlink_path
+
+
 def test_ingest_source_happy_path(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
@@ -543,11 +552,14 @@ def test_ingest_source_supports_mixed_manifest_workspace(tmp_path: Path) -> None
     copied_source.write_text("# Copied\n\nstored world\n", encoding="utf-8")
     pointer_source = tmp_path / "pointer.md"
     pointer_source.write_text("# Pointer\n\npointer world\n", encoding="utf-8")
+    symlink_source = tmp_path / "symlink.md"
+    symlink_source.write_text("# Symlink\n\nsymlink world\n", encoding="utf-8")
 
     legacy_added = add_source(tmp_path, legacy_source, storage_mode="copy")
     workspace_added = add_source(tmp_path, workspace_source)
     copied_added = add_source(tmp_path, copied_source, storage_mode="copy")
     pointer_added = add_source(tmp_path, pointer_source, storage_mode="pointer")
+    symlink_added = add_source(tmp_path, symlink_source, storage_mode="symlink")
 
     legacy_manifest = load_source_record(legacy_added.manifest_path).model_copy(
         update={
@@ -565,6 +577,7 @@ def test_ingest_source_supports_mixed_manifest_workspace(tmp_path: Path) -> None
     workspace_result = ingest_source(tmp_path, workspace_added.source_id)
     copied_result = ingest_source(tmp_path, copied_added.source_id)
     pointer_result = ingest_source(tmp_path, pointer_added.source_id)
+    symlink_result = ingest_source(tmp_path, symlink_added.source_id)
 
     legacy_body = legacy_result.page_path.read_text(encoding="utf-8")
     assert "Stored source:" in legacy_body
@@ -601,6 +614,15 @@ def test_ingest_source_supports_mixed_manifest_workspace(tmp_path: Path) -> None
     assert pointer_run.input_refs == [
         pointer_added.manifest_path.relative_to(tmp_path).as_posix(),
         "pointer.md",
+    ]
+
+    symlink_body = symlink_result.page_path.read_text(encoding="utf-8")
+    assert "Workspace source: `symlink.md`" in symlink_body
+    assert "registered from `symlink.md`" in symlink_body
+    symlink_run = load_run_record(symlink_result.run_path)
+    assert symlink_run.input_refs == [
+        symlink_added.manifest_path.relative_to(tmp_path).as_posix(),
+        "symlink.md",
     ]
 
 
@@ -781,23 +803,98 @@ def test_ingest_source_pointer_backed_checksum_drift(tmp_path: Path) -> None:
     assert source_record.last_run_id is not None
 
 
-def test_ingest_source_rejects_unsupported_symlink_storage_mode(
-    tmp_path: Path,
-) -> None:
+def test_ingest_source_symlink_backed_happy_path(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
-    added = add_source(tmp_path, source)
-    source_record = load_source_record(added.manifest_path).model_copy(
-        update={
-            "source_ref": "brief.md",
-            "source_ref_kind": "workspace_path",
-            "storage_mode": "symlink",
-        }
-    )
-    write_source_record(added.manifest_path, source_record)
+    added = add_source(tmp_path, source, storage_mode="symlink")
 
-    with pytest.raises(ValueError, match="Unsupported storage mode for ingestion: symlink"):
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert "Workspace source: `brief.md`" in body
+    assert "registered from `brief.md`" in body
+    run_record = load_run_record(result.run_path)
+    assert run_record.input_refs == [
+        added.manifest_path.relative_to(tmp_path).as_posix(),
+        "brief.md",
+    ]
+
+
+def test_ingest_source_symlink_backed_missing_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="symlink")
+    assert added.stored_path is not None
+    added.stored_path.unlink()
+
+    with pytest.raises(ValueError, match="Source symlink artifact is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_symlink_backed_regular_file_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="symlink")
+    assert added.stored_path is not None
+    added.stored_path.unlink()
+    added.stored_path.write_text("not-a-link\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Source symlink artifact is not a symlink"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_symlink_backed_target_mismatch(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    other = tmp_path / "other.md"
+    other.write_text("# Other\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="symlink")
+    rewrite_symlink(tmp_path, added.source_id, Path("../../../other.md"))
+
+    with pytest.raises(ValueError, match="target does not match manifest source_ref"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_symlink_backed_missing_workspace_target(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="symlink")
+    source.unlink()
+
+    with pytest.raises(ValueError, match="Workspace source is missing"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.last_run_id is not None
+
+
+def test_ingest_source_symlink_backed_checksum_drift(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="symlink")
+    source.write_text("# Brief\n\nchanged\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Workspace source checksum mismatch"):
         ingest_source(tmp_path, added.source_id)
 
     source_record = load_source_record(added.manifest_path)

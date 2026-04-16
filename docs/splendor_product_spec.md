@@ -361,10 +361,11 @@ Field meanings:
     - `none` for workspace-backed sources
     - `copy` for workspace-backed and external local sources
     - `pointer` for workspace-backed sources via `raw/sources/<source_id>/pointer.json`
-    - `symlink` remains schema-visible but unimplemented
+    - `symlink` for workspace-backed sources via `raw/sources/<source_id>/<filename>`
 - `storage_path`
   - Optional path to the materialized artifact under `raw/sources/` when one exists.
   - Pointer-backed sources use `raw/sources/<source_id>/pointer.json`.
+  - Symlink-backed sources use `raw/sources/<source_id>/<filename>`.
 - `source_commit`
   - Optional git commit SHA captured for clean tracked workspace files when the project wants
     stronger repo-native provenance.

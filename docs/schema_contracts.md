@@ -95,10 +95,11 @@ Implemented fields:
     - `none` for workspace-backed sources
     - `copy` for workspace-backed and external local sources
     - `pointer` for workspace-backed sources
-    - `symlink` remains unimplemented
+    - `symlink` for workspace-backed sources
 - `storage_path`
   - Optional path under `raw/sources/` when Splendor materializes an artifact.
   - Pointer-backed sources use `raw/sources/<source_id>/pointer.json`.
+  - Symlink-backed sources use `raw/sources/<source_id>/<filename>`.
 - `materialized_at`
   - Timestamp indicating when `storage_path` was created or last refreshed.
 - `source_commit`

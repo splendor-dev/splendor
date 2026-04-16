@@ -433,13 +433,15 @@ Exit criteria:
 
 Scope:
 
-- add guarded `storage_mode=symlink`
-- validate platform constraints
+- add guarded `storage_mode=symlink` for workspace-backed sources
+- validate symlink artifacts and workspace-target safety
 - document operational caveats
 
 Exit criteria:
 
 - projects that prefer filesystem-level mirroring can opt in knowingly
+- symlink artifacts live under `raw/sources/<source_id>/<filename>`
+- external local files remain `copy`-only
 
 #### SR-9 — Materialization workflow polish
 
