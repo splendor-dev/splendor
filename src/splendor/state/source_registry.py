@@ -9,9 +9,10 @@ from pathlib import Path
 from splendor import __version__
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import SourceRecord
+from splendor.schemas import SourcePointerArtifact, SourceRecord
 from splendor.schemas.types import StorageMode
-from splendor.state.source_compat import canonical_source_ref
+from splendor.state.source_compat import canonical_source_ref, effective_materialized_path
+from splendor.state.source_pointer import pointer_artifact_relpath, write_source_pointer
 from splendor.utils.fs import copy_file_if_missing, ensure_directory, write_text_atomic
 from splendor.utils.git import captured_source_commit
 from splendor.utils.hashing import sha256_file
@@ -106,7 +107,7 @@ def _effective_storage_mode(
     configured_storage_mode: StorageMode,
 ) -> StorageMode:
     if source_ref_kind == "workspace_path":
-        if configured_storage_mode in {"none", "copy"}:
+        if configured_storage_mode in {"none", "copy", "pointer"}:
             return configured_storage_mode
         msg = (
             f"Storage mode {configured_storage_mode!r} is not implemented yet for workspace sources"
@@ -115,7 +116,12 @@ def _effective_storage_mode(
 
     if configured_storage_mode == "copy":
         return "copy"
-    if configured_storage_mode in {"pointer", "symlink"}:
+    if configured_storage_mode == "pointer":
+        msg = (
+            f"Storage mode {configured_storage_mode!r} is not implemented yet for external sources"
+        )
+        raise ValueError(msg)
+    if configured_storage_mode == "symlink":
         msg = (
             f"Storage mode {configured_storage_mode!r} is not implemented yet for external sources"
         )
@@ -161,6 +167,16 @@ def _stored_path_for(layout, source_id: str, candidate: Path) -> Path:
     return layout.raw_sources_dir / source_id / candidate.name
 
 
+def _materialized_path_for(
+    layout, source_id: str, candidate: Path, storage_mode: StorageMode
+) -> Path | None:
+    if storage_mode == "copy":
+        return _stored_path_for(layout, source_id, candidate)
+    if storage_mode == "pointer":
+        return layout.root / pointer_artifact_relpath(source_id)
+    return None
+
+
 def _validated_existing_registration(
     *,
     root: Path,
@@ -177,7 +193,12 @@ def _validated_existing_registration(
             f"for source {existing.source_id}: {exc}"
         )
         raise ValueError(msg) from exc
-    stored_path = resolved.resolved_path if resolved.storage_mode == "copy" else None
+    stored_path_value = effective_materialized_path(existing)
+    stored_path = (
+        resolve_manifest_storage_path(root, stored_path_value)
+        if stored_path_value is not None
+        else None
+    )
     source_ref = canonical_source_ref(existing)
     return stored_path, resolved.storage_mode, source_ref
 
@@ -222,9 +243,7 @@ def register_source(
         source_ref_kind=source_ref_kind,
         capture_source_commit_enabled=capture_commit_enabled,
     )
-    stored_path = (
-        _stored_path_for(layout, source_id, candidate) if selected_storage_mode == "copy" else None
-    )
+    stored_path = _materialized_path_for(layout, source_id, candidate, selected_storage_mode)
 
     if manifest_path.exists():
         existing = load_source_record(manifest_path)
@@ -253,8 +272,9 @@ def register_source(
             already_registered=True,
         )
 
+    added_at = utc_now_iso()
     copied = False
-    if stored_path is not None:
+    if selected_storage_mode == "copy" and stored_path is not None:
         copied = copy_file_if_missing(candidate, stored_path)
         stored_checksum = sha256_file(stored_path)
         if stored_checksum != checksum:
@@ -263,8 +283,18 @@ def register_source(
                 f"expected {checksum}, got {stored_checksum}"
             )
             raise ValueError(msg)
-
-    added_at = utc_now_iso()
+    elif selected_storage_mode == "pointer" and stored_path is not None:
+        ensure_directory(stored_path.parent)
+        write_source_pointer(
+            stored_path,
+            SourcePointerArtifact(
+                source_id=source_id,
+                source_ref=source_ref,
+                source_ref_kind=source_ref_kind,
+                checksum=checksum,
+                created_at=added_at,
+            ),
+        )
     record = SourceRecord(
         source_id=source_id,
         title=_title_for(candidate),

@@ -51,6 +51,7 @@ What it does:
 - refreshes the managed PR context comment after review or check state changes
 - reuses the `coverage-xml` artifact from the matching CI run when possible
 - suppresses no-op refresh comments
+- includes outdated review threads when refreshing managed PR context
 
 Permissions:
 

@@ -62,13 +62,16 @@ Caveats:
 
 Pinned reusable workflow:
 
-- `shaypal5/pr-agent-context@v4.0.16`
+- `shaypal5/pr-agent-context@v4.0.18`
+  - Refresh flow uses `include_outdated_review_threads: true` to keep managed PR context aligned
+    with both active and outdated review discussions.
 
 Chosen behavior:
 
 - initial PR runs publish a managed context comment
 - refresh runs are triggered on review activity and completed external checks
 - refresh runs suppress no-op all-clear comments
+- refresh runs include outdated review threads for richer PR context updates
 - coverage comes from the `coverage-xml` artifact produced by CI
 - the repository provides a custom prompt template at `.github/pr-agent-context-template.md`
 

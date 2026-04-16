@@ -420,13 +420,14 @@ Exit criteria:
 
 Scope:
 
-- define pointer artifact format
-- add `storage_mode=pointer`
-- teach resolver to follow pointer artifacts
+- define pointer artifact format at `raw/sources/<source_id>/pointer.json`
+- add `storage_mode=pointer` for workspace-backed sources
+- teach resolver to validate pointer artifacts and follow them back to workspace files
 
 Exit criteria:
 
-- projects have a cross-platform materialization alternative that does not duplicate bytes
+- projects have a cross-platform materialization alternative for workspace sources that does not
+  duplicate bytes
 
 #### SR-8 — Optional symlink mode
 
