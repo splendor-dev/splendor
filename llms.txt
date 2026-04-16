@@ -1,0 +1,102 @@
+# Splendor LLM Index
+
+## Core Tree
+
+.
+├── src/splendor/
+│   ├── cli.py
+│   ├── config.py
+│   ├── layout.py
+│   ├── commands/
+│   │   ├── init.py
+│   │   ├── add_source.py
+│   │   ├── ingest.py
+│   │   ├── materialize_source.py
+│   │   └── health.py
+│   ├── schemas/
+│   │   ├── source.py
+│   │   ├── source_pointer.py
+│   │   ├── runtime.py
+│   │   ├── planning.py
+│   │   ├── wiki.py
+│   │   ├── common.py
+│   │   └── types.py
+│   ├── state/
+│   │   ├── runtime.py
+│   │   ├── paths.py
+│   │   ├── source_compat.py
+│   │   ├── source_pointer.py
+│   │   ├── source_registry.py
+│   │   └── source_resolver.py
+│   └── utils/
+│       ├── fs.py
+│       ├── git.py
+│       ├── hashing.py
+│       ├── ids.py
+│       ├── time.py
+│       └── wiki.py
+├── tests/
+│   ├── test_init.py
+│   ├── test_add_source.py
+│   ├── test_ingest.py
+│   ├── test_cli.py
+│   ├── test_source_resolver.py
+│   ├── test_schemas.py
+│   └── test_config.py
+├── docs/
+│   ├── splendor_product_spec.md
+│   ├── splendor_mvp_to_v1_roadmap.md
+│   ├── source_resolution_refactor_plan.md
+│   ├── schema_contracts.md
+│   ├── ci_and_repo_automation.md
+│   └── github_automation_architecture.md
+└── .github/workflows/
+    ├── ci.yml
+    ├── pr-agent-context-refresh.yml
+    ├── pre-commit-ci-autofix-trigger.yml
+    └── weekly-repo-review.yml
+
+## Critical Files
+
+- CLI entrypoint: `src/splendor/cli.py`
+- CLI command implementations: `src/splendor/commands/`
+- Layout and filesystem contract: `src/splendor/layout.py`
+- Config loading and defaults: `src/splendor/config.py`
+- Source registration and manifest writes: `src/splendor/state/source_registry.py`
+- Source resolution and validation: `src/splendor/state/source_resolver.py`
+- Queue/run state helpers: `src/splendor/state/runtime.py`
+- Shared workspace path validation: `src/splendor/state/paths.py`
+
+## Schemas
+
+- Source manifest schema: `src/splendor/schemas/source.py`
+- Pointer artifact schema: `src/splendor/schemas/source_pointer.py`
+- Queue/run schemas: `src/splendor/schemas/runtime.py`
+- Planning object schemas: `src/splendor/schemas/planning.py`
+- Wiki frontmatter schema: `src/splendor/schemas/wiki.py`
+- Shared type aliases: `src/splendor/schemas/types.py`
+
+## Internal APIs
+
+- `register_source()` / materialization helpers: `src/splendor/state/source_registry.py`
+- `resolve_source_content()`: `src/splendor/state/source_resolver.py`
+- `initialize_workspace()`: `src/splendor/commands/init.py`
+- `add_source()`: `src/splendor/commands/add_source.py`
+- `ingest_source()`: `src/splendor/commands/ingest.py`
+- `materialize_source()`: `src/splendor/commands/materialize_source.py`
+- `run_health()`: `src/splendor/commands/health.py`
+
+## Configuration and Automation
+
+- Packaging and tool config: `pyproject.toml`
+- Repo root instructions: `AGENTS.md`
+- Dynamic agent state: `.agent-plan.md`
+- CI and automation docs: `docs/ci_and_repo_automation.md`
+- Workflow files: `.github/workflows/`
+
+## Product and Planning Docs
+
+- Product contract: `docs/splendor_product_spec.md`
+- Delivery roadmap: `docs/splendor_mvp_to_v1_roadmap.md`
+- Source-resolution implementation sequence: `docs/source_resolution_refactor_plan.md`
+- Schema summary: `docs/schema_contracts.md`
