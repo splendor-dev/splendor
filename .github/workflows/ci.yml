@@ -61,9 +61,9 @@ jobs:
       contents: read
       actions: read
       pull-requests: write
-    uses: shaypal5/pr-agent-context/.github/workflows/pr-agent-context.yml@v4.0.16
+    uses: shaypal5/pr-agent-context/.github/workflows/pr-agent-context.yml@v4.0.18
     with:
-      tool_ref: v4.0.16
+      tool_ref: v4.0.18
       include_patch_coverage: true
       patch_coverage_source_mode: coverage_xml_artifact
       coverage_report_artifact_name: coverage-xml
