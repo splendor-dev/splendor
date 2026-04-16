@@ -44,6 +44,15 @@ def write_pointer(
     return path
 
 
+def write_symlink_artifact(root: Path, *, source_id: str = "src-1234567890abcdef") -> Path:
+    source_file = root / "docs" / "spec.md"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    artifact = root / "raw" / "sources" / source_id / "spec.md"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.symlink_to(Path("../../../docs/spec.md"))
+    return artifact
+
+
 def test_resolve_source_content_legacy_manifest_uses_stored_copy(tmp_path: Path) -> None:
     stored_path = tmp_path / "raw" / "sources" / "src-1234567890abcdef" / "spec.md"
     stored_path.parent.mkdir(parents=True)
@@ -260,6 +269,146 @@ def test_resolve_source_content_pointer_source_rejects_missing_workspace_target(
         resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
 
 
+def test_resolve_source_content_symlink_source_uses_workspace_target(tmp_path: Path) -> None:
+    source_file = tmp_path / "docs" / "spec.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("hello\n", encoding="utf-8")
+    write_symlink_artifact(tmp_path)
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-1234567890abcdef/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+        checksum="5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+    )
+
+    resolved = resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+    assert resolved.canonical_ref == "docs/spec.md"
+    assert resolved.canonical_ref_kind == "workspace_path"
+    assert resolved.storage_mode == "symlink"
+    assert resolved.resolved_path == source_file.resolve()
+    assert resolved.resolved_ref == "docs/spec.md"
+    assert resolved.content_origin_label == "Workspace source"
+
+
+def test_resolve_source_content_symlink_source_rejects_missing_artifact(
+    tmp_path: Path,
+) -> None:
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-1234567890abcdef/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+    )
+
+    with pytest.raises(ValueError, match="Source symlink artifact is missing"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
+def test_resolve_source_content_symlink_source_rejects_regular_file_artifact(
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "raw" / "sources" / "src-1234567890abcdef" / "spec.md"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("not-a-link\n", encoding="utf-8")
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-1234567890abcdef/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+    )
+
+    with pytest.raises(ValueError, match="Source symlink artifact is not a symlink"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
+def test_resolve_source_content_symlink_source_rejects_target_outside_workspace(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path.parent / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    artifact = tmp_path / "raw" / "sources" / "src-1234567890abcdef" / "spec.md"
+    artifact.parent.mkdir(parents=True)
+    artifact.symlink_to(outside)
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-1234567890abcdef/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+    )
+
+    with pytest.raises(ValueError, match="target escapes workspace root"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
+def test_resolve_source_content_symlink_source_rejects_target_mismatch(
+    tmp_path: Path,
+) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "spec.md").write_text("hello\n", encoding="utf-8")
+    other = docs / "other.md"
+    other.write_text("hello\n", encoding="utf-8")
+    artifact = tmp_path / "raw" / "sources" / "src-1234567890abcdef" / "spec.md"
+    artifact.parent.mkdir(parents=True)
+    artifact.symlink_to(Path("../../../docs/other.md"))
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-1234567890abcdef/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+        checksum="5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+    )
+
+    with pytest.raises(ValueError, match="target does not match manifest source_ref"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
+def test_resolve_source_content_symlink_source_rejects_missing_workspace_target(
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "raw" / "sources" / "src-1234567890abcdef" / "spec.md"
+    artifact.parent.mkdir(parents=True)
+    artifact.symlink_to(Path("../../../docs/spec.md"))
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-1234567890abcdef/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+        checksum="5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+    )
+
+    with pytest.raises(ValueError, match="Workspace source is missing"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
+def test_resolve_source_content_symlink_source_rejects_checksum_drift(
+    tmp_path: Path,
+) -> None:
+    source_file = tmp_path / "docs" / "spec.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("changed\n", encoding="utf-8")
+    write_symlink_artifact(tmp_path)
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-1234567890abcdef/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+        checksum="5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+    )
+
+    with pytest.raises(ValueError, match="Workspace source checksum mismatch"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
 def test_resolve_source_content_pointer_source_rejects_checksum_drift(
     tmp_path: Path,
 ) -> None:
@@ -277,17 +426,4 @@ def test_resolve_source_content_pointer_source_rejects_checksum_drift(
     )
 
     with pytest.raises(ValueError, match="Workspace source checksum mismatch"):
-        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
-
-
-def test_resolve_source_content_rejects_unsupported_symlink_storage_mode(
-    tmp_path: Path,
-) -> None:
-    source = make_source_record(
-        storage_mode="symlink",
-        source_ref="docs/spec.md",
-        source_ref_kind="workspace_path",
-    )
-
-    with pytest.raises(ValueError, match="Unsupported storage mode for ingestion: symlink"):
         resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")

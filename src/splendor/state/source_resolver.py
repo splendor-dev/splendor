@@ -13,6 +13,7 @@ from splendor.state.source_compat import (
     effective_source_ref_kind,
     effective_storage_mode,
     effective_stored_path,
+    symlink_source_error_label,
 )
 from splendor.state.source_pointer import load_source_pointer
 from splendor.state.source_registry import (
@@ -49,6 +50,17 @@ def _resolve_workspace_ref(root: Path, source_ref: str, *, context: str) -> Path
         msg = f"{context} path escapes workspace root: {source_ref}"
         raise ValueError(msg) from exc
     return resolved_path
+
+
+def _resolve_artifact_ref(root: Path, artifact_ref: str, *, context: str) -> Path:
+    artifact_ref_path = Path(artifact_ref)
+    if artifact_ref_path.is_absolute():
+        msg = f"{context} path must be repo-relative: {artifact_ref}"
+        raise ValueError(msg)
+    if ".." in artifact_ref_path.parts:
+        msg = f"{context} path escapes workspace root: {artifact_ref}"
+        raise ValueError(msg)
+    return root.resolve() / artifact_ref_path
 
 
 def _require_workspace_source_checksum(
@@ -180,17 +192,74 @@ def _resolve_pointer_source(
         content_origin_label="Workspace source",
     )
 
-    if not resolved_path.exists():
+
+def _resolve_symlink_source(
+    root: Path, source: SourceRecord, raw_sources_dir: Path
+) -> ResolvedSource:
+    if not source.source_ref:
+        msg = "Symlink-backed source is missing source_ref"
+        raise ValueError(msg)
+    if source.source_ref_kind != "workspace_path":
+        msg = (
+            "Symlink-backed source must use source_ref_kind=workspace_path; "
+            f"got {source.source_ref_kind!r}"
+        )
+        raise ValueError(msg)
+
+    symlink_path_value = effective_materialized_path(source)
+    if symlink_path_value is None:
+        msg = f"Symlink-backed source is missing a symlink artifact path: {source.source_id}"
+        raise ValueError(msg)
+    symlink_path = _resolve_artifact_ref(root, symlink_path_value, context="Symlink artifact")
+    _validate_materialized_source_location(
+        symlink_path,
+        raw_sources_dir,
+        source.source_id,
+        symlink_path_value,
+        description="Symlink artifact path",
+    )
+
+    source_label = symlink_source_error_label(source)
+    if not symlink_path.exists() and not symlink_path.is_symlink():
+        msg = f"{source_label} is missing: {symlink_path}"
+        raise ValueError(msg)
+    if not symlink_path.is_symlink():
+        msg = f"{source_label} is not a symlink: {symlink_path}"
+        raise ValueError(msg)
+
+    try:
+        resolved_path = symlink_path.resolve(strict=True)
+    except FileNotFoundError as exc:
         msg = f"Workspace source is missing: {source.source_ref}"
+        raise ValueError(msg) from exc
+
+    workspace_root = root.resolve()
+    try:
+        resolved_path.relative_to(workspace_root)
+    except ValueError as exc:
+        msg = f"{source_label} target escapes workspace root: {symlink_path}"
+        raise ValueError(msg) from exc
+
+    expected_path = _resolve_workspace_ref(root, source.source_ref, context="Workspace source")
+    if resolved_path != expected_path:
+        actual_ref = resolved_path.relative_to(workspace_root).as_posix()
+        msg = (
+            f"{source_label} target does not match manifest source_ref: "
+            f"expected {source.source_ref}, got {actual_ref}"
+        )
         raise ValueError(msg)
-    if sha256_file(resolved_path) != source.checksum:
-        msg = f"Workspace source checksum mismatch for ingestion: {source.source_ref}"
-        raise ValueError(msg)
+
+    _require_workspace_source_checksum(
+        resolved_path,
+        source.checksum,
+        label="Workspace source",
+        source_ref=source.source_ref,
+    )
 
     return ResolvedSource(
         canonical_ref=source.source_ref,
         canonical_ref_kind="workspace_path",
-        storage_mode="none",
+        storage_mode="symlink",
         resolved_path=resolved_path,
         resolved_ref=source.source_ref,
         content_origin_label="Workspace source",
@@ -237,8 +306,7 @@ def resolve_source_content(
     if storage_mode == "pointer":
         return _resolve_pointer_source(root, source, raw_sources_dir)
     if storage_mode == "symlink":
-        msg = f"Unsupported storage mode for ingestion: {storage_mode}"
-        raise ValueError(msg)
+        return _resolve_symlink_source(root, source, raw_sources_dir)
 
     if storage_mode == "none":
         return _resolve_workspace_source(root, source)

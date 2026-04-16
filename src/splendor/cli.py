@@ -83,6 +83,8 @@ def handle_add_source(args: argparse.Namespace) -> int:
     if result.stored_path is not None:
         if result.storage_mode == "pointer":
             print(f"Pointer artifact: {result.stored_path}")
+        elif result.storage_mode == "symlink":
+            print(f"Symlink artifact: {result.stored_path}")
         else:
             print(f"Stored copy: {result.stored_path}")
     return 0

@@ -107,7 +107,7 @@ def _build_extract(text: str) -> str:
 
 def _summary_mode_for(config, source: SourceRecord) -> SummaryMode:
     if (
-        effective_storage_mode(source) in {"none", "pointer"}
+        effective_storage_mode(source) in {"none", "pointer", "symlink"}
         and effective_source_ref_kind(source) == "workspace_path"
     ):
         return config.sources.summarize_in_repo_extracts_as

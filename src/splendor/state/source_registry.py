@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -107,7 +108,7 @@ def _effective_storage_mode(
     configured_storage_mode: StorageMode,
 ) -> StorageMode:
     if source_ref_kind == "workspace_path":
-        if configured_storage_mode in {"none", "copy", "pointer"}:
+        if configured_storage_mode in {"none", "copy", "pointer", "symlink"}:
             return configured_storage_mode
         msg = (
             f"Storage mode {configured_storage_mode!r} is not implemented yet for workspace sources"
@@ -170,11 +171,36 @@ def _stored_path_for(layout, source_id: str, candidate: Path) -> Path:
 def _materialized_path_for(
     layout, source_id: str, candidate: Path, storage_mode: StorageMode
 ) -> Path | None:
-    if storage_mode == "copy":
+    if storage_mode in {"copy", "symlink"}:
         return _stored_path_for(layout, source_id, candidate)
     if storage_mode == "pointer":
         return layout.root / pointer_artifact_relpath(source_id)
     return None
+
+
+def _replace_path(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        msg = f"Cannot replace existing directory with source artifact: {path}"
+        raise ValueError(msg)
+    if path.exists() or path.is_symlink():
+        path.unlink()
+
+
+def _write_workspace_symlink(stored_path: Path, candidate: Path) -> None:
+    ensure_directory(stored_path.parent)
+    _replace_path(stored_path)
+    target = Path(os.path.relpath(candidate, start=stored_path.parent))
+    stored_path.symlink_to(target)
+    if not stored_path.is_symlink():
+        msg = f"Failed to create source symlink artifact: {stored_path}"
+        raise ValueError(msg)
+    resolved_target = stored_path.resolve(strict=True)
+    if resolved_target != candidate.resolve():
+        msg = (
+            "Source symlink artifact does not resolve to the canonical workspace source: "
+            f"{stored_path}"
+        )
+        raise ValueError(msg)
 
 
 def _validated_existing_registration(
@@ -194,11 +220,12 @@ def _validated_existing_registration(
         )
         raise ValueError(msg) from exc
     stored_path_value = effective_materialized_path(existing)
-    stored_path = (
-        resolve_manifest_storage_path(root, stored_path_value)
-        if stored_path_value is not None
-        else None
-    )
+    if stored_path_value is None:
+        stored_path = None
+    elif resolved.storage_mode == "symlink":
+        stored_path = root.resolve() / Path(stored_path_value)
+    else:
+        stored_path = resolve_manifest_storage_path(root, stored_path_value)
     source_ref = canonical_source_ref(existing)
     return stored_path, resolved.storage_mode, source_ref
 
@@ -295,6 +322,8 @@ def register_source(
                 created_at=added_at,
             ),
         )
+    elif selected_storage_mode == "symlink" and stored_path is not None:
+        _write_workspace_symlink(stored_path, candidate)
     record = SourceRecord(
         source_id=source_id,
         title=_title_for(candidate),

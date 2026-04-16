@@ -326,8 +326,7 @@ sources.
 ### Scope
 - split canonical source reference from storage realization
 - default in-repo files to workspace-backed registration
-- preserve copy and pointer options where projects need stronger materialization
-- keep `symlink` available in schema/config while deferring runtime support
+- preserve copy, pointer, and symlink options where projects need stronger materialization
 - reduce source-summary duplication for in-repo text sources
 
 ### Deliverables
@@ -344,6 +343,8 @@ sources.
 - external sources still get durable materialization when appropriate
 - workspace-backed sources can optionally materialize deterministic pointer artifacts under
   `raw/sources/<source_id>/pointer.json`
+- workspace-backed sources can optionally materialize symlink artifacts under
+  `raw/sources/<source_id>/<filename>`
 - ingest reads through one resolver interface regardless of source origin
 - source-summary pages remain deterministic while becoming less noisy
 

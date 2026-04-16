@@ -169,13 +169,41 @@ def test_add_source_rejects_pointer_for_external_sources(tmp_path: Path) -> None
         external_dir.rmdir()
 
 
-def test_add_source_rejects_symlink_for_workspace_sources(tmp_path: Path) -> None:
+def test_add_source_supports_symlink_for_workspace_sources(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "note.md"
     source.write_text("# note\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="not implemented yet"):
-        add_source(tmp_path, source, storage_mode="symlink")
+    result = add_source(tmp_path, source, storage_mode="symlink")
+
+    manifest = load_source_record(result.manifest_path)
+    assert result.storage_mode == "symlink"
+    assert result.stored_path is not None and result.stored_path.exists()
+    assert result.stored_path == tmp_path / "raw" / "sources" / result.source_id / "note.md"
+    assert result.stored_path.is_symlink()
+    assert result.stored_path.resolve() == source.resolve()
+    assert manifest.path == f"raw/sources/{result.source_id}/note.md"
+    assert manifest.storage_path == manifest.path
+    assert manifest.source_ref == "note.md"
+    assert manifest.source_ref_kind == "workspace_path"
+    assert manifest.storage_mode == "symlink"
+    assert manifest.materialized_at is not None
+    assert result.stored_path.read_text(encoding="utf-8") == "# note\n"
+
+
+def test_add_source_rejects_symlink_for_external_sources(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    external_dir = tmp_path.parent / f"{tmp_path.name}-external"
+    external_dir.mkdir()
+    source = external_dir / "outside.md"
+    source.write_text("# outside\n", encoding="utf-8")
+
+    try:
+        with pytest.raises(ValueError, match="not implemented yet for external sources"):
+            add_source(tmp_path, source, storage_mode="symlink")
+    finally:
+        source.unlink(missing_ok=True)
+        external_dir.rmdir()
 
 
 def test_add_source_is_deduplicated_by_checksum_for_workspace_backed_sources(
@@ -221,6 +249,22 @@ def test_add_source_is_deduplicated_by_checksum_for_pointer_backed_sources(
     assert first.source_id == second.source_id
     assert second.already_registered is True
     assert second.storage_mode == "pointer"
+    assert second.stored_path == first.stored_path
+
+
+def test_add_source_is_deduplicated_by_checksum_for_symlink_backed_sources(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "notes.txt"
+    source.write_text("same-content\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source, storage_mode="symlink")
+    second = add_source(tmp_path, source, storage_mode="symlink")
+
+    assert first.source_id == second.source_id
+    assert second.already_registered is True
+    assert second.storage_mode == "symlink"
     assert second.stored_path == first.stored_path
 
 
@@ -367,11 +411,14 @@ def test_add_source_reuses_mixed_manifest_shapes_authoritatively(tmp_path: Path)
     copied_source.write_text("# copied\n", encoding="utf-8")
     pointer_source = tmp_path / "pointer.md"
     pointer_source.write_text("# pointer\n", encoding="utf-8")
+    symlink_source = tmp_path / "symlink.md"
+    symlink_source.write_text("# symlink\n", encoding="utf-8")
 
     legacy_added = add_source(tmp_path, legacy_source, storage_mode="copy")
     add_source(tmp_path, workspace_source)
     add_source(tmp_path, copied_source, storage_mode="copy")
     add_source(tmp_path, pointer_source, storage_mode="pointer")
+    add_source(tmp_path, symlink_source, storage_mode="symlink")
 
     legacy_manifest = load_source_record(legacy_added.manifest_path).model_copy(
         update={
@@ -389,6 +436,7 @@ def test_add_source_reuses_mixed_manifest_shapes_authoritatively(tmp_path: Path)
     workspace_repeat = add_source(tmp_path, workspace_source, storage_mode="copy")
     copied_repeat = add_source(tmp_path, copied_source)
     pointer_repeat = add_source(tmp_path, pointer_source)
+    symlink_repeat = add_source(tmp_path, symlink_source)
 
     assert legacy_repeat.already_registered is True
     assert legacy_repeat.source_ref == "legacy.md"
@@ -408,3 +456,8 @@ def test_add_source_reuses_mixed_manifest_shapes_authoritatively(tmp_path: Path)
     assert pointer_repeat.source_ref == "pointer.md"
     assert pointer_repeat.storage_mode == "pointer"
     assert pointer_repeat.stored_path is not None
+
+    assert symlink_repeat.already_registered is True
+    assert symlink_repeat.source_ref == "symlink.md"
+    assert symlink_repeat.storage_mode == "symlink"
+    assert symlink_repeat.stored_path is not None
