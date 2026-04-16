@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import yaml
+
 from splendor.commands.add_source import add_source
 from splendor.commands.health import run_health
 from splendor.commands.ingest import ingest_source
@@ -116,7 +118,7 @@ def handle_ingest(args: argparse.Namespace) -> int:
 
     print(f"Ingested source {result.source_id}")
     print(f"Source ref: {result.canonical_ref}")
-    print(f"Canonical content: {result.canonical_ref_kind.replace('_', ' ')}")
+    print(f"Canonical content: {result.content_origin_kind.replace('_', ' ')}")
     print(f"Run: {result.run_id}")
     print(f"Page: {result.page_path}")
     print(f"Queue record: {result.queue_path}")
@@ -142,7 +144,11 @@ def handle_materialize_source(args: argparse.Namespace) -> int:
 
 def handle_health(args: argparse.Namespace) -> int:
     root = args.root.resolve()
-    result = run_health(root)
+    try:
+        result = run_health(root)
+    except (ValueError, RuntimeError, OSError, yaml.YAMLError) as exc:
+        print(f"Error: {exc}")
+        return 1
     print(f"Checked sources: {result.checked_sources}")
     if not result.issues:
         print("Health check passed")

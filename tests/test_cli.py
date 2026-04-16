@@ -198,6 +198,24 @@ def test_cli_ingest_command(tmp_path: Path, capsys) -> None:
     assert "Canonical content: workspace path" in captured.out
 
 
+def test_cli_ingest_command_reports_stored_artifact_for_copied_workspace_source(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "--storage-mode", "copy", str(source)])
+
+    manifest_paths = list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source_id = manifest_paths[0].stem
+    exit_code = main(["--root", str(tmp_path), "ingest", source_id])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Source ref: brief.md" in captured.out
+    assert "Canonical content: stored artifact" in captured.out
+
+
 def test_cli_ingest_command_no_op(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -269,3 +287,13 @@ def test_cli_health_command_fails_for_invalid_sources(tmp_path: Path, capsys) ->
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "Health check failed: 1 issue(s)" in captured.out
+
+
+def test_cli_health_command_reports_top_level_errors(tmp_path: Path, capsys) -> None:
+    (tmp_path / "splendor.yaml").write_text("sources: [\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "health"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert captured.out.startswith("Error: ")
