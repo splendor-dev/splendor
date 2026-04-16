@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from splendor.cli import build_parser, main
@@ -297,3 +298,17 @@ def test_cli_health_command_reports_top_level_errors(tmp_path: Path, capsys) -> 
     assert exit_code == 1
     captured = capsys.readouterr()
     assert captured.out.startswith("Error: ")
+
+
+def test_cli_health_command_fails_when_source_manifest_dir_is_missing(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_records_dir = tmp_path / "state" / "manifests" / "sources"
+    shutil.rmtree(source_records_dir)
+
+    exit_code = main(["--root", str(tmp_path), "health"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Source manifest directory is missing or unreadable" in captured.out

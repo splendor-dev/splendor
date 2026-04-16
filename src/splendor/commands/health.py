@@ -49,6 +49,10 @@ def run_health(root: Path) -> HealthResult:
     issues: list[HealthIssue] = []
     checked_sources = 0
 
+    if not layout.source_records_dir.is_dir():
+        msg = f"Source manifest directory is missing or unreadable: {layout.source_records_dir}"
+        raise RuntimeError(msg)
+
     for manifest_path in sorted(layout.source_records_dir.glob("*.json")):
         checked_sources += 1
         source_id = manifest_path.stem
