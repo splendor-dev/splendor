@@ -70,6 +70,8 @@ class IngestResult:
     run_path: Path | None
     page_path: Path | None
     no_op: bool
+    canonical_ref_kind: str | None
+    canonical_ref: str | None
 
 
 def _make_run_id(source_id: str) -> str:
@@ -256,6 +258,8 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             run_path=None,
             page_path=layout.wiki_sources_dir / f"{source_id}.md",
             no_op=True,
+            canonical_ref_kind=None,
+            canonical_ref=None,
         )
 
     now = utc_now_iso()
@@ -406,6 +410,8 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             run_path=run_path,
             page_path=page_path,
             no_op=False,
+            canonical_ref_kind=resolved_source.canonical_ref_kind,
+            canonical_ref=resolved_source.canonical_ref,
         )
     except ValueError as exc:
         _mark_attempt_failed(
