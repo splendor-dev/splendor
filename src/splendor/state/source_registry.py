@@ -12,9 +12,19 @@ from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourcePointerArtifact, SourceRecord
 from splendor.schemas.types import StorageMode
-from splendor.state.source_compat import canonical_source_ref, effective_materialized_path
+from splendor.state.paths import resolve_workspace_path
+from splendor.state.source_compat import (
+    canonical_source_ref,
+    effective_materialized_path,
+    is_legacy_copied_manifest,
+)
 from splendor.state.source_pointer import pointer_artifact_relpath, write_source_pointer
-from splendor.utils.fs import copy_file_if_missing, ensure_directory, write_text_atomic
+from splendor.utils.fs import (
+    copy_file_atomic,
+    copy_file_if_missing,
+    ensure_directory,
+    write_text_atomic,
+)
 from splendor.utils.git import captured_source_commit
 from splendor.utils.hashing import sha256_file
 from splendor.utils.ids import stable_source_id
@@ -222,10 +232,15 @@ def write_source_artifact(
     checksum: str,
     storage_mode: StorageMode,
     materialized_at: str,
+    refresh: bool = False,
 ) -> bool:
     copied = False
     if storage_mode == "copy":
-        copied = copy_file_if_missing(candidate, stored_path)
+        if refresh:
+            copy_file_atomic(candidate, stored_path)
+            copied = True
+        else:
+            copied = copy_file_if_missing(candidate, stored_path)
         stored_checksum = sha256_file(stored_path)
         if stored_checksum != checksum:
             msg = (
@@ -290,16 +305,16 @@ def materializing_storage_mode_for_source(
     *,
     storage_mode: StorageMode | None = None,
 ) -> StorageMode:
+    if is_legacy_copied_manifest(source):
+        msg = (
+            "Legacy stored-artifact manifests cannot be materialized with this workflow: "
+            f"{source.source_id}"
+        )
+        raise ValueError(msg)
     if source.source_ref is None or source.source_ref_kind != "workspace_path":
         msg = (
             "Only workspace-backed sources can be materialized; "
             f"source {source.source_id} is {source.source_ref_kind or 'legacy'}"
-        )
-        raise ValueError(msg)
-    if source.storage_mode is None and source.source_ref is None:
-        msg = (
-            "Legacy stored-artifact manifests cannot be materialized with this workflow: "
-            f"{source.source_id}"
         )
         raise ValueError(msg)
 
@@ -360,7 +375,7 @@ def materialize_registered_source(
     selected_storage_mode = materializing_storage_mode_for_source(
         root, source, storage_mode=storage_mode
     )
-    candidate = _resolve_workspace_ref(root, source.source_ref)
+    candidate = resolve_workspace_path(root, source.source_ref, context="Workspace source")
     _require_workspace_source(candidate, source.checksum, source.source_ref)
 
     stored_path = _materialized_path_for(layout, source_id, candidate, selected_storage_mode)
@@ -377,6 +392,7 @@ def materialize_registered_source(
         checksum=source.checksum,
         storage_mode=selected_storage_mode,
         materialized_at=materialized_at,
+        refresh=True,
     )
     updated_source = source.model_copy(
         update={
@@ -394,24 +410,6 @@ def materialize_registered_source(
         storage_mode=selected_storage_mode,
         source_ref=source.source_ref,
     )
-
-
-def _resolve_workspace_ref(root: Path, source_ref: str) -> Path:
-    source_ref_path = Path(source_ref)
-    if source_ref_path.is_absolute():
-        msg = f"Workspace source path must be repo-relative: {source_ref}"
-        raise ValueError(msg)
-    if ".." in source_ref_path.parts:
-        msg = f"Workspace source path escapes workspace root: {source_ref}"
-        raise ValueError(msg)
-    resolved_path = (root / source_ref_path).resolve()
-    workspace_root = root.resolve()
-    try:
-        resolved_path.relative_to(workspace_root)
-    except ValueError as exc:
-        msg = f"Workspace source path escapes workspace root: {source_ref}"
-        raise ValueError(msg) from exc
-    return resolved_path
 
 
 def _require_workspace_source(resolved_path: Path, checksum: str, source_ref: str) -> None:

@@ -28,6 +28,18 @@ def copy_file_if_missing(source: Path, destination: Path) -> bool:
     return True
 
 
+def copy_file_atomic(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as handle:
+        temp_path = Path(handle.name)
+    try:
+        shutil.copy2(source, temp_path)
+        temp_path.replace(destination)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+
+
 def write_text_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(

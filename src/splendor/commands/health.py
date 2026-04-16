@@ -7,6 +7,7 @@ from pathlib import Path
 
 from splendor.config import load_config
 from splendor.layout import resolve_layout
+from splendor.schemas import SourceRecord
 from splendor.state.source_compat import effective_storage_mode
 from splendor.state.source_registry import load_source_record
 from splendor.state.source_resolver import resolve_source_content
@@ -24,7 +25,7 @@ class HealthResult:
     issues: list[HealthIssue]
 
 
-def _validate_storage_policy(source) -> None:
+def _validate_storage_policy(source: SourceRecord) -> None:
     storage_mode = effective_storage_mode(source)
     if storage_mode == "none" and source.source_ref_kind != "workspace_path":
         msg = (

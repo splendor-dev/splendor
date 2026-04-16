@@ -12,6 +12,7 @@ from splendor.state.source_registry import (
     _replace_path,
     _write_workspace_symlink,
     load_source_record,
+    materializing_storage_mode_for_source,
     write_source_record,
 )
 
@@ -571,6 +572,20 @@ def test_materialize_source_supports_copy_mode(tmp_path: Path) -> None:
     assert manifest.storage_path == manifest.path
 
 
+def test_materialize_source_refreshes_stale_copy_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source, storage_mode="copy")
+    assert registered.stored_path is not None
+    registered.stored_path.write_text("stale\n", encoding="utf-8")
+
+    result = materialize_source(tmp_path, registered.source_id)
+
+    assert result.storage_mode == "copy"
+    assert result.stored_path.read_text(encoding="utf-8") == "# note\n"
+
+
 def test_materialize_source_supports_symlink_mode(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "note.md"
@@ -629,6 +644,19 @@ def test_materialize_source_rejects_legacy_manifests(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Legacy stored-artifact manifests cannot be materialized"):
         materialize_source(tmp_path, registered.source_id)
+
+
+def test_materializing_storage_mode_rejects_legacy_manifest_shape(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source, storage_mode="copy")
+    legacy_manifest = load_source_record(registered.manifest_path).model_copy(
+        update={"source_ref": None, "source_ref_kind": None, "storage_mode": None}
+    )
+
+    with pytest.raises(ValueError, match="Legacy stored-artifact manifests cannot be materialized"):
+        materializing_storage_mode_for_source(tmp_path, legacy_manifest)
 
 
 def test_materialize_source_rejects_missing_workspace_source(tmp_path: Path) -> None:

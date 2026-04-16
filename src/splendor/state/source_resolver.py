@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from splendor.schemas import SourceRecord
+from splendor.state.paths import resolve_workspace_path
 from splendor.state.source_compat import (
     canonical_source_ref,
     copied_source_error_label,
@@ -31,25 +32,6 @@ class ResolvedSource:
     resolved_path: Path
     resolved_ref: str
     content_origin_label: str
-
-
-def _resolve_workspace_ref(root: Path, source_ref: str, *, context: str) -> Path:
-    source_ref_path = Path(source_ref)
-    if source_ref_path.is_absolute():
-        msg = f"{context} path must be repo-relative: {source_ref}"
-        raise ValueError(msg)
-    if ".." in source_ref_path.parts:
-        msg = f"{context} path escapes workspace root: {source_ref}"
-        raise ValueError(msg)
-
-    resolved_path = (root / source_ref_path).resolve()
-    workspace_root = root.resolve()
-    try:
-        resolved_path.relative_to(workspace_root)
-    except ValueError as exc:
-        msg = f"{context} path escapes workspace root: {source_ref}"
-        raise ValueError(msg) from exc
-    return resolved_path
 
 
 def _resolve_artifact_ref(root: Path, artifact_ref: str, *, context: str) -> Path:
@@ -85,7 +67,7 @@ def _resolve_workspace_source(root: Path, source: SourceRecord) -> ResolvedSourc
         )
         raise ValueError(msg)
 
-    resolved_path = _resolve_workspace_ref(root, source.source_ref, context="Workspace source")
+    resolved_path = resolve_workspace_path(root, source.source_ref, context="Workspace source")
     _require_workspace_source_checksum(
         resolved_path,
         source.checksum,
@@ -175,7 +157,7 @@ def _resolve_pointer_source(
         )
         raise ValueError(msg)
 
-    resolved_path = _resolve_workspace_ref(root, pointer.source_ref, context="Pointer target")
+    resolved_path = resolve_workspace_path(root, pointer.source_ref, context="Pointer target")
     _require_workspace_source_checksum(
         resolved_path,
         source.checksum,
@@ -243,7 +225,7 @@ def _resolve_symlink_source(
         msg = f"{source_label} target escapes workspace root: {symlink_path}"
         raise ValueError(msg) from exc
 
-    expected_path = _resolve_workspace_ref(root, source.source_ref, context="Workspace source")
+    expected_path = resolve_workspace_path(root, source.source_ref, context="Workspace source")
     if resolved_path != expected_path:
         actual_ref = resolved_path.relative_to(workspace_root).as_posix()
         msg = (
