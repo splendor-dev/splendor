@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from splendor import __version__
@@ -60,6 +61,7 @@ SUPPORTED_SOURCE_TYPES = {
     "hpp",
     "sh",
 }
+LEASE_TTL_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -74,9 +76,44 @@ class IngestResult:
     content_origin_kind: str | None
 
 
+@dataclass(frozen=True)
+class DrainItemResult:
+    source_id: str
+    queue_path: Path
+    outcome: str
+    message: str
+
+
+@dataclass(frozen=True)
+class DrainResult:
+    processed: int
+    succeeded: int
+    failed: int
+    skipped: int
+    items: list[DrainItemResult]
+
+
 def _make_run_id(source_id: str) -> str:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     return f"run-{source_id}-{stamp}"
+
+
+def _ingest_job_id(source_id: str) -> str:
+    return f"ingest-{source_id}"
+
+
+def _source_id_from_job_id(job_id: str) -> str:
+    if job_id.startswith("ingest-"):
+        return job_id.removeprefix("ingest-")
+    return job_id
+
+
+def _lease_owner() -> str:
+    return f"local-cli:{os.getpid()}"
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(microsecond=0)
 
 
 def _relative_to_root(root: Path, path: Path) -> str:
@@ -144,6 +181,33 @@ def _best_available_source_ref(source: SourceRecord) -> str:
     return effective_stored_path(source) or canonical_source_ref(source)
 
 
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def _lease_expires_at(now: datetime) -> str:
+    return (now + timedelta(seconds=LEASE_TTL_SECONDS)).isoformat()
+
+
+def _lease_is_expired(queue_item: QueueItemRecord, now: datetime) -> bool:
+    if queue_item.status != "leased":
+        return False
+    expires_at = _parse_timestamp(queue_item.lease_expires_at)
+    if expires_at is None:
+        return True
+    return expires_at <= now
+
+
+def _is_queue_eligible(queue_item: QueueItemRecord, now: datetime) -> bool:
+    if queue_item.job_type != "ingest_source":
+        return False
+    if queue_item.status == "pending":
+        return True
+    return _lease_is_expired(queue_item, now)
+
+
 def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     if source.status != "ingested" or not source.last_run_id:
         return False
@@ -173,6 +237,39 @@ def _validate_workspace_files(layout) -> None:
         raise RuntimeError(msg)
 
 
+def _load_source_for_queue(root: Path, queue_item: QueueItemRecord) -> tuple[Path, SourceRecord]:
+    manifest_path = root / queue_item.payload_ref
+    if not manifest_path.exists():
+        msg = f"Queue payload is missing source manifest: {manifest_path}"
+        raise FileNotFoundError(msg)
+    source = load_source_record(manifest_path)
+    expected_source_id = _source_id_from_job_id(queue_item.job_id)
+    if source.source_id != expected_source_id:
+        msg = f"Queue payload source ID does not match queued job: {queue_item.job_id}"
+        raise ValueError(msg)
+    return manifest_path, source
+
+
+def _finalize_queue_record(
+    queue_path: Path,
+    queue_item: QueueItemRecord,
+    *,
+    status: str,
+    last_error: str | None = None,
+) -> QueueItemRecord:
+    finalized = queue_item.model_copy(
+        update={
+            "status": status,
+            "updated_at": utc_now_iso(),
+            "lease_owner": None,
+            "lease_expires_at": None,
+            "last_error": last_error,
+        }
+    )
+    write_queue_item(queue_path, finalized)
+    return finalized
+
+
 def _mark_attempt_failed(
     *,
     queue_path: Path,
@@ -192,17 +289,18 @@ def _mark_attempt_failed(
         }
     )
     write_run_record(run_path, failed_run)
-    failed_queue = queue_item.model_copy(
-        update={
-            "status": "failed",
-            "updated_at": utc_now_iso(),
-            "last_error": error_message,
-        }
-    )
-    write_queue_item(queue_path, failed_queue)
+    _finalize_queue_record(queue_path, queue_item, status="failed", last_error=error_message)
     if manifest_path is not None and source is not None and run_id is not None:
         failed_source = source.model_copy(update={"status": "failed", "last_run_id": run_id})
         write_source_record(manifest_path, failed_source)
+
+
+def _mark_queue_failed_without_run(
+    queue_path: Path,
+    queue_item: QueueItemRecord,
+    error_message: str,
+) -> None:
+    _finalize_queue_record(queue_path, queue_item, status="failed", last_error=error_message)
 
 
 def _commit_success(
@@ -242,7 +340,7 @@ def _commit_success(
         raise
 
 
-def ingest_source(root: Path, source_id: str) -> IngestResult:
+def enqueue_ingest_job(root: Path, source_id: str) -> Path:
     config = load_config(root)
     layout = resolve_layout(root, config)
     _validate_workspace_files(layout)
@@ -256,43 +354,87 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
         msg = f"Source manifest ID does not match requested source: {source_id}"
         raise ValueError(msg)
 
+    now = utc_now_iso()
+    queue_path = queue_item_path_for(layout, _ingest_job_id(source_id))
+    existing_queue = load_queue_item(queue_path) if queue_path.exists() else None
+    queue_item = QueueItemRecord(
+        job_id=_ingest_job_id(source_id),
+        job_type="ingest_source",
+        status="pending",
+        created_at=now if existing_queue is None else existing_queue.created_at,
+        updated_at=now,
+        attempt_count=0 if existing_queue is None else existing_queue.attempt_count,
+        max_attempts=3 if existing_queue is None else existing_queue.max_attempts,
+        payload_ref=_relative_to_root(root, manifest_path),
+        lease_owner=None,
+        lease_expires_at=None,
+        last_error=None,
+    )
+    write_queue_item(queue_path, queue_item)
+    return queue_path
+
+
+def _claim_ingest_job(queue_path: Path, queue_item: QueueItemRecord) -> QueueItemRecord:
+    now = _utc_now()
+    leased_queue = queue_item.model_copy(
+        update={
+            "status": "leased",
+            "updated_at": now.isoformat(),
+            "attempt_count": queue_item.attempt_count + 1,
+            "lease_owner": _lease_owner(),
+            "lease_expires_at": _lease_expires_at(now),
+            "last_error": None,
+        }
+    )
+    write_queue_item(queue_path, leased_queue)
+    return leased_queue
+
+
+def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    _validate_workspace_files(layout)
+    queue_item = load_queue_item(queue_path)
+    if queue_item.job_type != "ingest_source":
+        msg = f"Unsupported queue job type for ingest worker: {queue_item.job_type}"
+        raise ValueError(msg)
+
+    now = _utc_now()
+    if queue_item.status == "leased" and not _lease_is_expired(queue_item, now):
+        msg = f"Queue item is already leased: {queue_item.job_id}"
+        raise RuntimeError(msg)
+    if queue_item.status not in {"pending", "leased"}:
+        msg = f"Queue item is not runnable: {queue_item.job_id}"
+        raise RuntimeError(msg)
+
+    queue_item = _claim_ingest_job(queue_path, queue_item)
+
+    try:
+        manifest_path, source = _load_source_for_queue(root, queue_item)
+    except (FileNotFoundError, ValueError) as exc:
+        _mark_queue_failed_without_run(queue_path, queue_item, str(exc))
+        raise
+
     if _is_no_op(root, layout, source):
+        _finalize_queue_record(queue_path, queue_item, status="done", last_error=None)
         return IngestResult(
-            source_id=source_id,
+            source_id=source.source_id,
             run_id=None,
-            queue_path=None,
+            queue_path=queue_path,
             run_path=None,
-            page_path=layout.wiki_sources_dir / f"{source_id}.md",
+            page_path=_page_path_for(layout.wiki_sources_dir, source.source_id),
             no_op=True,
             canonical_ref=None,
             content_origin_kind=None,
         )
 
-    now = utc_now_iso()
-    job_id = f"ingest-{source_id}"
-    queue_path = queue_item_path_for(layout, job_id)
-    existing_queue = load_queue_item(queue_path) if queue_path.exists() else None
-    attempt_count = 1 if existing_queue is None else existing_queue.attempt_count + 1
-    queue_item = QueueItemRecord(
-        job_id=job_id,
-        job_type="ingest_source",
-        status="pending",
-        created_at=now if existing_queue is None else existing_queue.created_at,
-        updated_at=now,
-        attempt_count=attempt_count,
-        max_attempts=3,
-        payload_ref=_relative_to_root(root, manifest_path),
-        last_error=None,
-    )
-    write_queue_item(queue_path, queue_item)
-
-    run_id = _make_run_id(source_id)
+    run_id = _make_run_id(source.source_id)
     run_path = run_record_path_for(layout, run_id)
     run = RunRecord(
         run_id=run_id,
-        job_id=job_id,
+        job_id=queue_item.job_id,
         job_type="ingest_source",
-        started_at=now,
+        started_at=utc_now_iso(),
         status="running",
         input_refs=[
             _relative_to_root(root, manifest_path),
@@ -323,17 +465,17 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
         except UnicodeDecodeError as exc:
             msg = f"Source file is not valid UTF-8 text: {resolved_source.resolved_path}"
             raise ValueError(msg) from exc
-        extract_mode = _summary_mode_for(config, source)
 
-        page_path = _page_path_for(layout.wiki_sources_dir, source_id)
+        extract_mode = _summary_mode_for(config, source)
+        page_path = _page_path_for(layout.wiki_sources_dir, source.source_id)
         page_relpath = _relative_to_root(root, page_path)
         registered_path = canonical_source_ref(source)
         frontmatter = KnowledgePageFrontmatter(
             kind="source-summary",
             title=source.title,
-            page_id=source_id,
+            page_id=source.source_id,
             status="active",
-            source_refs=[source_id],
+            source_refs=[source.source_id],
             generated_by_run_ids=[run_id],
             confidence=1.0,
             tags=["source-summary", source.source_type],
@@ -355,7 +497,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 f"Checksum: `{source.checksum}`",
                 f"Source ref: `{canonical_source_ref(source)}`",
                 f"Added at: `{source.added_at}`",
-                f"Ingested at: `{now}`",
+                f"Ingested at: `{utc_now_iso()}`",
             ],
             extract=_rendered_extract(source_text, extract_mode),
             provenance=[
@@ -367,12 +509,13 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
         )
         index_content = update_index_content(
             layout.index_file.read_text(encoding="utf-8"),
-            source_id=source_id,
+            source_id=source.source_id,
             title=source.title,
             page_name=page_path.name,
         )
         log_entry = (
-            f"- {now} Ingested source `{source_id}` via run `{run_id}` into `{page_relpath}`."
+            f"- {utc_now_iso()} Ingested source `{source.source_id}` "
+            f"via run `{run_id}` into `{page_relpath}`."
         )
         log_content = append_log_entry(layout.log_file.read_text(encoding="utf-8"), log_entry)
         updated_source = source.model_copy(
@@ -393,7 +536,15 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
                 ],
             }
         )
-        queue_item = queue_item.model_copy(update={"status": "done", "updated_at": utc_now_iso()})
+        success_queue = queue_item.model_copy(
+            update={
+                "status": "done",
+                "updated_at": utc_now_iso(),
+                "lease_owner": None,
+                "lease_expires_at": None,
+                "last_error": None,
+            }
+        )
         _commit_success(
             layout=layout,
             manifest_path=manifest_path,
@@ -401,7 +552,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             run_path=run_path,
             success_run=success_run,
             queue_path=queue_path,
-            success_queue=queue_item,
+            success_queue=success_queue,
             wiki_payload=WikiUpdatePayload(
                 page_path=page_path,
                 page_content=page_content,
@@ -410,7 +561,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             ),
         )
         return IngestResult(
-            source_id=source_id,
+            source_id=source.source_id,
             run_id=run_id,
             queue_path=queue_path,
             run_path=run_path,
@@ -440,3 +591,102 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             error_message=str(exc),
         )
         raise RuntimeError(f"Ingestion failed while committing outputs: {exc}") from exc
+
+
+def drain_pending_ingest_jobs(root: Path) -> DrainResult:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    queue_items: list[tuple[Path, QueueItemRecord]] = []
+    for queue_path in sorted(layout.queue_dir.glob("*.json")):
+        queue_items.append((queue_path, load_queue_item(queue_path)))
+
+    now = _utc_now()
+    ordered_items = sorted(queue_items, key=lambda item: (item[1].created_at, item[1].job_id))
+
+    processed = 0
+    succeeded = 0
+    failed = 0
+    skipped = 0
+    item_results: list[DrainItemResult] = []
+
+    for queue_path, queue_item in ordered_items:
+        source_id = _source_id_from_job_id(queue_item.job_id)
+        if not _is_queue_eligible(queue_item, now):
+            skipped += 1
+            continue
+
+        try:
+            result = run_ingest_job(root, queue_path)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            processed += 1
+            failed += 1
+            item_results.append(
+                DrainItemResult(
+                    source_id=source_id,
+                    queue_path=queue_path,
+                    outcome="failed",
+                    message=str(exc),
+                )
+            )
+            continue
+
+        if result.no_op:
+            skipped += 1
+            item_results.append(
+                DrainItemResult(
+                    source_id=result.source_id,
+                    queue_path=queue_path,
+                    outcome="skipped",
+                    message="already ingested for the current pipeline version",
+                )
+            )
+            continue
+
+        processed += 1
+        succeeded += 1
+        item_results.append(
+            DrainItemResult(
+                source_id=result.source_id,
+                queue_path=queue_path,
+                outcome="succeeded",
+                message=f"run {result.run_id}",
+            )
+        )
+
+    return DrainResult(
+        processed=processed,
+        succeeded=succeeded,
+        failed=failed,
+        skipped=skipped,
+        items=item_results,
+    )
+
+
+def ingest_source(root: Path, source_id: str) -> IngestResult:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    _validate_workspace_files(layout)
+    manifest_path = manifest_path_for(root, source_id)
+    if not manifest_path.exists():
+        msg = f"Unknown source ID: {source_id}"
+        raise FileNotFoundError(msg)
+
+    source = load_source_record(manifest_path)
+    if source.source_id != source_id:
+        msg = f"Source manifest ID does not match requested source: {source_id}"
+        raise ValueError(msg)
+
+    if _is_no_op(root, layout, source):
+        return IngestResult(
+            source_id=source_id,
+            run_id=None,
+            queue_path=None,
+            run_path=None,
+            page_path=layout.wiki_sources_dir / f"{source_id}.md",
+            no_op=True,
+            canonical_ref=None,
+            content_origin_kind=None,
+        )
+
+    queue_path = enqueue_ingest_job(root, source_id)
+    return run_ingest_job(root, queue_path)

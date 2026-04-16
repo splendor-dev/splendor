@@ -9,7 +9,7 @@ import yaml
 
 from splendor.commands.add_source import add_source
 from splendor.commands.health import run_health
-from splendor.commands.ingest import ingest_source
+from splendor.commands.ingest import drain_pending_ingest_jobs, ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.materialize_source import materialize_source
 from splendor.schemas.types import STORAGE_MODES
@@ -51,8 +51,17 @@ def build_parser() -> argparse.ArgumentParser:
     add_source_parser.set_defaults(capture_source_commit=None)
     add_source_parser.set_defaults(handler=handle_add_source)
 
-    ingest_parser = subparsers.add_parser("ingest", help="Ingest a registered source into the wiki")
-    ingest_parser.add_argument("source_id", help="Registered source identifier to ingest")
+    ingest_parser = subparsers.add_parser("ingest", help="Ingest registered sources into the wiki")
+    ingest_parser.add_argument(
+        "source_id",
+        nargs="?",
+        help="Registered source identifier to ingest",
+    )
+    ingest_parser.add_argument(
+        "--pending",
+        action="store_true",
+        help="Drain pending ingestion jobs from the queue.",
+    )
     ingest_parser.set_defaults(handler=handle_ingest)
 
     materialize_parser = subparsers.add_parser(
@@ -105,6 +114,28 @@ def handle_add_source(args: argparse.Namespace) -> int:
 
 def handle_ingest(args: argparse.Namespace) -> int:
     root = args.root.resolve()
+    if args.pending:
+        try:
+            result = drain_pending_ingest_jobs(root)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            print(f"Error: {exc}")
+            return 1
+
+        if not result.items:
+            print("No pending ingest jobs")
+            return 0
+
+        for item in result.items:
+            print(f"{item.source_id}: {item.outcome} ({item.message})")
+        print(
+            "Drain summary: "
+            f"processed={result.processed} "
+            f"succeeded={result.succeeded} "
+            f"failed={result.failed} "
+            f"skipped={result.skipped}"
+        )
+        return 1 if result.failed else 0
+
     try:
         result = ingest_source(root, args.source_id)
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
@@ -163,6 +194,8 @@ def handle_health(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "ingest" and bool(args.source_id) == bool(args.pending):
+        parser.error("ingest requires exactly one of <source_id> or --pending")
     return args.handler(args)
 
 
