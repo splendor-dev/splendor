@@ -232,6 +232,9 @@ def _resolve_symlink_source(
     except FileNotFoundError as exc:
         msg = f"Workspace source is missing: {source.source_ref}"
         raise ValueError(msg) from exc
+    except (OSError, RuntimeError) as exc:
+        msg = f"{source_label} could not be resolved: {symlink_path}"
+        raise ValueError(msg) from exc
 
     workspace_root = root.resolve()
     try:

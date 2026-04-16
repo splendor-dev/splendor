@@ -6,7 +6,13 @@ import pytest
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.state.source_pointer import load_source_pointer
-from splendor.state.source_registry import load_source_record, write_source_record
+from splendor.state.source_registry import (
+    _effective_storage_mode,
+    _replace_path,
+    _write_workspace_symlink,
+    load_source_record,
+    write_source_record,
+)
 
 
 def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -191,6 +197,16 @@ def test_add_source_supports_symlink_for_workspace_sources(tmp_path: Path) -> No
     assert result.stored_path.read_text(encoding="utf-8") == "# note\n"
 
 
+def test_effective_storage_mode_accepts_workspace_symlink() -> None:
+    assert (
+        _effective_storage_mode(
+            source_ref_kind="workspace_path",
+            configured_storage_mode="symlink",
+        )
+        == "symlink"
+    )
+
+
 def test_add_source_rejects_symlink_for_external_sources(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     external_dir = tmp_path.parent / f"{tmp_path.name}-external"
@@ -204,6 +220,64 @@ def test_add_source_rejects_symlink_for_external_sources(tmp_path: Path) -> None
     finally:
         source.unlink(missing_ok=True)
         external_dir.rmdir()
+
+
+def test_replace_path_rejects_existing_directory(tmp_path: Path) -> None:
+    existing = tmp_path / "artifact"
+    existing.mkdir()
+
+    with pytest.raises(ValueError, match="Cannot replace existing directory"):
+        _replace_path(existing)
+
+
+def test_replace_path_unlinks_existing_file_and_symlink(tmp_path: Path) -> None:
+    file_path = tmp_path / "artifact.txt"
+    file_path.write_text("hello\n", encoding="utf-8")
+    _replace_path(file_path)
+    assert not file_path.exists()
+
+    target = tmp_path / "target.txt"
+    target.write_text("hello\n", encoding="utf-8")
+    symlink_path = tmp_path / "artifact-link"
+    symlink_path.symlink_to(target)
+    _replace_path(symlink_path)
+    assert not symlink_path.exists()
+
+
+def test_write_workspace_symlink_replaces_stale_artifact(tmp_path: Path) -> None:
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    stored_path = tmp_path / "raw" / "sources" / "src-1" / "note.md"
+    stored_path.parent.mkdir(parents=True, exist_ok=True)
+    stored_path.write_text("stale\n", encoding="utf-8")
+
+    _write_workspace_symlink(stored_path, source)
+
+    assert stored_path.is_symlink()
+    assert stored_path.resolve() == source.resolve()
+
+
+def test_write_workspace_symlink_rejects_mismatched_resolution(tmp_path: Path) -> None:
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    stored_path = tmp_path / "raw" / "sources" / "src-1" / "note.md"
+    stored_path.parent.mkdir(parents=True, exist_ok=True)
+    other = tmp_path / "other.md"
+    other.write_text("# other\n", encoding="utf-8")
+    stored_path.symlink_to(other)
+
+    original_symlink_to = Path.symlink_to
+
+    def fake_symlink_to(self: Path, target: Path, target_is_directory: bool = False) -> None:
+        original_symlink_to(self, other, target_is_directory=target_is_directory)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(Path, "symlink_to", fake_symlink_to)
+    try:
+        with pytest.raises(ValueError, match="does not resolve to the canonical workspace source"):
+            _write_workspace_symlink(stored_path, source)
+    finally:
+        monkeypatch.undo()
 
 
 def test_add_source_is_deduplicated_by_checksum_for_workspace_backed_sources(
