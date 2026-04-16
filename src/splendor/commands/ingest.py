@@ -70,6 +70,8 @@ class IngestResult:
     run_path: Path | None
     page_path: Path | None
     no_op: bool
+    canonical_ref: str | None
+    content_origin_kind: str | None
 
 
 def _make_run_id(source_id: str) -> str:
@@ -128,6 +130,12 @@ def _build_summary(source: SourceRecord) -> str:
         f"This page records deterministic ingestion output for source `{source.source_id}`, "
         f"a `{source.source_type}` file registered from `{path_fragment}`."
     )
+
+
+def _content_origin_kind(storage_mode: str) -> str:
+    if storage_mode == "copy":
+        return "stored_artifact"
+    return "workspace_path"
 
 
 def _best_available_source_ref(source: SourceRecord) -> str:
@@ -256,6 +264,8 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             run_path=None,
             page_path=layout.wiki_sources_dir / f"{source_id}.md",
             no_op=True,
+            canonical_ref=None,
+            content_origin_kind=None,
         )
 
     now = utc_now_iso()
@@ -406,6 +416,8 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             run_path=run_path,
             page_path=page_path,
             no_op=False,
+            canonical_ref=resolved_source.canonical_ref,
+            content_origin_kind=_content_origin_kind(resolved_source.storage_mode),
         )
     except ValueError as exc:
         _mark_attempt_failed(

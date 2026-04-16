@@ -5,9 +5,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import yaml
+
 from splendor.commands.add_source import add_source
+from splendor.commands.health import run_health
 from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
+from splendor.commands.materialize_source import materialize_source
 from splendor.schemas.types import STORAGE_MODES
 
 
@@ -50,6 +54,20 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser = subparsers.add_parser("ingest", help="Ingest a registered source into the wiki")
     ingest_parser.add_argument("source_id", help="Registered source identifier to ingest")
     ingest_parser.set_defaults(handler=handle_ingest)
+
+    materialize_parser = subparsers.add_parser(
+        "materialize-source", help="Create or refresh a source storage artifact"
+    )
+    materialize_parser.add_argument("source_id", help="Registered source identifier to materialize")
+    materialize_parser.add_argument(
+        "--storage-mode",
+        choices=tuple(mode for mode in STORAGE_MODES if mode != "none"),
+        help="Override the target storage mode for this materialization.",
+    )
+    materialize_parser.set_defaults(handler=handle_materialize_source)
+
+    health_parser = subparsers.add_parser("health", help="Validate source storage state")
+    health_parser.set_defaults(handler=handle_health)
     return parser
 
 
@@ -81,12 +99,7 @@ def handle_add_source(args: argparse.Namespace) -> int:
     print(f"Source ref: {result.source_ref}")
     print(f"Storage mode: {result.storage_mode}")
     if result.stored_path is not None:
-        if result.storage_mode == "pointer":
-            print(f"Pointer artifact: {result.stored_path}")
-        elif result.storage_mode == "symlink":
-            print(f"Symlink artifact: {result.stored_path}")
-        else:
-            print(f"Stored copy: {result.stored_path}")
+        print(f"Storage artifact: {result.stored_path}")
     return 0
 
 
@@ -104,11 +117,47 @@ def handle_ingest(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Ingested source {result.source_id}")
+    print(f"Source ref: {result.canonical_ref}")
+    print(f"Canonical content: {result.content_origin_kind.replace('_', ' ')}")
     print(f"Run: {result.run_id}")
     print(f"Page: {result.page_path}")
     print(f"Queue record: {result.queue_path}")
     print(f"Run record: {result.run_path}")
     return 0
+
+
+def handle_materialize_source(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = materialize_source(root, args.source_id, storage_mode=args.storage_mode)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    print(f"Materialized source {result.source_id}")
+    print(f"Manifest: {result.manifest_path}")
+    print(f"Source ref: {result.source_ref}")
+    print(f"Storage mode: {result.storage_mode}")
+    print(f"Storage artifact: {result.stored_path}")
+    return 0
+
+
+def handle_health(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = run_health(root)
+    except (ValueError, RuntimeError, OSError, yaml.YAMLError) as exc:
+        print(f"Error: {exc}")
+        return 1
+    print(f"Checked sources: {result.checked_sources}")
+    if not result.issues:
+        print("Health check passed")
+        return 0
+
+    print(f"Health check failed: {len(result.issues)} issue(s)")
+    for issue in result.issues:
+        print(f"- {issue.source_id}: {issue.message}")
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:

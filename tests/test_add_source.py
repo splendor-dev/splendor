@@ -5,12 +5,14 @@ import pytest
 
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
+from splendor.commands.materialize_source import materialize_source
 from splendor.state.source_pointer import load_source_pointer
 from splendor.state.source_registry import (
     _effective_storage_mode,
     _replace_path,
     _write_workspace_symlink,
     load_source_record,
+    materializing_storage_mode_for_source,
     write_source_record,
 )
 
@@ -535,3 +537,145 @@ def test_add_source_reuses_mixed_manifest_shapes_authoritatively(tmp_path: Path)
     assert symlink_repeat.source_ref == "symlink.md"
     assert symlink_repeat.storage_mode == "symlink"
     assert symlink_repeat.stored_path is not None
+
+
+def test_materialize_source_defaults_workspace_none_to_pointer(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source)
+
+    result = materialize_source(tmp_path, registered.source_id)
+
+    manifest = load_source_record(result.manifest_path)
+    assert result.storage_mode == "pointer"
+    assert (
+        result.stored_path == tmp_path / "raw" / "sources" / registered.source_id / "pointer.json"
+    )
+    assert manifest.storage_mode == "pointer"
+    assert manifest.storage_path == manifest.path
+    assert manifest.materialized_at is not None
+
+
+def test_materialize_source_supports_copy_mode(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source)
+
+    result = materialize_source(tmp_path, registered.source_id, storage_mode="copy")
+
+    manifest = load_source_record(result.manifest_path)
+    assert result.storage_mode == "copy"
+    assert result.stored_path.exists()
+    assert manifest.storage_mode == "copy"
+    assert manifest.storage_path == manifest.path
+
+
+def test_materialize_source_refreshes_stale_copy_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source, storage_mode="copy")
+    assert registered.stored_path is not None
+    registered.stored_path.write_text("stale\n", encoding="utf-8")
+
+    result = materialize_source(tmp_path, registered.source_id)
+
+    assert result.storage_mode == "copy"
+    assert result.stored_path.read_text(encoding="utf-8") == "# note\n"
+
+
+def test_materialize_source_supports_symlink_mode(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source)
+
+    result = materialize_source(tmp_path, registered.source_id, storage_mode="symlink")
+
+    manifest = load_source_record(result.manifest_path)
+    assert result.storage_mode == "symlink"
+    assert result.stored_path.is_symlink()
+    assert manifest.storage_mode == "symlink"
+    assert manifest.storage_path == manifest.path
+
+
+def test_materialize_source_is_idempotent_for_existing_materialized_mode(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source, storage_mode="pointer")
+    first_manifest = load_source_record(registered.manifest_path)
+
+    result = materialize_source(tmp_path, registered.source_id)
+
+    manifest = load_source_record(result.manifest_path)
+    assert result.storage_mode == "pointer"
+    assert manifest.storage_mode == "pointer"
+    assert manifest.materialized_at is not None
+    assert manifest.materialized_at >= first_manifest.materialized_at
+
+
+def test_materialize_source_rejects_external_sources(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    external_dir = tmp_path.parent / f"{tmp_path.name}-external"
+    external_dir.mkdir()
+    source = external_dir / "outside.md"
+    source.write_text("# outside\n", encoding="utf-8")
+    try:
+        registered = add_source(tmp_path, source)
+        with pytest.raises(ValueError, match="Only workspace-backed sources can be materialized"):
+            materialize_source(tmp_path, registered.source_id)
+    finally:
+        source.unlink(missing_ok=True)
+        external_dir.rmdir()
+
+
+def test_materialize_source_rejects_legacy_manifests(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source, storage_mode="copy")
+    legacy_manifest = load_source_record(registered.manifest_path).model_copy(
+        update={"source_ref": None, "source_ref_kind": None, "storage_mode": None}
+    )
+    write_source_record(registered.manifest_path, legacy_manifest)
+
+    with pytest.raises(ValueError, match="Legacy stored-artifact manifests cannot be materialized"):
+        materialize_source(tmp_path, registered.source_id)
+
+
+def test_materializing_storage_mode_rejects_legacy_manifest_shape(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source, storage_mode="copy")
+    legacy_manifest = load_source_record(registered.manifest_path).model_copy(
+        update={"source_ref": None, "source_ref_kind": None, "storage_mode": None}
+    )
+
+    with pytest.raises(ValueError, match="Legacy stored-artifact manifests cannot be materialized"):
+        materializing_storage_mode_for_source(tmp_path, legacy_manifest)
+
+
+def test_materialize_source_rejects_missing_workspace_source(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source)
+    source.unlink()
+
+    with pytest.raises(ValueError, match="Workspace source is missing"):
+        materialize_source(tmp_path, registered.source_id)
+
+
+def test_materialize_source_rejects_checksum_drift(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+    registered = add_source(tmp_path, source)
+    source.write_text("# changed\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Workspace source checksum mismatch for materialization"):
+        materialize_source(tmp_path, registered.source_id)

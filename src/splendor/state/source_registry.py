@@ -12,9 +12,19 @@ from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourcePointerArtifact, SourceRecord
 from splendor.schemas.types import StorageMode
-from splendor.state.source_compat import canonical_source_ref, effective_materialized_path
+from splendor.state.paths import resolve_workspace_path
+from splendor.state.source_compat import (
+    canonical_source_ref,
+    effective_materialized_path,
+    is_legacy_copied_manifest,
+)
 from splendor.state.source_pointer import pointer_artifact_relpath, write_source_pointer
-from splendor.utils.fs import copy_file_if_missing, ensure_directory, write_text_atomic
+from splendor.utils.fs import (
+    copy_file_atomic,
+    copy_file_if_missing,
+    ensure_directory,
+    write_text_atomic,
+)
 from splendor.utils.git import captured_source_commit
 from splendor.utils.hashing import sha256_file
 from splendor.utils.ids import stable_source_id
@@ -30,6 +40,15 @@ class RegisteredSource:
     source_ref: str
     copied: bool
     already_registered: bool
+
+
+@dataclass(frozen=True)
+class MaterializedSource:
+    record: SourceRecord
+    manifest_path: Path
+    stored_path: Path
+    storage_mode: StorageMode
+    source_ref: str
 
 
 def manifest_path_for(root: Path, source_id: str) -> Path:
@@ -203,6 +222,56 @@ def _write_workspace_symlink(stored_path: Path, candidate: Path) -> None:
         raise ValueError(msg)
 
 
+def write_source_artifact(
+    candidate: Path,
+    *,
+    stored_path: Path,
+    source_id: str,
+    source_ref: str,
+    source_ref_kind: str,
+    checksum: str,
+    storage_mode: StorageMode,
+    materialized_at: str,
+    refresh: bool = False,
+) -> bool:
+    copied = False
+    if storage_mode == "copy":
+        if refresh:
+            copy_file_atomic(candidate, stored_path)
+            copied = True
+        else:
+            copied = copy_file_if_missing(candidate, stored_path)
+        stored_checksum = sha256_file(stored_path)
+        if stored_checksum != checksum:
+            msg = (
+                f"Stored source checksum mismatch for {stored_path}: "
+                f"expected {checksum}, got {stored_checksum}"
+            )
+            raise ValueError(msg)
+        return copied
+
+    if storage_mode == "pointer":
+        ensure_directory(stored_path.parent)
+        write_source_pointer(
+            stored_path,
+            SourcePointerArtifact(
+                source_id=source_id,
+                source_ref=source_ref,
+                source_ref_kind=source_ref_kind,
+                checksum=checksum,
+                created_at=materialized_at,
+            ),
+        )
+        return False
+
+    if storage_mode == "symlink":
+        _write_workspace_symlink(stored_path, candidate)
+        return False
+
+    msg = f"Storage mode {storage_mode!r} does not materialize a source artifact"
+    raise ValueError(msg)
+
+
 def _validated_existing_registration(
     *,
     root: Path,
@@ -228,6 +297,128 @@ def _validated_existing_registration(
         stored_path = resolve_manifest_storage_path(root, stored_path_value)
     source_ref = canonical_source_ref(existing)
     return stored_path, resolved.storage_mode, source_ref
+
+
+def materializing_storage_mode_for_source(
+    root: Path,
+    source: SourceRecord,
+    *,
+    storage_mode: StorageMode | None = None,
+) -> StorageMode:
+    if is_legacy_copied_manifest(source):
+        msg = (
+            "Legacy stored-artifact manifests cannot be materialized with this workflow: "
+            f"{source.source_id}"
+        )
+        raise ValueError(msg)
+    if source.source_ref is None or source.source_ref_kind != "workspace_path":
+        msg = (
+            "Only workspace-backed sources can be materialized; "
+            f"source {source.source_id} is {source.source_ref_kind or 'legacy'}"
+        )
+        raise ValueError(msg)
+
+    if storage_mode is not None:
+        selected_storage_mode = _effective_storage_mode(
+            source_ref_kind="workspace_path",
+            configured_storage_mode=storage_mode,
+        )
+    elif source.storage_mode in {"copy", "pointer", "symlink"}:
+        selected_storage_mode = source.storage_mode
+    else:
+        config = load_config(root)
+        configured_mode = config.sources.in_repo_storage_mode
+        if configured_mode in {"copy", "pointer", "symlink"}:
+            selected_storage_mode = configured_mode
+        else:
+            selected_storage_mode = "pointer"
+
+    if selected_storage_mode == "none":
+        msg = f"Storage mode {selected_storage_mode!r} does not materialize a source artifact"
+        raise ValueError(msg)
+    return selected_storage_mode
+
+
+def materialize_registered_source(
+    root: Path,
+    source_id: str,
+    *,
+    storage_mode: StorageMode | None = None,
+) -> MaterializedSource:
+    manifest_path = manifest_path_for(root, source_id)
+    if not manifest_path.exists():
+        msg = f"Unknown source ID: {source_id}"
+        raise FileNotFoundError(msg)
+
+    source = load_source_record(manifest_path)
+    if source.source_id != source_id:
+        msg = f"Source manifest ID does not match requested source: {source_id}"
+        raise ValueError(msg)
+    if source.storage_mode is None and source.source_ref is None:
+        msg = (
+            "Legacy stored-artifact manifests cannot be materialized with this workflow: "
+            f"{source_id}"
+        )
+        raise ValueError(msg)
+    if source.source_ref is None or source.source_ref_kind != "workspace_path":
+        msg = (
+            "Only workspace-backed sources can be materialized; "
+            f"source {source_id} is {source.source_ref_kind or 'legacy'}"
+        )
+        raise ValueError(msg)
+
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    ensure_directory(layout.source_records_dir)
+    ensure_directory(layout.raw_sources_dir)
+
+    selected_storage_mode = materializing_storage_mode_for_source(
+        root, source, storage_mode=storage_mode
+    )
+    candidate = resolve_workspace_path(root, source.source_ref, context="Workspace source")
+    _require_workspace_source(candidate, source.checksum, source.source_ref)
+
+    stored_path = _materialized_path_for(layout, source_id, candidate, selected_storage_mode)
+    if stored_path is None:
+        msg = f"Storage mode {selected_storage_mode!r} did not produce a storage path"
+        raise ValueError(msg)
+    materialized_at = utc_now_iso()
+    write_source_artifact(
+        candidate,
+        stored_path=stored_path,
+        source_id=source_id,
+        source_ref=source.source_ref,
+        source_ref_kind=source.source_ref_kind,
+        checksum=source.checksum,
+        storage_mode=selected_storage_mode,
+        materialized_at=materialized_at,
+        refresh=True,
+    )
+    updated_source = source.model_copy(
+        update={
+            "storage_mode": selected_storage_mode,
+            "storage_path": stored_path.relative_to(root).as_posix(),
+            "path": stored_path.relative_to(root).as_posix(),
+            "materialized_at": materialized_at,
+        }
+    )
+    write_source_record(manifest_path, updated_source)
+    return MaterializedSource(
+        record=updated_source,
+        manifest_path=manifest_path,
+        stored_path=stored_path,
+        storage_mode=selected_storage_mode,
+        source_ref=source.source_ref,
+    )
+
+
+def _require_workspace_source(resolved_path: Path, checksum: str, source_ref: str) -> None:
+    if not resolved_path.exists():
+        msg = f"Workspace source is missing: {source_ref}"
+        raise ValueError(msg)
+    if sha256_file(resolved_path) != checksum:
+        msg = f"Workspace source checksum mismatch for materialization: {source_ref}"
+        raise ValueError(msg)
 
 
 def register_source(
@@ -301,29 +492,17 @@ def register_source(
 
     added_at = utc_now_iso()
     copied = False
-    if selected_storage_mode == "copy" and stored_path is not None:
-        copied = copy_file_if_missing(candidate, stored_path)
-        stored_checksum = sha256_file(stored_path)
-        if stored_checksum != checksum:
-            msg = (
-                f"Stored source checksum mismatch for {stored_path}: "
-                f"expected {checksum}, got {stored_checksum}"
-            )
-            raise ValueError(msg)
-    elif selected_storage_mode == "pointer" and stored_path is not None:
-        ensure_directory(stored_path.parent)
-        write_source_pointer(
-            stored_path,
-            SourcePointerArtifact(
-                source_id=source_id,
-                source_ref=source_ref,
-                source_ref_kind=source_ref_kind,
-                checksum=checksum,
-                created_at=added_at,
-            ),
+    if selected_storage_mode in {"copy", "pointer", "symlink"} and stored_path is not None:
+        copied = write_source_artifact(
+            candidate,
+            stored_path=stored_path,
+            source_id=source_id,
+            source_ref=source_ref,
+            source_ref_kind=source_ref_kind,
+            checksum=checksum,
+            storage_mode=selected_storage_mode,
+            materialized_at=added_at,
         )
-    elif selected_storage_mode == "symlink" and stored_path is not None:
-        _write_workspace_symlink(stored_path, candidate)
     record = SourceRecord(
         source_id=source_id,
         title=_title_for(candidate),
