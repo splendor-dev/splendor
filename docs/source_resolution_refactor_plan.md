@@ -14,6 +14,14 @@ already lives inside the tracked repository, Splendor should not duplicate it in
 by default. Instead, Splendor should register the repo file as the canonical source, verify it by
 checksum during ingest, and only materialize a snapshot when the project explicitly opts in.
 
+Status note:
+
+- this plan has been implemented through `SR-9`
+- the last planned slice landed in `PR #15`, which completed queue-first ingest draining on top of
+  the source-resolution rollout
+- treat the sections below as the completed implementation sequence and design record for this
+  refactor
+
 ## 2. Problem Statement
 
 The current MVP source contract assumes that registration means "copy the file into
@@ -477,7 +485,7 @@ Mitigation:
 Mitigation:
 
 - land the documentation PR first
-- treat this file as the implementation sequence until Phase 2 is complete
+- treat this file as the implementation sequence; Phase 2 is now complete through `SR-9`
 
 ## 12. Recommended Default Decisions
 

@@ -99,8 +99,8 @@ uv run pre-commit run --all-files
 
 ## What comes next
 
-The next milestone should expand deterministic ingestion into pending-queue draining, then layer on
-query and planning-object CLI support.
+The next milestone should move from deterministic ingestion to the first Milestone 3 CLI slice:
+query support plus planning-object create/list commands.
 
 ## Additional documentation
 
