@@ -207,3 +207,34 @@ def test_parse_planning_markdown_rejects_invalid_frontmatter(tmp_path: Path) -> 
         assert "failed schema validation" in str(exc)
     else:
         raise AssertionError("Expected planning frontmatter validation failure")
+
+
+def test_parse_planning_markdown_accepts_crlf_frontmatter(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    task_path = tmp_path / "planning" / "tasks" / "task-crlf.md"
+    task_path.write_text(
+        "---\r\n"
+        "schema_version: '1'\r\n"
+        "kind: task\r\n"
+        "task_id: task-crlf\r\n"
+        "title: CRLF task\r\n"
+        "status: todo\r\n"
+        "priority: medium\r\n"
+        "milestone_refs: []\r\n"
+        "decision_refs: []\r\n"
+        "question_refs: []\r\n"
+        "owner: null\r\n"
+        "created_at: '2026-04-17T00:00:00+00:00'\r\n"
+        "updated_at: '2026-04-17T00:00:00+00:00'\r\n"
+        "depends_on: []\r\n"
+        "source_refs: []\r\n"
+        "---\r\n\r\n"
+        "# CRLF task\r\n\r\n"
+        "## Notes\r\n",
+        encoding="utf-8",
+    )
+
+    record = parse_planning_markdown(task_path, TaskRecord)
+
+    assert record.task_id == "task-crlf"
+    assert record.title == "CRLF task"

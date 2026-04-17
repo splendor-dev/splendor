@@ -75,11 +75,12 @@ def write_planning_markdown(path: Path, content: str) -> None:
 
 def parse_planning_markdown(path: Path, model: type[PlanningRecord]) -> PlanningRecord:
     raw = path.read_text(encoding="utf-8")
-    if not raw.startswith("---\n"):
+    normalized = raw.replace("\r\n", "\n").replace("\r", "\n")
+    if not normalized.startswith("---\n"):
         raise ValueError(f"Planning record {path} is missing YAML frontmatter")
 
     try:
-        frontmatter_text, _body = raw.removeprefix("---\n").split("\n---\n", maxsplit=1)
+        frontmatter_text, _body = normalized.removeprefix("---\n").split("\n---\n", maxsplit=1)
     except ValueError as exc:
         raise ValueError(f"Planning record {path} has malformed YAML frontmatter") from exc
 
