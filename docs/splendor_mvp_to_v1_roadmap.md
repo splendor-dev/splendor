@@ -216,7 +216,7 @@ This is the point where Splendor starts to feel distinct from a generic RAG wrap
 ### Planned PR slices
 - `M3-P1` Planning-object create/list commands
 - `M3-P2` Query CLI plus `query --json`
-- `M3-P3` Optional filed-answer workflow
+- `M3-P3` Optional file-answer workflow
 
 ---
 

@@ -28,6 +28,8 @@ _KIND_TO_ID_FIELD = {
     "question": "question_id",
 }
 
+_RECORD_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
 
 def planning_directory(layout: ResolvedLayout, kind: str) -> Path:
     try:
@@ -38,6 +40,7 @@ def planning_directory(layout: ResolvedLayout, kind: str) -> Path:
 
 
 def planning_path(layout: ResolvedLayout, kind: str, record_id: str) -> Path:
+    validate_record_id(record_id)
     return planning_directory(layout, kind) / f"{record_id}.md"
 
 
@@ -51,7 +54,7 @@ def record_id_field(kind: str) -> str:
 def default_record_id(kind: str, title: str) -> str:
     slug = slugify(title)
     if not slug:
-        raise ValueError("Title must contain at least one letter or number")
+        raise ValueError("Title must contain at least one ASCII letter or number")
     return f"{kind}-{slug}"
 
 
@@ -59,6 +62,14 @@ def slugify(value: str) -> str:
     normalized = value.strip().lower()
     normalized = re.sub(r"[^a-z0-9]+", "-", normalized)
     return normalized.strip("-")
+
+
+def validate_record_id(record_id: str) -> str:
+    if not _RECORD_ID_PATTERN.fullmatch(record_id):
+        raise ValueError(
+            "Record ID must match ^[a-z0-9]+(?:-[a-z0-9]+)*$ and may not contain path separators"
+        )
+    return record_id
 
 
 def render_frontmatter(record: BaseModel) -> str:

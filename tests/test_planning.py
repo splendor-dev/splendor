@@ -238,3 +238,49 @@ def test_parse_planning_markdown_accepts_crlf_frontmatter(tmp_path: Path) -> Non
 
     assert record.task_id == "task-crlf"
     assert record.title == "CRLF task"
+
+
+def test_create_task_rejects_path_traversal_id(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+
+    try:
+        create_task(
+            tmp_path,
+            "Write CLI docs",
+            record_id="../escape",
+            status="todo",
+            priority="medium",
+            owner=None,
+            milestone_refs=[],
+            decision_refs=[],
+            question_refs=[],
+            depends_on=[],
+            source_refs=[],
+        )
+    except ValueError as exc:
+        assert "Record ID must match" in str(exc)
+    else:
+        raise AssertionError("Expected invalid record ID failure")
+
+
+def test_default_record_id_error_mentions_ascii_constraint(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+
+    try:
+        create_task(
+            tmp_path,
+            "שלום",
+            record_id=None,
+            status="todo",
+            priority="medium",
+            owner=None,
+            milestone_refs=[],
+            decision_refs=[],
+            question_refs=[],
+            depends_on=[],
+            source_refs=[],
+        )
+    except ValueError as exc:
+        assert "ASCII letter or number" in str(exc)
+    else:
+        raise AssertionError("Expected ASCII-only slug validation failure")

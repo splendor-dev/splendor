@@ -101,9 +101,7 @@ uv run pre-commit run --all-files
 
 ## What comes next
 
-`M3-P1` is now implemented: planning-object create/list commands landed as the first Milestone 3
-slice. The next planned PR is `M3-P2`, which should add query CLI support plus `splendor query
---json`.
+`M3-P1` is now implemented: planning-object create/list commands landed as the first Milestone 3 slice. The next planned PR is `M3-P2`, which should add query CLI support plus `splendor query --json`.
 
 ## Additional documentation
 
