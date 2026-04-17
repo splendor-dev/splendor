@@ -121,7 +121,7 @@ def handle_ingest(args: argparse.Namespace) -> int:
             print(f"Error: {exc}")
             return 1
 
-        if not result.items:
+        if result.total == 0:
             print("No pending ingest jobs")
             return 0
 

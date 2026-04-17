@@ -5,6 +5,7 @@ import pytest
 
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
+from splendor.state.runtime import load_queue_item
 
 
 def test_cli_init_command(tmp_path: Path, capsys) -> None:
@@ -262,6 +263,33 @@ def test_cli_ingest_pending_reports_no_jobs(tmp_path: Path, capsys) -> None:
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "No pending ingest jobs" in captured.out
+
+
+def test_cli_ingest_pending_reports_skipped_items(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+
+    manifest_paths = list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source_id = manifest_paths[0].stem
+    queue_path = enqueue_ingest_job(tmp_path, source_id)
+    queue_record = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "lease_owner": "local-cli:123",
+            "lease_expires_at": "2099-01-01T00:00:00+00:00",
+        }
+    )
+    queue_path.write_text(queue_record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert f"{source_id}: skipped (lease active until 2099-01-01T00:00:00+00:00)" in captured.out
+    assert "Drain summary: processed=0 succeeded=0 failed=0 skipped=1" in captured.out
+    assert "No pending ingest jobs" not in captured.out
 
 
 def test_cli_ingest_pending_prints_summary(tmp_path: Path, capsys) -> None:

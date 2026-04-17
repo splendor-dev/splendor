@@ -86,6 +86,7 @@ class DrainItemResult:
 
 @dataclass(frozen=True)
 class DrainResult:
+    total: int
     processed: int
     succeeded: int
     failed: int
@@ -206,6 +207,21 @@ def _is_queue_eligible(queue_item: QueueItemRecord, now: datetime) -> bool:
     if queue_item.status == "pending":
         return True
     return _lease_is_expired(queue_item, now)
+
+
+def _skip_message(queue_item: QueueItemRecord, now: datetime) -> str:
+    if queue_item.status == "failed":
+        return "status=failed"
+    if queue_item.status == "done":
+        return "status=done"
+    if queue_item.status == "leased":
+        expires_at = _parse_timestamp(queue_item.lease_expires_at)
+        if expires_at is None:
+            return "leased with no expiry"
+        if expires_at > now:
+            return f"lease active until {queue_item.lease_expires_at}"
+        return f"expired lease at {queue_item.lease_expires_at}"
+    return f"status={queue_item.status}"
 
 
 def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
@@ -354,15 +370,27 @@ def enqueue_ingest_job(root: Path, source_id: str) -> Path:
         msg = f"Source manifest ID does not match requested source: {source_id}"
         raise ValueError(msg)
 
-    now = utc_now_iso()
+    now = _utc_now()
     queue_path = queue_item_path_for(layout, _ingest_job_id(source_id))
     existing_queue = load_queue_item(queue_path) if queue_path.exists() else None
+    if (
+        existing_queue is not None
+        and existing_queue.status == "leased"
+        and not _lease_is_expired(existing_queue, now)
+    ):
+        msg = f"Queue item is already leased: {existing_queue.job_id}"
+        raise RuntimeError(msg)
+
+    created_at = now.isoformat()
+    if existing_queue is not None and existing_queue.status in {"pending", "leased"}:
+        created_at = existing_queue.created_at
+
     queue_item = QueueItemRecord(
         job_id=_ingest_job_id(source_id),
         job_type="ingest_source",
         status="pending",
-        created_at=now if existing_queue is None else existing_queue.created_at,
-        updated_at=now,
+        created_at=created_at,
+        updated_at=now.isoformat(),
         attempt_count=0 if existing_queue is None else existing_queue.attempt_count,
         max_attempts=3 if existing_queue is None else existing_queue.max_attempts,
         payload_ref=_relative_to_root(root, manifest_path),
@@ -603,6 +631,7 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
     now = _utc_now()
     ordered_items = sorted(queue_items, key=lambda item: (item[1].created_at, item[1].job_id))
 
+    total = len(ordered_items)
     processed = 0
     succeeded = 0
     failed = 0
@@ -613,6 +642,14 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
         source_id = _source_id_from_job_id(queue_item.job_id)
         if not _is_queue_eligible(queue_item, now):
             skipped += 1
+            item_results.append(
+                DrainItemResult(
+                    source_id=source_id,
+                    queue_path=queue_path,
+                    outcome="skipped",
+                    message=_skip_message(queue_item, now),
+                )
+            )
             continue
 
         try:
@@ -654,6 +691,7 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
         )
 
     return DrainResult(
+        total=total,
         processed=processed,
         succeeded=succeeded,
         failed=failed,

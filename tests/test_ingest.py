@@ -274,6 +274,51 @@ def test_enqueue_ingest_job_creates_pending_item_without_attempt_increment(tmp_p
     assert queue_record.lease_expires_at is None
 
 
+def test_enqueue_ingest_job_rejects_unexpired_leased_item(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    leased_queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "lease_owner": "local-cli:123",
+            "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+        }
+    )
+    queue_path.write_text(leased_queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="already leased"):
+        enqueue_ingest_job(tmp_path, added.source_id)
+
+    updated_queue = load_queue_item(queue_path)
+    assert updated_queue.status == "leased"
+    assert updated_queue.lease_owner == "local-cli:123"
+
+
+def test_enqueue_ingest_job_refreshes_created_at_when_reenqueuing_terminal_item(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    first_queue = load_queue_item(queue_path)
+    terminal_queue = first_queue.model_copy(
+        update={"status": "done", "created_at": "2000-01-01T00:00:00+00:00"}
+    )
+    queue_path.write_text(terminal_queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    reenqueued_queue = load_queue_item(queue_path)
+    assert reenqueued_queue.status == "pending"
+    assert reenqueued_queue.created_at != terminal_queue.created_at
+    assert reenqueued_queue.attempt_count == first_queue.attempt_count
+
+
 def test_run_ingest_job_claims_once_and_clears_lease_on_success(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
@@ -346,7 +391,11 @@ def test_drain_pending_ingest_jobs_skips_nonexpired_and_failed_items(tmp_path: P
     assert result.succeeded == 0
     assert result.failed == 0
     assert result.skipped == 2
-    assert result.items == []
+    assert result.total == 2
+    assert len(result.items) == 2
+    messages = {item.source_id: item.message for item in result.items}
+    assert "lease active until" in messages[added.source_id]
+    assert messages[failed_added.source_id] == "status=failed"
 
 
 def test_drain_pending_ingest_jobs_continues_after_failure(tmp_path: Path) -> None:
