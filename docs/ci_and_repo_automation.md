@@ -129,3 +129,15 @@ Optional repository variables:
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
 - `pre-commit.ci autofix trigger` bridges bot PRs and `pre-commit.ci` label-based autofix behavior.
 - `weekly-repo-review` is scheduled maintenance, not a merge gate.
+
+## Planning update rule for PRs
+
+When a pull request is opened against work that came from a tracked plan, the PR should update the
+versioned planning documents as part of the same change. At minimum that means:
+
+- `.agent-plan.md` for the current machine-readable task state
+- `README.md` when its "what comes next" or milestone framing changes
+- any relevant human-facing planning document under `docs/` that the PR advances, supersedes, or completes
+
+This keeps the plan aligned with merged work and avoids stale roadmap or milestone guidance after a
+planned slice lands.

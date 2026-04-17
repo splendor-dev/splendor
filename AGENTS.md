@@ -23,6 +23,8 @@
 - Cleanup or tooling branches may use `refactor/<topic>`.
 - Keep commits scoped to one logical change.
 - Do not rewrite history on shared branches unless explicitly requested.
+- When a PR implements work from a plan, update the versioned planning state in the same PR:
+  `.agent-plan.md`, `README.md`, and any affected human-facing planning document in `docs/`.
 
 ## Architecture Boundaries
 
