@@ -16,7 +16,7 @@ checksum during ingest, and only materialize a snapshot when the project explici
 
 Status note:
 
-- this plan has been implemented through `SR-9`
+- this plan is fully implemented through `SR-9`
 - the last planned slice landed in `PR #15`, which completed queue-first ingest draining on top of
   the source-resolution rollout
 - treat the sections below as the completed implementation sequence and design record for this
@@ -299,15 +299,15 @@ Proposed default policy:
 
 This keeps `wiki/sources/` useful without turning it into a second docs tree.
 
-## 10. Detailed Implementation Plan
+## 10. Implemented PR Breakdown
 
-The work should proceed in two phases. Each phase may span multiple PRs.
+The work proceeded in two phases. Each phase spanned multiple PRs.
 
 ### 10.1 Phase 1 — Introduce the source-resolution model
 
 ### Goal
 
-Make the core source manifest and ingest path understand canonical references and storage modes.
+Made the core source manifest and ingest path understand canonical references and storage modes.
 
 ### Phase 1 outcomes
 
@@ -317,11 +317,12 @@ Make the core source manifest and ingest path understand canonical references an
 - ingest reads through a resolver abstraction
 - older manifests still work
 
-### Recommended PR breakdown
+### Implemented PR breakdown
 
 Planning note:
 
-- the rollout steps below use `SR-n` labels (`Source Resolution`) to distinguish plan items from GitHub PR numbers
+- the rollout steps below use `SR-n` labels (`Source Resolution`) to distinguish implementation
+  plan items from GitHub PR numbers
 
 #### SR-1 — Docs and contract alignment
 
@@ -397,7 +398,7 @@ Exit criteria:
 
 ### Goal
 
-Make the wiki output and storage options match the new source model ergonomically.
+Made the wiki output and storage options match the new source model ergonomically.
 
 ### Phase 2 outcomes
 
@@ -405,7 +406,7 @@ Make the wiki output and storage options match the new source model ergonomicall
 - optional pointer and symlink materialization paths exist
 - projects can opt into stronger snapshot behavior where they need it
 
-### Recommended PR breakdown
+### Implemented PR breakdown
 
 Planning note:
 
@@ -485,11 +486,13 @@ Mitigation:
 Mitigation:
 
 - land the documentation PR first
-- treat this file as the implementation sequence; Phase 2 is now complete through `SR-9`
+- treat this file as the implementation sequence and completed design record; Phase 2 is complete
+  through `SR-9`
 
 ## 12. Recommended Default Decisions
 
-These should be treated as the proposed baseline unless implementation uncovers a blocking issue:
+These should be treated as the adopted baseline unless a future refactor intentionally changes
+them:
 
 - default in-repo storage mode: `none`
 - default external local storage mode: `copy`
@@ -497,8 +500,7 @@ These should be treated as the proposed baseline unless implementation uncovers 
 - source-summary rendering for external or transformed text: `full`
 - capture git commit for clean tracked workspace files: `true`
 
-## 13. Merge and Follow-up
+## 13. Follow-up
 
-After this design PR is merged, implementation should proceed as the PR series described above. The
-first code PR should focus on schema and config scaffolding, not on UI polish or richer source
-types.
+The source-resolution refactor is complete. Future source-type expansion should continue to build on
+this source-ref plus storage-mode contract rather than bypassing it.

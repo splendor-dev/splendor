@@ -213,6 +213,11 @@ This is the point where Splendor starts to feel distinct from a generic RAG wrap
 - planning objects are stored in git-friendly markdown with machine-readable frontmatter
 - planning objects can be listed and filtered at least minimally
 
+### Planned PR slices
+- `M3-P1` Planning-object create/list commands
+- `M3-P2` Query CLI plus `query --json`
+- `M3-P3` Optional filed-answer workflow
+
 ---
 
 ## Milestone 4 — MVP core: deterministic lint and health checks
@@ -247,6 +252,11 @@ Ship the first strong maintenance layer without overusing LLMs.
 - a user can run deterministic health checks locally
 - failures are actionable
 - linting can run in CI later with minimal extra work
+
+### Planned PR slices
+- `M4-P1` Lint/health command framework and report writing
+- `M4-P2` Wiki/planning/source integrity checks
+- `M4-P3` Queue/run integrity checks and repair diagnostics
 
 ---
 
@@ -283,6 +293,10 @@ Ship a first public MVP that is stable enough for real project use.
 - the MVP is reliable on at least one real project
 - the CLI surface is coherent and documented
 
+### Planned PR slices
+- `M5-P1` MVP docs, quickstart, and example workspace
+- `M5-P2` MVP hardening: coverage, errors, packaging, polish
+
 ---
 
 ## Milestone 6 — Post-MVP: stronger provenance and review state
@@ -314,6 +328,10 @@ This milestone is especially important for sensitive, policy-heavy, or research-
 - users can inspect why a page says what it says
 - contested knowledge is surfaced instead of silently merged
 - provenance is visible enough to support trust and debugging
+
+### Planned PR slices
+- `M6-P1` Review-state and provenance model expansion
+- `M6-P2` Contradiction surfacing and review-task linkage
 
 ---
 
@@ -348,6 +366,17 @@ sources.
 - ingest reads through one resolver interface regardless of source origin
 - source-summary pages remain deterministic while becoming less noisy
 
+### Historical implementation sequence
+- `SR-1` Docs and contract alignment
+- `SR-2` Schema and config scaffolding
+- `SR-3` Source resolver abstraction
+- `SR-4` `add-source` default behavior switch
+- `SR-5` Migration and polish
+- `SR-6` Source-summary rendering policy
+- `SR-7` Pointer storage mode
+- `SR-8` Optional symlink mode
+- `SR-9` Materialization workflow polish
+
 ---
 
 ## Milestone 7 — Post-MVP: code awareness
@@ -376,6 +405,10 @@ This milestone is a likely differentiator for Splendor versus more generic LLM w
 - Splendor can reason about the code repo itself
 - repo changes can drive meaningful wiki maintenance
 - architecture understanding is materially improved
+
+### Planned PR slices
+- `M7-P1` Repo scan and code/doc source classification
+- `M7-P2` Repo refresh and architecture/topic linkage
 
 ---
 
@@ -410,6 +443,10 @@ Add strong optional GitHub-powered features without making GitHub mandatory.
 - a GitHub-heavy user can adopt strong GitHub-native workflows
 - a non-GitHub user is not blocked by any of this
 
+### Planned PR slices
+- `M8-P1` GitHub Actions lint/health integration
+- `M8-P2` Optional PR-centric generated-change workflows
+
 ---
 
 ## Milestone 9 — Post-MVP: local web UI v0
@@ -442,6 +479,10 @@ Provide a modest but useful human UI without changing the system’s center of g
 - the UI is helpful but non-essential
 - agents can still operate entirely through CLI
 
+### Planned PR slices
+- `M9-P1` Local web UI browse/search shell
+- `M9-P2` Planning/runs UI views
+
 ---
 
 ## Milestone 10 — Post-MVP: queue robustness and repair workflows
@@ -468,6 +509,10 @@ Make Splendor resilient in the face of failed ingest/maintenance jobs.
 - users can recover from broken jobs without manual state surgery
 - queue state is transparent and trustworthy
 - repeated maintenance/ingest workflows are operationally sane
+
+### Planned PR slices
+- `M10-P1` Queue inspect/retry/repair commands
+- `M10-P2` Backoff, dead-letter, and stale-lease recovery
 
 ---
 
@@ -504,6 +549,10 @@ model as text-native sources.
 - extraction artifacts are stored cleanly and repairably
 - failures in OCR-heavy paths do not destabilize the core system
 
+### Planned PR slices
+- `M11-P1` Rich-source dispatch and PDF path
+- `M11-P2` OCR/image ingest path
+
 ---
 
 ## Milestone 12 — v1 stabilization and release
@@ -519,6 +568,10 @@ Publish a coherent, documented v1 that feels like a complete product.
 - extension points
 - performance polish
 - one or two real-world showcase repos
+
+### Planned PR slices
+- `M12-P1` Schema/docs/migration stabilization
+- `M12-P2` Extension/performance/release finalization
 
 ### Deliverables
 - v1 schema versions

@@ -405,3 +405,166 @@ def test_cli_health_command_fails_when_source_manifest_dir_is_missing(
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "Source manifest directory is missing or unreadable" in captured.out
+
+
+def test_cli_task_create_command(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Write",
+            "CLI",
+            "docs",
+            "--priority",
+            "high",
+            "--owner",
+            "codex",
+            "--milestone-ref",
+            "milestone-m3-p1",
+            "--source-ref",
+            "src-123",
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Created task task-write-cli-docs" in captured.out
+    assert "planning/tasks/task-write-cli-docs.md" in captured.out
+
+
+def test_cli_task_list_command_supports_filters(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Write",
+            "CLI",
+            "docs",
+            "--priority",
+            "high",
+            "--milestone-ref",
+            "milestone-m3-p1",
+        ]
+    )
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query", "--priority", "low"])
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "list",
+            "--priority",
+            "high",
+            "--milestone-ref",
+            "milestone-m3-p1",
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    lines = [line for line in captured.out.splitlines() if line.startswith("task-")]
+    assert lines == ["task-write-cli-docs  todo  high  Write CLI docs"]
+
+
+def test_cli_milestone_create_and_list_commands(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "milestone",
+            "create",
+            "Milestone",
+            "3",
+            "Slice",
+            "--status",
+            "active",
+            "--target-date",
+            "2026-05-01",
+        ]
+    )
+
+    exit_code = main(["--root", str(tmp_path), "milestone", "list", "--status", "active"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    lines = [line for line in captured.out.splitlines() if line.startswith("milestone-")]
+    assert lines == ["milestone-milestone-3-slice  active  2026-05-01  Milestone 3 Slice"]
+
+
+def test_cli_decision_create_command(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "decision",
+            "create",
+            "Use",
+            "planning",
+            "markdown",
+            "--related-task",
+            "task-write-cli-docs",
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Created decision decision-use-planning-markdown" in captured.out
+
+
+def test_cli_question_create_command(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "question",
+            "create",
+            "How",
+            "should",
+            "query",
+            "ranking",
+            "work",
+            "--related-decision",
+            "decision-use-planning-markdown",
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Created question question-how-should-query-ranking-work" in captured.out
+
+
+def test_cli_task_create_command_rejects_duplicate_ids(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Write", "CLI", "docs"])
+
+    exit_code = main(["--root", str(tmp_path), "task", "create", "Write", "CLI", "docs"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Task ID already exists: task-write-cli-docs" in captured.out
+
+
+def test_cli_task_list_fails_for_invalid_frontmatter(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+    task_path = tmp_path / "planning" / "tasks" / "task-invalid.md"
+    task_path.write_text("---\nkind: task\nbogus: true\n---\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "task", "list"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert captured.out.startswith("Error: Planning record")
