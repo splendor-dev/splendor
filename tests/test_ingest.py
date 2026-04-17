@@ -1,11 +1,17 @@
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 import yaml
 
 from splendor.commands.add_source import add_source
-from splendor.commands.ingest import ingest_source
+from splendor.commands.ingest import (
+    drain_pending_ingest_jobs,
+    enqueue_ingest_job,
+    ingest_source,
+    run_ingest_job,
+)
 from splendor.commands.init import initialize_workspace
 from splendor.config import load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
@@ -251,6 +257,168 @@ def test_ingest_source_missing_source_id_does_not_create_runtime_state(tmp_path:
 
     assert list((tmp_path / "state" / "queue").glob("*.json")) == []
     assert list((tmp_path / "state" / "runs").glob("*.json")) == []
+
+
+def test_enqueue_ingest_job_creates_pending_item_without_attempt_increment(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "pending"
+    assert queue_record.attempt_count == 0
+    assert queue_record.lease_owner is None
+    assert queue_record.lease_expires_at is None
+
+
+def test_enqueue_ingest_job_rejects_unexpired_leased_item(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    leased_queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "lease_owner": "local-cli:123",
+            "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+        }
+    )
+    queue_path.write_text(leased_queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="already leased"):
+        enqueue_ingest_job(tmp_path, added.source_id)
+
+    updated_queue = load_queue_item(queue_path)
+    assert updated_queue.status == "leased"
+    assert updated_queue.lease_owner == "local-cli:123"
+
+
+def test_enqueue_ingest_job_refreshes_created_at_when_reenqueuing_terminal_item(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    first_queue = load_queue_item(queue_path)
+    terminal_queue = first_queue.model_copy(
+        update={"status": "done", "created_at": "2000-01-01T00:00:00+00:00"}
+    )
+    queue_path.write_text(terminal_queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    reenqueued_queue = load_queue_item(queue_path)
+    assert reenqueued_queue.status == "pending"
+    assert reenqueued_queue.created_at != terminal_queue.created_at
+    assert reenqueued_queue.attempt_count == first_queue.attempt_count
+
+
+def test_run_ingest_job_claims_once_and_clears_lease_on_success(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    result = run_ingest_job(tmp_path, queue_path)
+
+    assert result.no_op is False
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "done"
+    assert queue_record.attempt_count == 1
+    assert queue_record.lease_owner is None
+    assert queue_record.lease_expires_at is None
+
+
+def test_drain_pending_ingest_jobs_reclaims_expired_leases(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    queue_record = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "attempt_count": 2,
+            "lease_owner": "local-cli:999",
+            "lease_expires_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+        }
+    )
+    queue_path.write_text(queue_record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.processed == 1
+    assert result.succeeded == 1
+    assert result.failed == 0
+    assert result.skipped == 0
+    updated_queue = load_queue_item(queue_path)
+    assert updated_queue.status == "done"
+    assert updated_queue.attempt_count == 3
+
+
+def test_drain_pending_ingest_jobs_skips_nonexpired_and_failed_items(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    leased_queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "lease_owner": "local-cli:123",
+            "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+        }
+    )
+    queue_path.write_text(leased_queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    failed_source = tmp_path / "failed.md"
+    failed_source.write_bytes(b"\xff\xfe\xfa")
+    failed_added = add_source(tmp_path, failed_source)
+    failed_queue_path = enqueue_ingest_job(tmp_path, failed_added.source_id)
+    failed_queue = load_queue_item(failed_queue_path).model_copy(update={"status": "failed"})
+    failed_queue_path.write_text(failed_queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.processed == 0
+    assert result.succeeded == 0
+    assert result.failed == 0
+    assert result.skipped == 2
+    assert result.total == 2
+    assert len(result.items) == 2
+    messages = {item.source_id: item.message for item in result.items}
+    assert "lease active until" in messages[added.source_id]
+    assert messages[failed_added.source_id] == "status=failed"
+
+
+def test_drain_pending_ingest_jobs_continues_after_failure(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    ok_source = tmp_path / "brief.md"
+    ok_source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    ok_added = add_source(tmp_path, ok_source)
+    enqueue_ingest_job(tmp_path, ok_added.source_id)
+
+    bad_source = tmp_path / "broken.bin"
+    bad_source.write_bytes(b"\x00\x01\x02")
+    bad_added = add_source(tmp_path, bad_source)
+    enqueue_ingest_job(tmp_path, bad_added.source_id)
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.processed == 2
+    assert result.succeeded == 1
+    assert result.failed == 1
+    assert result.skipped == 0
+    outcomes = {item.source_id: item.outcome for item in result.items}
+    assert outcomes[ok_added.source_id] == "succeeded"
+    assert outcomes[bad_added.source_id] == "failed"
 
 
 def test_ingest_source_validates_stored_copy_checksum(tmp_path: Path) -> None:
