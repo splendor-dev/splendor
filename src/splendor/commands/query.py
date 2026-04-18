@@ -7,21 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from splendor.config import load_config
-from splendor.layout import resolve_layout
+from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.utils.planning import (
     iter_planning_paths,
     parse_planning_document,
     planning_directory,
+    record_id_field,
 )
 from splendor.utils.wiki import parse_wiki_markdown
 
 _PLANNING_KINDS = ("task", "milestone", "decision", "question")
-_PLANNING_ID_FIELDS = {
-    "task": "task_id",
-    "milestone": "milestone_id",
-    "decision": "decision_id",
-    "question": "question_id",
-}
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
@@ -84,7 +79,8 @@ def run_query(root: Path, question: str) -> QueryResult:
     if not query_tokens:
         raise ValueError("Query must contain at least one ASCII letter or number")
 
-    documents = [*_iter_wiki_documents(root), *_iter_planning_documents(root)]
+    layout = resolve_layout(root, load_config(root))
+    documents = [*_iter_wiki_documents(root, layout), *_iter_planning_documents(root, layout)]
     scored_documents: list[_ScoredDocument] = []
     for document in documents:
         score = _score_document(document, query_tokens)
@@ -128,8 +124,7 @@ def run_query(root: Path, question: str) -> QueryResult:
     return QueryResult(query=normalized_query, summary=summary, matches=matches)
 
 
-def _iter_wiki_documents(root: Path) -> list[_QueryDocument]:
-    layout = resolve_layout(root, load_config(root))
+def _iter_wiki_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocument]:
     documents: list[_QueryDocument] = []
     for path in sorted(layout.wiki_dir.rglob("*.md")):
         if path.name == ".gitkeep":
@@ -161,10 +156,9 @@ def _iter_wiki_documents(root: Path) -> list[_QueryDocument]:
     return documents
 
 
-def _iter_planning_documents(root: Path) -> list[_QueryDocument]:
+def _iter_planning_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocument]:
     from splendor.commands.planning import _model_for  # imported lazily to avoid duplication
 
-    layout = resolve_layout(root, load_config(root))
     documents: list[_QueryDocument] = []
     for kind in _PLANNING_KINDS:
         model = _model_for(kind)
@@ -172,7 +166,7 @@ def _iter_planning_documents(root: Path) -> list[_QueryDocument]:
             parsed = parse_planning_document(path, model)
             record = parsed.record
             payload = record.model_dump(mode="json")
-            record_id = str(payload[_PLANNING_ID_FIELDS[kind]])
+            record_id = str(getattr(record, record_id_field(kind)))
             status = payload.get("status")
             source_refs = list(payload.get("source_refs", []))
             keyword_values = [kind]
@@ -180,7 +174,7 @@ def _iter_planning_documents(root: Path) -> list[_QueryDocument]:
                 keyword_values.append(status)
             search_values = [record.title]
             for key, value in payload.items():
-                if key in {"schema_version", "kind", "title", _PLANNING_ID_FIELDS[kind]}:
+                if key in {"schema_version", "kind", "title", record_id_field(kind)}:
                     continue
                 search_values.extend(_flatten_search_values(value))
             search_values.append(parsed.body)
