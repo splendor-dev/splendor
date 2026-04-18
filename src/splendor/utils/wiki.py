@@ -1,4 +1,4 @@
-"""Deterministic wiki page and index/log writers."""
+"""Deterministic wiki page parsing and index/log writers."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
 from splendor.layout import ResolvedLayout
 from splendor.schemas import KnowledgePageFrontmatter
@@ -20,8 +21,38 @@ class WikiUpdatePayload:
     log_content: str
 
 
+@dataclass(frozen=True)
+class ParsedWikiPage:
+    frontmatter: KnowledgePageFrontmatter
+    body: str
+
+
 def render_frontmatter(record: KnowledgePageFrontmatter) -> str:
     return yaml.safe_dump(record.model_dump(mode="json"), sort_keys=False).strip()
+
+
+def parse_wiki_markdown(path: Path) -> ParsedWikiPage:
+    raw = path.read_text(encoding="utf-8")
+    normalized = raw.replace("\r\n", "\n").replace("\r", "\n")
+    if not normalized.startswith("---\n"):
+        raise ValueError(f"Wiki page {path} is missing YAML frontmatter")
+
+    try:
+        frontmatter_text, body = normalized.removeprefix("---\n").split("\n---\n", maxsplit=1)
+    except ValueError as exc:
+        raise ValueError(f"Wiki page {path} has malformed YAML frontmatter") from exc
+
+    try:
+        payload = yaml.safe_load(frontmatter_text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Wiki page {path} has invalid YAML frontmatter") from exc
+
+    try:
+        frontmatter = KnowledgePageFrontmatter.model_validate(payload or {})
+    except ValidationError as exc:
+        raise ValueError(f"Wiki page {path} failed schema validation: {exc}") from exc
+
+    return ParsedWikiPage(frontmatter=frontmatter, body=body)
 
 
 def _fenced_extract_block(extract: str) -> str:

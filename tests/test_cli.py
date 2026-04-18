@@ -1,10 +1,13 @@
+import json
 import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
+from splendor.schemas import KnowledgePageFrontmatter
 from splendor.state.runtime import load_queue_item
 
 
@@ -405,6 +408,96 @@ def test_cli_health_command_fails_when_source_manifest_dir_is_missing(
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "Source manifest directory is missing or unreadable" in captured.out
+
+
+def write_queryable_wiki_page(path: Path, *, title: str, page_id: str, body: str) -> None:
+    frontmatter = KnowledgePageFrontmatter(
+        kind="concept",
+        title=title,
+        page_id=page_id,
+        status="active",
+        confidence=0.8,
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
+    path.write_text(
+        f"---\n{frontmatter_text}\n---\n\n{body}",
+        encoding="utf-8",
+    )
+
+
+def test_cli_query_command_prints_text_results(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    write_queryable_wiki_page(
+        tmp_path / "wiki" / "concepts" / "query.md",
+        title="Deterministic query",
+        page_id="concept-deterministic-query",
+        body="# Deterministic query\n\nThis page covers local retrieval.\n",
+    )
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "deterministic", "query"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Query: deterministic query" in captured.out
+    assert "Summary: Found 2 matching records." in captured.out
+    assert "Matches:" in captured.out
+    assert "planning/tasks/task-ship-query.md" in captured.out
+    assert "wiki/concepts/query.md" in captured.out
+
+
+def test_cli_query_command_supports_json_output(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query", "--source-ref", "src-123"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "query", "--json"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["query"] == "query"
+    assert payload["match_count"] == 1
+    assert payload["matches"][0]["path"] == "planning/tasks/task-ship-query.md"
+    assert payload["matches"][0]["generated_by_run_ids"] == []
+    assert payload["matches"][0]["tags"] == []
+
+
+def test_cli_query_command_reports_no_matches(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "nothing"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert 'Summary: No matches found for "nothing".' in captured.out
+
+
+def test_cli_query_command_rejects_degenerate_queries(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "!!!"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Query must contain at least one ASCII letter or number" in captured.out
+
+
+def test_cli_query_command_fails_for_invalid_wiki_frontmatter(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+    bad_page = tmp_path / "wiki" / "concepts" / "bad.md"
+    bad_page.write_text("---\nkind: concept\nbogus: true\n---\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "query", "concept"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert captured.out.startswith("Error: Wiki page")
 
 
 def test_cli_task_create_command(tmp_path: Path, capsys) -> None:
