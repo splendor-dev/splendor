@@ -23,6 +23,11 @@
 - Cleanup or tooling branches may use `refactor/<topic>`.
 - Keep commits scoped to one logical change.
 - Do not rewrite history on shared branches unless explicitly requested.
+- Feature or PR work is not complete at local commit time. It only ends once the branch is pushed
+  and a non-draft GitHub PR with a detailed description is open.
+- Published PRs should carry intentional GitHub metadata:
+  apply the appropriate labels, assign the PR to a milestone, and avoid leaving review-ready work
+  as draft unless the user explicitly asks for a draft.
 - When a PR implements work from a plan, update the versioned planning state in the same PR:
   `.agent-plan.md`, `README.md`, and any affected human-facing planning document in `docs/`.
 

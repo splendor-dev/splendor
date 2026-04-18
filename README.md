@@ -22,6 +22,8 @@ are implemented:
   `splendor question create` for structured planning objects under `planning/`
 - `splendor query "<question>"` and `splendor query "<question>" --json` for deterministic retrieval across
   maintained wiki and planning markdown
+- `splendor file-answer --from-last-query --title "..."` for filing the latest saved query result
+  back into `wiki/topics/`
 - Pydantic schema foundations for source, wiki, planning, queue, and run records
 - unit tests, linting, coverage, pre-commit, and GitHub Actions automation
 
@@ -79,6 +81,7 @@ uv run splendor ingest <source-id>
 ```bash
 uv run splendor query "How should query ranking work"
 uv run splendor query "How should query ranking work" --json
+uv run splendor file-answer --from-last-query --title "Query ranking answer"
 ```
 
 ### Run checks
@@ -105,14 +108,16 @@ uv run pre-commit run --all-files
 - `src/splendor/commands/ingest.py` performs deterministic single-source ingestion and writes queue,
   run, and wiki updates
 - `src/splendor/commands/query.py` provides deterministic retrieval across `wiki/` and `planning/`
+- `src/splendor/commands/file_answer.py` files the latest saved query snapshot into `wiki/topics/`
+  and can link an explicit question record
 - `src/splendor/schemas/` defines the initial schema contracts
 - `.github/workflows/` contains CI, PR context, autofix-trigger, and weekly repo-review workflows
 
 ## What comes next
 
-`M3-P2` is now implemented: query CLI support plus `splendor query --json` landed as the second
-Milestone 3 slice. The next planned PR is `M3-P3`, which should add the optional file-answer
-workflow.
+`M3-P3` is now implemented: successful queries persist `state/queries/last-query.json`, and
+`splendor file-answer --from-last-query --title "..."` files that deterministic result back into
+`wiki/topics/`, optionally linking an explicit question record.
 
 ## Additional documentation
 

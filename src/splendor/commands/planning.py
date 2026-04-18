@@ -11,10 +11,12 @@ from splendor.schemas import DecisionRecord, MilestoneRecord, QuestionRecord, Ta
 from splendor.utils.planning import (
     default_record_id,
     iter_planning_paths,
+    parse_planning_document,
     parse_planning_markdown,
     planning_directory,
     planning_path,
     record_id_field,
+    render_planning_document,
     render_planning_markdown,
     write_planning_markdown,
 )
@@ -50,6 +52,14 @@ class MilestoneListRow:
     status: str
     target_date: str | None
     title: str
+
+
+@dataclass(frozen=True)
+class UpdateQuestionAnswerResult:
+    record_id: str
+    path: Path
+    title: str
+    content: str
 
 
 def _model_for(kind: str):
@@ -212,6 +222,37 @@ def list_milestones(root: Path, *, status: str | None) -> list[MilestoneListRow]
     return rows
 
 
+def update_question_answer(
+    root: Path,
+    *,
+    question_id: str,
+    answer_page_ref: str,
+    answer_title: str,
+) -> UpdateQuestionAnswerResult:
+    layout = resolve_layout(root, load_config(root))
+    path = planning_path(layout, "question", question_id)
+    if not path.exists():
+        raise ValueError(f"Unknown question ID: {question_id}")
+
+    parsed = parse_planning_document(path, QuestionRecord)
+    record = parsed.record.model_copy(
+        update={
+            "status": "answered",
+            "answer_page_ref": answer_page_ref,
+            "updated_at": utc_now_iso(),
+        }
+    )
+    answer_section = f"## Answer\n\nFiled answer: [{answer_title}]({answer_page_ref})\n"
+    body = _replace_answer_section(parsed.body, answer_section)
+    content = render_planning_document(record, body=body)
+    return UpdateQuestionAnswerResult(
+        record_id=question_id,
+        path=path,
+        title=record.title,
+        content=content,
+    )
+
+
 def _write_record(root: Path, record, *, title: str) -> CreatePlanningResult:
     kind = record.kind
     layout = resolve_layout(root, load_config(root))
@@ -232,3 +273,12 @@ def _load_records(root: Path, kind: str):
         rows.append(parse_planning_markdown(path, model))
     rows.sort(key=lambda record: getattr(record, record_id_field(kind)))
     return rows
+
+
+def _replace_answer_section(body: str, answer_section: str) -> str:
+    normalized = body.replace("\r\n", "\n").replace("\r", "\n").rstrip()
+    marker = "\n## Answer\n"
+    if marker in normalized:
+        prefix, _separator, _suffix = normalized.partition(marker)
+        return f"{prefix.rstrip()}\n\n{answer_section}\n"
+    return f"{normalized}\n\n{answer_section}\n"

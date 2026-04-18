@@ -57,6 +57,7 @@ class QuestionRecord(StrictRecord):
     status: Literal["open", "answered", "deferred"] = "open"
     created_at: str
     updated_at: str
+    answer_page_ref: str | None = None
     source_refs: list[str] = Field(default_factory=list)
     related_tasks: list[str] = Field(default_factory=list)
     related_decisions: list[str] = Field(default_factory=list)
