@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import posixpath
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -243,6 +244,8 @@ def update_question_answer(
         }
     )
     answer_section = f"## Answer\n\nFiled answer: [{answer_title}]({answer_page_ref})\n"
+    answer_link = posixpath.relpath(answer_page_ref, start=path.parent.relative_to(root).as_posix())
+    answer_section = f"## Answer\n\nFiled answer: [{answer_title}]({answer_link})\n"
     body = _replace_answer_section(parsed.body, answer_section)
     content = render_planning_document(record, body=body)
     return UpdateQuestionAnswerResult(

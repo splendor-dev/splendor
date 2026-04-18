@@ -101,10 +101,22 @@ def render_source_summary_page(
 
 def update_index_content(index_content: str, *, source_id: str, title: str, page_name: str) -> str:
     bullet = f"- [{title}](sources/{page_name}) (`{source_id}`)"
-    return upsert_index_section(index_content, section_header="## Sources", bullet=bullet)
+    stable_token = f"(`{source_id}`)"
+    return upsert_index_section(
+        index_content,
+        section_header="## Sources",
+        bullet=bullet,
+        dedupe_predicate=lambda line: stable_token in line,
+    )
 
 
-def upsert_index_section(index_content: str, *, section_header: str, bullet: str) -> str:
+def upsert_index_section(
+    index_content: str,
+    *,
+    section_header: str,
+    bullet: str,
+    dedupe_predicate=None,
+) -> str:
     lines = index_content.rstrip().splitlines()
 
     try:
@@ -122,7 +134,10 @@ def upsert_index_section(index_content: str, *, section_header: str, bullet: str
     existing_bullets = [
         line for line in lines[section_index + 1 : next_heading_index] if line.startswith("- [")
     ]
-    existing_bullets = [line for line in existing_bullets if line != bullet]
+    if dedupe_predicate is None:
+        existing_bullets = [line for line in existing_bullets if line != bullet]
+    else:
+        existing_bullets = [line for line in existing_bullets if not dedupe_predicate(line)]
     existing_bullets.append(bullet)
     section_lines = ["", *sorted(existing_bullets)]
     new_lines = lines[: section_index + 1] + section_lines + lines[next_heading_index:]

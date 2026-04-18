@@ -514,6 +514,29 @@ def test_cli_query_command_rejects_degenerate_queries(tmp_path: Path, capsys) ->
     assert not (tmp_path / "state" / "queries" / "last-query.json").exists()
 
 
+def test_cli_file_answer_reports_invalid_saved_query_snapshot(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    snapshot_path = tmp_path / "state" / "queries" / "last-query.json"
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text("{not valid json", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Broken snapshot answer",
+        ]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Saved query snapshot is invalid" in captured.out
+
+
 def test_cli_query_command_fails_for_invalid_wiki_frontmatter(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     capsys.readouterr()
@@ -618,7 +641,7 @@ def test_cli_file_answer_updates_explicit_question(tmp_path: Path, capsys) -> No
     assert "status: answered" in question
     assert "answer_page_ref: wiki/topics/answer-ranking-answer.md" in question
     assert "## Answer" in question
-    assert "[Ranking answer](wiki/topics/answer-ranking-answer.md)" in question
+    assert "[Ranking answer](../../wiki/topics/answer-ranking-answer.md)" in question
 
 
 def test_cli_file_answer_errors_without_saved_query(tmp_path: Path, capsys) -> None:
