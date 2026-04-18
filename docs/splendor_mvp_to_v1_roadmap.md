@@ -221,7 +221,7 @@ This is the point where Splendor starts to feel distinct from a generic RAG wrap
 ### Milestone 3 status
 
 `M3-P1` and `M3-P2` are implemented. The next planned Milestone 3 PR is `M3-P3`, which adds the
-optional filed-answer workflow on top of the deterministic local query path.
+optional file-answer workflow on top of the deterministic local query path.
 
 ---
 

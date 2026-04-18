@@ -8,7 +8,11 @@ from pathlib import Path
 
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.utils.planning import iter_planning_paths, parse_planning_markdown, planning_directory
+from splendor.utils.planning import (
+    iter_planning_paths,
+    parse_planning_document,
+    planning_directory,
+)
 from splendor.utils.wiki import parse_wiki_markdown
 
 _PLANNING_KINDS = ("task", "milestone", "decision", "question")
@@ -165,9 +169,9 @@ def _iter_planning_documents(root: Path) -> list[_QueryDocument]:
     for kind in _PLANNING_KINDS:
         model = _model_for(kind)
         for path in iter_planning_paths(planning_directory(layout, kind)):
-            record = parse_planning_markdown(path, model)
+            parsed = parse_planning_document(path, model)
+            record = parsed.record
             payload = record.model_dump(mode="json")
-            raw_content = path.read_text(encoding="utf-8")
             record_id = str(payload[_PLANNING_ID_FIELDS[kind]])
             status = payload.get("status")
             source_refs = list(payload.get("source_refs", []))
@@ -179,9 +183,8 @@ def _iter_planning_documents(root: Path) -> list[_QueryDocument]:
                 if key in {"schema_version", "kind", "title", _PLANNING_ID_FIELDS[kind]}:
                     continue
                 search_values.extend(_flatten_search_values(value))
-            search_values.append(raw_content)
+            search_values.append(parsed.body)
             search_body = "\n".join(search_values)
-            snippet_source = _body_after_frontmatter(raw_content)
             documents.append(
                 _QueryDocument(
                     document_class="planning",
@@ -197,7 +200,7 @@ def _iter_planning_documents(root: Path) -> list[_QueryDocument]:
                     record_id_tokens=_content_tokens(record_id),
                     keyword_tokens=_content_tokens(" ".join(keyword_values)),
                     body_tokens=_content_tokens(search_body),
-                    snippet_source=snippet_source,
+                    snippet_source=parsed.body,
                 )
             )
     return documents
@@ -260,13 +263,6 @@ def _best_snippet(text: str, query_tokens: list[str]) -> str:
 def _candidate_score(candidate: str, query_tokens: list[str]) -> int:
     candidate_tokens = _content_tokens(candidate)
     return sum(candidate_tokens.count(token) for token in query_tokens)
-
-
-def _body_after_frontmatter(raw: str) -> str:
-    normalized = raw.replace("\r\n", "\n").replace("\r", "\n")
-    if normalized.startswith("---\n") and "\n---\n" in normalized.removeprefix("---\n"):
-        return normalized.removeprefix("---\n").split("\n---\n", maxsplit=1)[1]
-    return normalized
 
 
 def _unique_in_order(values: list[str]) -> list[str]:

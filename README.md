@@ -20,7 +20,7 @@ are implemented:
 - `splendor ingest <source-id>` for deterministic single-source ingestion into `wiki/sources/`
 - `splendor task create|list`, `splendor milestone create|list`, `splendor decision create`, and
   `splendor question create` for structured planning objects under `planning/`
-- `splendor query "<question>"` and `splendor query --json` for deterministic retrieval across
+- `splendor query "<question>"` and `splendor query "<question>" --json` for deterministic retrieval across
   maintained wiki and planning markdown
 - Pydantic schema foundations for source, wiki, planning, queue, and run records
 - unit tests, linting, coverage, pre-commit, and GitHub Actions automation
@@ -111,7 +111,7 @@ uv run pre-commit run --all-files
 ## What comes next
 
 `M3-P2` is now implemented: query CLI support plus `splendor query --json` landed as the second
-Milestone 3 slice. The next planned PR is `M3-P3`, which should add the optional filed-answer
+Milestone 3 slice. The next planned PR is `M3-P3`, which should add the optional file-answer
 workflow.
 
 ## Additional documentation

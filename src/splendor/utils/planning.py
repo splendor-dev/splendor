@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
@@ -13,6 +14,13 @@ from splendor.layout import ResolvedLayout
 from splendor.utils.fs import write_text_atomic
 
 PlanningRecord = TypeVar("PlanningRecord", bound=BaseModel)
+
+
+@dataclass(frozen=True)
+class ParsedPlanningDocument:
+    record: PlanningRecord
+    body: str
+
 
 _KIND_TO_SUBDIR = {
     "task": "tasks",
@@ -85,13 +93,17 @@ def write_planning_markdown(path: Path, content: str) -> None:
 
 
 def parse_planning_markdown(path: Path, model: type[PlanningRecord]) -> PlanningRecord:
+    return parse_planning_document(path, model).record
+
+
+def parse_planning_document(path: Path, model: type[PlanningRecord]) -> ParsedPlanningDocument:
     raw = path.read_text(encoding="utf-8")
     normalized = raw.replace("\r\n", "\n").replace("\r", "\n")
     if not normalized.startswith("---\n"):
         raise ValueError(f"Planning record {path} is missing YAML frontmatter")
 
     try:
-        frontmatter_text, _body = normalized.removeprefix("---\n").split("\n---\n", maxsplit=1)
+        frontmatter_text, body = normalized.removeprefix("---\n").split("\n---\n", maxsplit=1)
     except ValueError as exc:
         raise ValueError(f"Planning record {path} has malformed YAML frontmatter") from exc
 
@@ -101,9 +113,11 @@ def parse_planning_markdown(path: Path, model: type[PlanningRecord]) -> Planning
         raise ValueError(f"Planning record {path} has invalid YAML frontmatter") from exc
 
     try:
-        return model.model_validate(payload or {})
+        record = model.model_validate(payload or {})
     except ValidationError as exc:
         raise ValueError(f"Planning record {path} failed schema validation: {exc}") from exc
+
+    return ParsedPlanningDocument(record=record, body=body)
 
 
 def iter_planning_paths(directory: Path) -> list[Path]:

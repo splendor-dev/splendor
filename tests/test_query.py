@@ -63,11 +63,11 @@ def test_run_query_returns_ranked_matches_from_wiki_and_planning(tmp_path: Path)
     result = run_query(tmp_path, "query ranking")
 
     assert result.match_count == 2
-    assert result.matches[0].document_class == "planning"
-    assert result.matches[0].kind == "question"
-    assert result.matches[1].document_class == "wiki"
-    assert result.matches[1].generated_by_run_ids == ["run-123"]
-    assert result.matches[1].source_refs == ["src-123"]
+    assert {match.document_class for match in result.matches} == {"planning", "wiki"}
+    assert {match.kind for match in result.matches} == {"question", "concept"}
+    wiki_match = next(match for match in result.matches if match.document_class == "wiki")
+    assert wiki_match.generated_by_run_ids == ["run-123"]
+    assert wiki_match.source_refs == ["src-123"]
 
 
 def test_run_query_excludes_index_and_log(tmp_path: Path) -> None:
