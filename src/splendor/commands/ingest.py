@@ -12,6 +12,7 @@ from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord, SourceRecord
 from splendor.schemas.types import SummaryMode
+from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import (
     load_queue_item,
     load_run_record,
@@ -254,7 +255,7 @@ def _validate_workspace_files(layout) -> None:
 
 
 def _load_source_for_queue(root: Path, queue_item: QueueItemRecord) -> tuple[Path, SourceRecord]:
-    manifest_path = root / queue_item.payload_ref
+    manifest_path = resolve_workspace_path(root, queue_item.payload_ref, context="Queue payload")
     if not manifest_path.exists():
         msg = f"Queue payload is missing source manifest: {manifest_path}"
         raise FileNotFoundError(msg)

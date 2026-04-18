@@ -319,6 +319,50 @@ def test_enqueue_ingest_job_refreshes_created_at_when_reenqueuing_terminal_item(
     assert reenqueued_queue.attempt_count == first_queue.attempt_count
 
 
+def test_run_ingest_job_rejects_absolute_queue_payload_ref(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    queue_record = load_queue_item(queue_path).model_copy(
+        update={"payload_ref": "/tmp/outside-manifest.json"}
+    )
+    queue_path.write_text(queue_record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Queue payload path must be repo-relative"):
+        run_ingest_job(tmp_path, queue_path)
+
+    updated_queue = load_queue_item(queue_path)
+    assert updated_queue.status == "failed"
+    assert (
+        updated_queue.last_error
+        == "Queue payload path must be repo-relative: /tmp/outside-manifest.json"
+    )
+
+
+def test_run_ingest_job_rejects_escaping_queue_payload_ref(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    queue_record = load_queue_item(queue_path).model_copy(
+        update={"payload_ref": "../outside-manifest.json"}
+    )
+    queue_path.write_text(queue_record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Queue payload path escapes workspace root"):
+        run_ingest_job(tmp_path, queue_path)
+
+    updated_queue = load_queue_item(queue_path)
+    assert updated_queue.status == "failed"
+    assert (
+        updated_queue.last_error
+        == "Queue payload path escapes workspace root: ../outside-manifest.json"
+    )
+
+
 def test_run_ingest_job_claims_once_and_clears_lease_on_success(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
