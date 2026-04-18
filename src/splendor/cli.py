@@ -12,6 +12,15 @@ from splendor.commands.health import run_health
 from splendor.commands.ingest import drain_pending_ingest_jobs, ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.materialize_source import materialize_source
+from splendor.commands.planning import (
+    create_decision,
+    create_milestone,
+    create_question,
+    create_task,
+    list_milestones,
+    list_tasks,
+)
+from splendor.schemas import DecisionRecord, MilestoneRecord, QuestionRecord, TaskRecord
 from splendor.schemas.types import STORAGE_MODES
 
 
@@ -77,6 +86,142 @@ def build_parser() -> argparse.ArgumentParser:
 
     health_parser = subparsers.add_parser("health", help="Validate source storage state")
     health_parser.set_defaults(handler=handle_health)
+
+    task_parser = subparsers.add_parser("task", help="Create or inspect task records")
+    task_subparsers = task_parser.add_subparsers(dest="task_command", required=True)
+    task_create_parser = task_subparsers.add_parser("create", help="Create a task record")
+    task_create_parser.add_argument("title", nargs="+", help="Task title")
+    task_create_parser.add_argument("--id", dest="record_id", help="Explicit task identifier")
+    task_create_parser.add_argument(
+        "--status",
+        choices=TaskRecord.model_fields["status"].annotation.__args__,
+        default=TaskRecord.model_fields["status"].default,
+        help="Initial task status.",
+    )
+    task_create_parser.add_argument(
+        "--priority",
+        choices=TaskRecord.model_fields["priority"].annotation.__args__,
+        default=TaskRecord.model_fields["priority"].default,
+        help="Task priority.",
+    )
+    task_create_parser.add_argument("--owner", help="Task owner")
+    task_create_parser.add_argument(
+        "--milestone-ref", action="append", default=[], help="Linked milestone reference"
+    )
+    task_create_parser.add_argument(
+        "--decision-ref", action="append", default=[], help="Linked decision reference"
+    )
+    task_create_parser.add_argument(
+        "--question-ref", action="append", default=[], help="Linked question reference"
+    )
+    task_create_parser.add_argument(
+        "--depends-on", action="append", default=[], help="Task dependency reference"
+    )
+    task_create_parser.add_argument(
+        "--source-ref", action="append", default=[], help="Linked source reference"
+    )
+    task_create_parser.set_defaults(handler=handle_task_create)
+    task_list_parser = task_subparsers.add_parser("list", help="List task records")
+    task_list_parser.add_argument(
+        "--status",
+        choices=TaskRecord.model_fields["status"].annotation.__args__,
+        help="Filter by task status.",
+    )
+    task_list_parser.add_argument(
+        "--priority",
+        choices=TaskRecord.model_fields["priority"].annotation.__args__,
+        help="Filter by task priority.",
+    )
+    task_list_parser.add_argument("--milestone-ref", help="Filter by milestone reference")
+    task_list_parser.set_defaults(handler=handle_task_list)
+
+    milestone_parser = subparsers.add_parser(
+        "milestone", help="Create or inspect milestone records"
+    )
+    milestone_subparsers = milestone_parser.add_subparsers(dest="milestone_command", required=True)
+    milestone_create_parser = milestone_subparsers.add_parser(
+        "create", help="Create a milestone record"
+    )
+    milestone_create_parser.add_argument("title", nargs="+", help="Milestone title")
+    milestone_create_parser.add_argument(
+        "--id", dest="record_id", help="Explicit milestone identifier"
+    )
+    milestone_create_parser.add_argument(
+        "--status",
+        choices=MilestoneRecord.model_fields["status"].annotation.__args__,
+        default=MilestoneRecord.model_fields["status"].default,
+        help="Initial milestone status.",
+    )
+    milestone_create_parser.add_argument("--target-date", help="Milestone target date")
+    milestone_create_parser.add_argument(
+        "--task-ref", action="append", default=[], help="Linked task reference"
+    )
+    milestone_create_parser.add_argument(
+        "--decision-ref", action="append", default=[], help="Linked decision reference"
+    )
+    milestone_create_parser.add_argument(
+        "--question-ref", action="append", default=[], help="Linked question reference"
+    )
+    milestone_create_parser.set_defaults(handler=handle_milestone_create)
+    milestone_list_parser = milestone_subparsers.add_parser("list", help="List milestone records")
+    milestone_list_parser.add_argument(
+        "--status",
+        choices=MilestoneRecord.model_fields["status"].annotation.__args__,
+        help="Filter by milestone status.",
+    )
+    milestone_list_parser.set_defaults(handler=handle_milestone_list)
+
+    decision_parser = subparsers.add_parser("decision", help="Create decision records")
+    decision_subparsers = decision_parser.add_subparsers(dest="decision_command", required=True)
+    decision_create_parser = decision_subparsers.add_parser(
+        "create", help="Create a decision record"
+    )
+    decision_create_parser.add_argument("title", nargs="+", help="Decision title")
+    decision_create_parser.add_argument("--id", dest="record_id", help="Explicit decision ID")
+    decision_create_parser.add_argument(
+        "--status",
+        choices=DecisionRecord.model_fields["status"].annotation.__args__,
+        default=DecisionRecord.model_fields["status"].default,
+        help="Initial decision status.",
+    )
+    decision_create_parser.add_argument("--decided-at", help="Decision date")
+    decision_create_parser.add_argument(
+        "--supersedes", action="append", default=[], help="Superseded decision reference"
+    )
+    decision_create_parser.add_argument(
+        "--source-ref", action="append", default=[], help="Linked source reference"
+    )
+    decision_create_parser.add_argument(
+        "--related-task", action="append", default=[], help="Related task reference"
+    )
+    decision_create_parser.add_argument(
+        "--related-question", action="append", default=[], help="Related question reference"
+    )
+    decision_create_parser.set_defaults(handler=handle_decision_create)
+
+    question_parser = subparsers.add_parser("question", help="Create question records")
+    question_subparsers = question_parser.add_subparsers(dest="question_command", required=True)
+    question_create_parser = question_subparsers.add_parser(
+        "create", help="Create a question record"
+    )
+    question_create_parser.add_argument("title", nargs="+", help="Question title")
+    question_create_parser.add_argument("--id", dest="record_id", help="Explicit question ID")
+    question_create_parser.add_argument(
+        "--status",
+        choices=QuestionRecord.model_fields["status"].annotation.__args__,
+        default=QuestionRecord.model_fields["status"].default,
+        help="Initial question status.",
+    )
+    question_create_parser.add_argument(
+        "--source-ref", action="append", default=[], help="Linked source reference"
+    )
+    question_create_parser.add_argument(
+        "--related-task", action="append", default=[], help="Related task reference"
+    )
+    question_create_parser.add_argument(
+        "--related-decision", action="append", default=[], help="Related decision reference"
+    )
+    question_create_parser.set_defaults(handler=handle_question_create)
     return parser
 
 
@@ -189,6 +334,127 @@ def handle_health(args: argparse.Namespace) -> int:
     for issue in result.issues:
         print(f"- {issue.source_id}: {issue.message}")
     return 1
+
+
+def _title_from_args(args: argparse.Namespace) -> str:
+    return " ".join(args.title)
+
+
+def handle_task_create(args: argparse.Namespace) -> int:
+    try:
+        result = create_task(
+            args.root.resolve(),
+            _title_from_args(args),
+            record_id=args.record_id,
+            status=args.status,
+            priority=args.priority,
+            owner=args.owner,
+            milestone_refs=args.milestone_ref,
+            decision_refs=args.decision_ref,
+            question_refs=args.question_ref,
+            depends_on=args.depends_on,
+            source_refs=args.source_ref,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    print(f"Created task {result.record_id}")
+    print(f"Path: {result.path}")
+    return 0
+
+
+def handle_task_list(args: argparse.Namespace) -> int:
+    try:
+        rows = list_tasks(
+            args.root.resolve(),
+            status=args.status,
+            priority=args.priority,
+            milestone_ref=args.milestone_ref,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    for row in rows:
+        print(f"{row.task_id}  {row.status}  {row.priority}  {row.title}")
+    return 0
+
+
+def handle_milestone_create(args: argparse.Namespace) -> int:
+    try:
+        result = create_milestone(
+            args.root.resolve(),
+            _title_from_args(args),
+            record_id=args.record_id,
+            status=args.status,
+            target_date=args.target_date,
+            task_refs=args.task_ref,
+            decision_refs=args.decision_ref,
+            question_refs=args.question_ref,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    print(f"Created milestone {result.record_id}")
+    print(f"Path: {result.path}")
+    return 0
+
+
+def handle_milestone_list(args: argparse.Namespace) -> int:
+    try:
+        rows = list_milestones(args.root.resolve(), status=args.status)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    for row in rows:
+        target_date = row.target_date or "-"
+        print(f"{row.milestone_id}  {row.status}  {target_date}  {row.title}")
+    return 0
+
+
+def handle_decision_create(args: argparse.Namespace) -> int:
+    try:
+        result = create_decision(
+            args.root.resolve(),
+            _title_from_args(args),
+            record_id=args.record_id,
+            status=args.status,
+            decided_at=args.decided_at,
+            supersedes=args.supersedes,
+            source_refs=args.source_ref,
+            related_tasks=args.related_task,
+            related_questions=args.related_question,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    print(f"Created decision {result.record_id}")
+    print(f"Path: {result.path}")
+    return 0
+
+
+def handle_question_create(args: argparse.Namespace) -> int:
+    try:
+        result = create_question(
+            args.root.resolve(),
+            _title_from_args(args),
+            record_id=args.record_id,
+            status=args.status,
+            source_refs=args.source_ref,
+            related_tasks=args.related_task,
+            related_decisions=args.related_decision,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    print(f"Created question {result.record_id}")
+    print(f"Path: {result.path}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -11,12 +11,15 @@ planning objects inside version control instead of rebuilding context from scrat
 ## Status
 
 This repository is in the bootstrap phase. Milestone 0 is established and the earliest Milestone 1
-surface plus the first deterministic Milestone 2 ingest path are implemented:
+surface, the first deterministic Milestone 2 ingest path, and the first Milestone 3 planning slice
+are implemented:
 
 - Python package scaffold with `src/` layout and a minimal CLI
 - `splendor init` for repository layout creation
 - `splendor add-source <path>` for deterministic source registration
 - `splendor ingest <source-id>` for deterministic single-source ingestion into `wiki/sources/`
+- `splendor task create|list`, `splendor milestone create|list`, `splendor decision create`, and
+  `splendor question create` for structured planning objects under `planning/`
 - Pydantic schema foundations for source, wiki, planning, queue, and run records
 - unit tests, linting, coverage, pre-commit, and GitHub Actions automation
 
@@ -24,7 +27,6 @@ Not implemented yet:
 
 - OCR and derived extraction workflows
 - query engine
-- planning-object creation commands
 - web UI
 - advanced code-aware repository scanning
 
@@ -99,8 +101,7 @@ uv run pre-commit run --all-files
 
 ## What comes next
 
-The next milestone should move from deterministic ingestion to the first Milestone 3 CLI slice:
-query support plus planning-object create/list commands.
+`M3-P1` is now implemented: planning-object create/list commands landed as the first Milestone 3 slice. The next planned PR is `M3-P2`, which should add query CLI support plus `splendor query --json`.
 
 ## Additional documentation
 
