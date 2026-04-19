@@ -5,9 +5,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+import splendor.cli as cli_module
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
 from splendor.schemas import KnowledgePageFrontmatter
+from splendor.state.query_snapshot import load_query_snapshot
 from splendor.state.runtime import load_queue_item
 
 
@@ -465,6 +467,50 @@ def test_cli_query_command_supports_json_output(tmp_path: Path, capsys) -> None:
     assert payload["matches"][0]["tags"] == []
 
 
+def test_cli_query_command_persists_last_query_snapshot(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "query"])
+
+    assert exit_code == 0
+    snapshot = load_query_snapshot(tmp_path / "state" / "queries" / "last-query.json")
+    assert snapshot.query == "query"
+    assert snapshot.match_count == 1
+
+
+def test_cli_query_command_persists_snapshot_for_json_output(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "query", "--json"])
+
+    assert exit_code == 0
+    snapshot = load_query_snapshot(tmp_path / "state" / "queries" / "last-query.json")
+    assert snapshot.query == "query"
+
+
+def test_cli_query_command_reports_snapshot_write_failure(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    capsys.readouterr()
+
+    def fail_write(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli_module, "write_query_snapshot", fail_write)
+
+    exit_code = main(["--root", str(tmp_path), "query", "query"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Error: disk full" in captured.out
+
+
 def test_cli_query_command_reports_no_matches(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     capsys.readouterr()
@@ -485,6 +531,30 @@ def test_cli_query_command_rejects_degenerate_queries(tmp_path: Path, capsys) ->
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "Query must contain at least one ASCII letter or number" in captured.out
+    assert not (tmp_path / "state" / "queries" / "last-query.json").exists()
+
+
+def test_cli_file_answer_reports_invalid_saved_query_snapshot(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    snapshot_path = tmp_path / "state" / "queries" / "last-query.json"
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text("{not valid json", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Broken snapshot answer",
+        ]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Saved query snapshot is invalid" in captured.out
 
 
 def test_cli_query_command_fails_for_invalid_wiki_frontmatter(tmp_path: Path, capsys) -> None:
@@ -527,6 +597,194 @@ def test_cli_task_create_command(tmp_path: Path, capsys) -> None:
     captured = capsys.readouterr()
     assert "Created task task-write-cli-docs" in captured.out
     assert "planning/tasks/task-write-cli-docs.md" in captured.out
+
+
+def test_cli_file_answer_from_last_query_creates_topic_page_and_updates_index_and_log(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    write_queryable_wiki_page(
+        tmp_path / "wiki" / "topics" / "ranking.md",
+        title="Ranking note",
+        page_id="topic-ranking-note",
+        body="Ranking evidence appears here.\n",
+    )
+    main(["--root", str(tmp_path), "query", "ranking"])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Filed answer answer-ranking-answer" in captured.out
+    page_path = tmp_path / "wiki" / "topics" / "answer-ranking-answer.md"
+    page = page_path.read_text(encoding="utf-8")
+    assert "## Query" in page
+    assert "## Ranked Matches" in page
+    assert "Ranking note" in page
+    assert "filed-answer" in page
+    assert "## Filed Answers" in (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+    assert "answer-ranking-answer" in (tmp_path / "wiki" / "log.md").read_text(encoding="utf-8")
+
+
+def test_cli_file_answer_updates_explicit_question(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "question", "create", "What", "is", "ranking"])
+    main(["--root", str(tmp_path), "query", "ranking"])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+            "--question-id",
+            "question-what-is-ranking",
+        ]
+    )
+
+    assert exit_code == 0
+    question_path = tmp_path / "planning" / "questions" / "question-what-is-ranking.md"
+    question = question_path.read_text(encoding="utf-8")
+    assert "status: answered" in question
+    assert "answer_page_ref: wiki/topics/answer-ranking-answer.md" in question
+    assert "## Answer" in question
+    assert "[Ranking answer](../../wiki/topics/answer-ranking-answer.md)" in question
+
+
+def test_cli_file_answer_reports_write_failure(tmp_path: Path, capsys, monkeypatch) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "query", "nothing"])
+    capsys.readouterr()
+
+    def fail_file_answer(*args, **kwargs):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(cli_module, "file_answer_from_last_query", fail_file_answer)
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+        ]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Error: read-only file system" in captured.out
+
+
+def test_cli_file_answer_errors_without_saved_query(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+        ]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "No saved query snapshot found" in captured.out
+
+
+def test_cli_file_answer_errors_for_unknown_question_without_writing_page(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "query", "nothing"])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+            "--question-id",
+            "question-missing",
+        ]
+    )
+
+    assert exit_code == 1
+    assert not (tmp_path / "wiki" / "topics" / "answer-ranking-answer.md").exists()
+
+
+def test_cli_file_answer_uses_create_only_semantics(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "query", "nothing"])
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+        ]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Filed answer page already exists" in captured.out
+
+
+def test_cli_file_answer_accepts_custom_page_id(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "query", "nothing"])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+            "--page-id",
+            "answer-custom",
+        ]
+    )
+
+    assert exit_code == 0
+    assert (tmp_path / "wiki" / "topics" / "answer-custom.md").exists()
 
 
 def test_cli_task_list_command_supports_filters(tmp_path: Path, capsys) -> None:

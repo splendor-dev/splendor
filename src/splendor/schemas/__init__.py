@@ -6,6 +6,7 @@ from splendor.schemas.planning import (
     QuestionRecord,
     TaskRecord,
 )
+from splendor.schemas.query import QueryMatchSnapshot, QuerySnapshot
 from splendor.schemas.runtime import QueueItemRecord, RunRecord
 from splendor.schemas.source import SourceRecord
 from splendor.schemas.source_pointer import SourcePointerArtifact
@@ -16,6 +17,8 @@ __all__ = [
     "DecisionRecord",
     "KnowledgePageFrontmatter",
     "MilestoneRecord",
+    "QueryMatchSnapshot",
+    "QuerySnapshot",
     "QuestionRecord",
     "QueueItemRecord",
     "RunRecord",

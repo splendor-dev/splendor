@@ -33,6 +33,7 @@ KEEP_FILES = [
     "state/manifests/sources/.gitkeep",
     "state/queue/.gitkeep",
     "state/runs/.gitkeep",
+    "state/queries/.gitkeep",
     "state/locks/.gitkeep",
     "reports/lint/.gitkeep",
     "reports/health/.gitkeep",

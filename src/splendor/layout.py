@@ -64,6 +64,10 @@ class ResolvedLayout:
     def runs_dir(self) -> Path:
         return self.state_dir / "runs"
 
+    @property
+    def queries_dir(self) -> Path:
+        return self.state_dir / "queries"
+
 
 def resolve_layout(root: Path, config: SplendorConfig) -> ResolvedLayout:
     layout = config.layout
@@ -112,6 +116,7 @@ def required_directories(layout: ResolvedLayout) -> list[Path]:
         layout.state_dir,
         layout.state_dir / "queue",
         layout.state_dir / "runs",
+        layout.state_dir / "queries",
         layout.state_dir / "locks",
         layout.state_dir / "manifests",
         layout.source_records_dir,

@@ -141,3 +141,17 @@ versioned planning documents as part of the same change. At minimum that means:
 
 This keeps the plan aligned with merged work and avoids stale roadmap or milestone guidance after a
 planned slice lands.
+
+## Agent completion rule for PR work
+
+For agent-driven feature or PR work in this repository, local implementation is not the terminal
+state. The work should be treated as complete only after:
+
+- the branch is pushed
+- a non-draft pull request is open on GitHub
+- the pull request has a detailed description
+- the pull request has intentional labels
+- the pull request is assigned to the appropriate milestone
+
+If any of those publication steps are still missing, the work is still in progress even if the code
+changes are already committed locally.

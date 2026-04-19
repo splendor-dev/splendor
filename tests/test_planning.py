@@ -12,6 +12,7 @@ from splendor.commands.planning import (
     create_task,
     list_milestones,
     list_tasks,
+    update_question_answer,
 )
 from splendor.schemas import DecisionRecord, MilestoneRecord, QuestionRecord, TaskRecord
 from splendor.utils.planning import parse_planning_markdown
@@ -115,6 +116,29 @@ def test_create_question_round_trips_with_schema(tmp_path: Path) -> None:
     assert record.question_id == "question-how-should-query-ranking-work"
     assert record.status == "open"
     assert record.related_decisions == ["decision-use-planning-markdown"]
+
+
+def test_update_question_answer_uses_relative_markdown_link(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    create_question(
+        tmp_path,
+        "How should query ranking work",
+        record_id="question-query-ranking",
+        status="open",
+        source_refs=[],
+        related_tasks=[],
+        related_decisions=[],
+    )
+
+    result = update_question_answer(
+        tmp_path,
+        question_id="question-query-ranking",
+        answer_page_ref="wiki/topics/answer-query-ranking.md",
+        answer_title="Query ranking answer",
+    )
+
+    assert "answer_page_ref: wiki/topics/answer-query-ranking.md" in result.content
+    assert "[Query ranking answer](../../wiki/topics/answer-query-ranking.md)" in result.content
 
 
 def test_list_tasks_is_sorted_and_filtered(tmp_path: Path) -> None:

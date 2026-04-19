@@ -7,6 +7,7 @@ from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_question, create_task
 from splendor.commands.query import run_query
 from splendor.schemas import KnowledgePageFrontmatter
+from splendor.state.query_snapshot import load_query_snapshot
 
 
 def write_wiki_page(
@@ -238,3 +239,40 @@ def test_run_query_result_is_json_serializable(tmp_path: Path) -> None:
     assert parsed["query"] == "query"
     assert parsed["match_count"] == 1
     assert parsed["matches"][0]["path"] == "planning/tasks/task-ship-query.md"
+
+
+def test_query_snapshot_schema_round_trip(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    create_task(
+        tmp_path,
+        "Ship query",
+        record_id=None,
+        status="todo",
+        priority="medium",
+        owner=None,
+        milestone_refs=[],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+    )
+
+    result = run_query(tmp_path, "query")
+    snapshot_path = tmp_path / "state" / "queries" / "last-query.json"
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "query": result.query,
+                "summary": result.summary,
+                "match_count": result.match_count,
+                "created_at": "2026-04-18T00:00:00+00:00",
+                "matches": [match.__dict__ for match in result.matches],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = load_query_snapshot(snapshot_path)
+    assert snapshot.query == "query"
+    assert snapshot.matches[0].record_id == "task-ship-query"
