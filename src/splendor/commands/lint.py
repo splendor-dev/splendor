@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from splendor.commands.maintenance import MaintenanceCheckResult
+from splendor.commands.maintenance import MaintenanceCheckResult, workspace_relative_path
 from splendor.layout import ResolvedLayout, required_directories
 from splendor.schemas import MaintenanceIssue
 
@@ -21,7 +21,7 @@ def run_lint_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckResul
             MaintenanceIssue(
                 code="missing-directory",
                 message="Required workspace directory is missing",
-                path=str(directory),
+                path=workspace_relative_path(layout.root, directory),
                 check_name="workspace-layout",
             )
         )
@@ -35,7 +35,7 @@ def run_lint_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckResul
             MaintenanceIssue(
                 code="missing-file",
                 message="Required bootstrap file is missing",
-                path=str(path),
+                path=workspace_relative_path(layout.root, path),
                 check_name="workspace-bootstrap",
             )
         )

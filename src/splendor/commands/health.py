@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from splendor.commands.maintenance import MaintenanceCheckResult
+from splendor.commands.maintenance import MaintenanceCheckResult, workspace_relative_path
 from splendor.layout import ResolvedLayout
 from splendor.schemas import MaintenanceIssue, SourceRecord
 from splendor.state.source_compat import effective_storage_mode
@@ -50,7 +50,7 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
                 MaintenanceIssue(
                     code="source-health-check-failed",
                     message=str(exc),
-                    path=str(manifest_path),
+                    path=workspace_relative_path(layout.root, manifest_path),
                     record_id=source_id,
                     check_name="source-storage",
                 )

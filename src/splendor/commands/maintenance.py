@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-import yaml
-
 from splendor.config import default_config, load_config
 from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.schemas import MaintenanceIssue, MaintenanceReport
-from splendor.utils.fs import ensure_directory, write_text_atomic
+from splendor.utils.fs import ensure_directory
 from splendor.utils.time import utc_now_iso
 
 
@@ -74,13 +73,44 @@ def _report_basename(report_dir: Path) -> str:
     return candidate
 
 
+def workspace_relative_path(root: Path, path: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
 def write_report_artifacts(layout: ResolvedLayout, report: MaintenanceReport) -> tuple[Path, Path]:
     report_dir = ensure_directory(layout.reports_dir / report.command)
     basename = _report_basename(report_dir)
     json_path = report_dir / f"{basename}.json"
     markdown_path = report_dir / f"{basename}.md"
-    write_text_atomic(json_path, render_report_json(report))
-    write_text_atomic(markdown_path, render_report_markdown(report))
+    json_content = render_report_json(report)
+    markdown_content = render_report_markdown(report)
+
+    temp_paths: list[Path] = []
+    committed_paths: list[Path] = []
+    try:
+        for destination, content in (
+            (json_path, json_content),
+            (markdown_path, markdown_content),
+        ):
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=destination.parent,
+                delete=False,
+            ) as handle:
+                handle.write(content)
+                temp_paths.append(Path(handle.name))
+
+        for temp_path, destination in zip(temp_paths, (json_path, markdown_path), strict=True):
+            temp_path.replace(destination)
+            committed_paths.append(destination)
+    except Exception:
+        for path in temp_paths:
+            path.unlink(missing_ok=True)
+        for path in committed_paths:
+            path.unlink(missing_ok=True)
+        raise
+
     return json_path, markdown_path
 
 
@@ -104,7 +134,7 @@ def execute_maintenance_command(
             issue_count=len(check_result.issues),
             issues=check_result.issues,
         )
-    except (ValueError, RuntimeError, OSError, yaml.YAMLError) as exc:
+    except Exception as exc:
         if layout is None:
             layout = resolve_layout(root, default_config(project_name=root.name))
         report = MaintenanceReport(

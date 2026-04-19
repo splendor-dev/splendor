@@ -414,6 +414,7 @@ def test_cli_health_command_fails_for_invalid_sources(tmp_path: Path, capsys) ->
     assert payload["issue_count"] == 1
     assert payload["issues"][0]["record_id"]
     assert payload["issues"][0]["code"] == "source-health-check-failed"
+    assert payload["issues"][0]["path"].startswith("state/manifests/sources/")
     markdown = markdown_report.read_text(encoding="utf-8")
     assert "## Issues" in markdown
     assert "[source-health-check-failed]" in markdown
@@ -494,6 +495,7 @@ def test_cli_lint_command_fails_when_required_directory_is_missing(tmp_path: Pat
     payload = json.loads(latest_report_paths(tmp_path, "lint")[0].read_text(encoding="utf-8"))
     assert payload["status"] == "failed"
     assert payload["issues"][0]["code"] == "missing-directory"
+    assert payload["issues"][0]["path"] == "planning/tasks"
 
 
 def test_cli_lint_command_fails_when_required_bootstrap_file_is_missing(
@@ -509,6 +511,7 @@ def test_cli_lint_command_fails_when_required_bootstrap_file_is_missing(
     assert "Required bootstrap file is missing" in captured.out
     payload = json.loads(latest_report_paths(tmp_path, "lint")[0].read_text(encoding="utf-8"))
     assert payload["issues"][0]["code"] == "missing-file"
+    assert payload["issues"][0]["path"] == "wiki/index.md"
 
 
 def test_cli_lint_command_supports_json_output(tmp_path: Path, capsys) -> None:

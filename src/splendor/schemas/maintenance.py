@@ -35,4 +35,19 @@ class MaintenanceReport(StrictRecord):
                 f"issue_count must equal the number of issues; got {self.issue_count} "
                 f"for {len(self.issues)} issues"
             )
+        if self.status == "passed":
+            if self.issues or self.issue_count != 0:
+                raise ValueError("passed reports must not contain issues")
+            if self.fatal_error is not None:
+                raise ValueError("passed reports must not contain fatal_error")
+        elif self.status == "failed":
+            if not self.issues or self.issue_count == 0:
+                raise ValueError("failed reports must contain at least one issue")
+            if self.fatal_error is not None:
+                raise ValueError("failed reports must not contain fatal_error")
+        elif self.status == "error":
+            if self.fatal_error is None:
+                raise ValueError("error reports must contain fatal_error")
+            if self.issues or self.issue_count != 0:
+                raise ValueError("error reports must not contain issues")
         return self
