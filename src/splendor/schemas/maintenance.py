@@ -8,6 +8,8 @@ from pydantic import Field, model_validator
 
 from splendor.schemas.common import StrictRecord
 
+type MaintenanceCommand = Literal["lint", "health"]
+
 
 class MaintenanceIssue(StrictRecord):
     kind: Literal["maintenance_issue"] = "maintenance_issue"
@@ -20,7 +22,7 @@ class MaintenanceIssue(StrictRecord):
 
 class MaintenanceReport(StrictRecord):
     kind: Literal["maintenance_report"] = "maintenance_report"
-    command: Literal["lint", "health"]
+    command: MaintenanceCommand
     created_at: str
     status: Literal["passed", "failed", "error"]
     checked_count: int = Field(ge=0)

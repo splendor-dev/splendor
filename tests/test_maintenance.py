@@ -72,6 +72,49 @@ def test_execute_maintenance_command_normalizes_unexpected_exceptions(tmp_path: 
     assert "unexpected crash" in payload["fatal_error"]
 
 
+def test_execute_maintenance_command_clears_issues_when_report_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    layout = resolve_layout(tmp_path, default_config(project_name=tmp_path.name))
+    for directory in (
+        layout.reports_dir,
+        layout.reports_dir / "lint",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    def failing_checks(root: Path, resolved_layout) -> MaintenanceCheckResult:
+        return MaintenanceCheckResult(
+            checked_count=2,
+            issues=[
+                MaintenanceIssue(
+                    code="missing-directory",
+                    message="Required workspace directory is missing",
+                    path="planning/tasks",
+                )
+            ],
+        )
+
+    def boom(*args, **kwargs):
+        raise OSError("write failed")
+
+    monkeypatch.setattr("splendor.commands.maintenance.write_report_artifacts", boom)
+
+    result = execute_maintenance_command(
+        tmp_path,
+        command="lint",
+        run_checks=failing_checks,
+    )
+
+    assert result.exit_code == 1
+    assert result.report.status == "error"
+    assert result.report.checked_count == 2
+    assert result.report.issue_count == 0
+    assert result.report.issues == []
+    assert result.report.fatal_error == "Failed to write report artifacts: write failed"
+    assert result.json_path is None
+    assert result.markdown_path is None
+
+
 def test_maintenance_report_rejects_passed_report_with_issues() -> None:
     with pytest.raises(ValueError, match="passed reports must not contain issues"):
         MaintenanceReport(

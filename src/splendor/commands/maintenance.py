@@ -11,7 +11,7 @@ from pathlib import Path
 
 from splendor.config import default_config, load_config
 from splendor.layout import ResolvedLayout, resolve_layout
-from splendor.schemas import MaintenanceIssue, MaintenanceReport
+from splendor.schemas import MaintenanceCommand, MaintenanceIssue, MaintenanceReport
 from splendor.utils.fs import ensure_directory
 from splendor.utils.time import utc_now_iso
 
@@ -117,7 +117,7 @@ def write_report_artifacts(layout: ResolvedLayout, report: MaintenanceReport) ->
 def execute_maintenance_command(
     root: Path,
     *,
-    command: str,
+    command: MaintenanceCommand,
     run_checks: MaintenanceChecks,
 ) -> MaintenanceCommandResult:
     created_at = utc_now_iso()
@@ -155,8 +155,8 @@ def execute_maintenance_command(
             created_at=created_at,
             status="error",
             checked_count=report.checked_count,
-            issue_count=report.issue_count,
-            issues=report.issues,
+            issue_count=0,
+            issues=[],
             fatal_error=f"Failed to write report artifacts: {exc}",
         )
         return MaintenanceCommandResult(
