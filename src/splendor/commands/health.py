@@ -2,27 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
-from splendor.config import load_config
-from splendor.layout import resolve_layout
-from splendor.schemas import SourceRecord
+from splendor.commands.maintenance import MaintenanceCheckResult
+from splendor.layout import ResolvedLayout
+from splendor.schemas import MaintenanceIssue, SourceRecord
 from splendor.state.source_compat import effective_storage_mode
 from splendor.state.source_registry import load_source_record
 from splendor.state.source_resolver import resolve_source_content
-
-
-@dataclass(frozen=True)
-class HealthIssue:
-    source_id: str
-    message: str
-
-
-@dataclass(frozen=True)
-class HealthResult:
-    checked_sources: int
-    issues: list[HealthIssue]
 
 
 def _validate_storage_policy(source: SourceRecord) -> None:
@@ -43,10 +30,8 @@ def _validate_storage_policy(source: SourceRecord) -> None:
         raise ValueError("Copied source is missing path")
 
 
-def run_health(root: Path) -> HealthResult:
-    config = load_config(root)
-    layout = resolve_layout(root, config)
-    issues: list[HealthIssue] = []
+def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckResult:
+    issues: list[MaintenanceIssue] = []
     checked_sources = 0
 
     if not layout.source_records_dir.is_dir():
@@ -61,6 +46,14 @@ def run_health(root: Path) -> HealthResult:
             _validate_storage_policy(source)
             resolve_source_content(root, source, layout.raw_sources_dir)
         except Exception as exc:
-            issues.append(HealthIssue(source_id=source_id, message=str(exc)))
+            issues.append(
+                MaintenanceIssue(
+                    code="source-health-check-failed",
+                    message=str(exc),
+                    path=str(manifest_path),
+                    record_id=source_id,
+                    check_name="source-storage",
+                )
+            )
 
-    return HealthResult(checked_sources=checked_sources, issues=issues)
+    return MaintenanceCheckResult(checked_count=checked_sources, issues=issues)

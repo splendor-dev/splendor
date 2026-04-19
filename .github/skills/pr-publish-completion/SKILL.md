@@ -18,6 +18,8 @@ Treat the work as incomplete until all of the following are true:
 - the pull request description is detailed and review-ready
 - the pull request has the appropriate labels
 - the pull request is assigned to a milestone
+- the PR URL and metadata have been verified after publication rather than assumed from a local
+  commit or push succeeding
 
 ## Publishing checklist
 
@@ -33,8 +35,10 @@ Treat the work as incomplete until all of the following are true:
 6. Apply or create the needed labels.
 7. Assign the PR to the correct milestone, creating one when the repository does not already have
    a suitable milestone.
+8. Verify the published PR URL, state, labels, and milestone before reporting completion.
 
 ## Notes
 
 - Do not stop at “code is written” or “commit exists”.
+- Do not stop at “tests pass locally” or “the branch is pushed”.
 - Do not leave a review-ready feature PR in draft unless the user explicitly asks for that state.

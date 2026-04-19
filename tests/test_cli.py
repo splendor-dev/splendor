@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,15 @@ from splendor.commands.ingest import enqueue_ingest_job
 from splendor.schemas import KnowledgePageFrontmatter
 from splendor.state.query_snapshot import load_query_snapshot
 from splendor.state.runtime import load_queue_item
+
+
+def latest_report_paths(root: Path, command: str) -> tuple[Path, Path]:
+    report_dir = root / "reports" / command
+    json_reports = sorted(report_dir.glob("*.json"))
+    markdown_reports = sorted(report_dir.glob("*.md"))
+    assert json_reports, f"expected JSON reports in {report_dir}"
+    assert markdown_reports, f"expected Markdown reports in {report_dir}"
+    return json_reports[-1], markdown_reports[-1]
 
 
 def test_cli_init_command(tmp_path: Path, capsys) -> None:
@@ -371,6 +381,18 @@ def test_cli_health_command_passes_for_valid_sources(tmp_path: Path, capsys) -> 
     captured = capsys.readouterr()
     assert "Checked sources: 1" in captured.out
     assert "Health check passed" in captured.out
+    json_report, markdown_report = latest_report_paths(tmp_path, "health")
+    assert json_report.stem == markdown_report.stem
+    assert re.fullmatch(r"\d{8}T\d{6}Z(?:-\d+)?", json_report.stem)
+    payload = json.loads(json_report.read_text(encoding="utf-8"))
+    assert payload["command"] == "health"
+    assert payload["status"] == "passed"
+    assert payload["checked_count"] == 1
+    assert payload["issue_count"] == 0
+    markdown = markdown_report.read_text(encoding="utf-8")
+    assert "# Splendor Health Report" in markdown
+    assert "- Status: `passed`" in markdown
+    assert "- Issues: `0`" in markdown
 
 
 def test_cli_health_command_fails_for_invalid_sources(tmp_path: Path, capsys) -> None:
@@ -386,6 +408,15 @@ def test_cli_health_command_fails_for_invalid_sources(tmp_path: Path, capsys) ->
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "Health check failed: 1 issue(s)" in captured.out
+    json_report, markdown_report = latest_report_paths(tmp_path, "health")
+    payload = json.loads(json_report.read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert payload["issue_count"] == 1
+    assert payload["issues"][0]["record_id"]
+    assert payload["issues"][0]["code"] == "source-health-check-failed"
+    markdown = markdown_report.read_text(encoding="utf-8")
+    assert "## Issues" in markdown
+    assert "[source-health-check-failed]" in markdown
 
 
 def test_cli_health_command_reports_top_level_errors(tmp_path: Path, capsys) -> None:
@@ -396,6 +427,11 @@ def test_cli_health_command_reports_top_level_errors(tmp_path: Path, capsys) -> 
     assert exit_code == 1
     captured = capsys.readouterr()
     assert captured.out.startswith("Error: ")
+    json_report, markdown_report = latest_report_paths(tmp_path, "health")
+    payload = json.loads(json_report.read_text(encoding="utf-8"))
+    assert payload["status"] == "error"
+    assert payload["fatal_error"]
+    assert "# Splendor Health Report" in markdown_report.read_text(encoding="utf-8")
 
 
 def test_cli_health_command_fails_when_source_manifest_dir_is_missing(
@@ -410,6 +446,82 @@ def test_cli_health_command_fails_when_source_manifest_dir_is_missing(
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "Source manifest directory is missing or unreadable" in captured.out
+
+
+def test_cli_health_command_supports_json_output(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "health", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "health"
+    assert payload["status"] == "passed"
+    assert payload["issue_count"] == 0
+
+
+def test_cli_lint_command_passes_for_initialized_workspace(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    exit_code = main(["--root", str(tmp_path), "lint"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Checked items:" in captured.out
+    assert "Lint check passed" in captured.out
+    json_report, markdown_report = latest_report_paths(tmp_path, "lint")
+    payload = json.loads(json_report.read_text(encoding="utf-8"))
+    assert payload["command"] == "lint"
+    assert payload["status"] == "passed"
+    assert payload["issue_count"] == 0
+    assert "# Splendor Lint Report" in markdown_report.read_text(encoding="utf-8")
+
+
+def test_cli_lint_command_fails_when_required_directory_is_missing(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    shutil.rmtree(tmp_path / "planning" / "tasks")
+
+    exit_code = main(["--root", str(tmp_path), "lint"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Lint check failed: 1 issue(s)" in captured.out
+    assert "Required workspace directory is missing" in captured.out
+    payload = json.loads(latest_report_paths(tmp_path, "lint")[0].read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert payload["issues"][0]["code"] == "missing-directory"
+
+
+def test_cli_lint_command_fails_when_required_bootstrap_file_is_missing(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    (tmp_path / "wiki" / "index.md").unlink()
+
+    exit_code = main(["--root", str(tmp_path), "lint"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Required bootstrap file is missing" in captured.out
+    payload = json.loads(latest_report_paths(tmp_path, "lint")[0].read_text(encoding="utf-8"))
+    assert payload["issues"][0]["code"] == "missing-file"
+
+
+def test_cli_lint_command_supports_json_output(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "lint", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "lint"
+    assert payload["status"] == "passed"
+    assert payload["issue_count"] == 0
 
 
 def write_queryable_wiki_page(path: Path, *, title: str, page_id: str, body: str) -> None:

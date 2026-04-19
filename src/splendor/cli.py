@@ -6,16 +6,16 @@ import argparse
 import json
 from pathlib import Path
 
-import yaml
-
 from splendor.commands.add_source import add_source
 from splendor.commands.file_answer import (
     default_answer_page_id,
     file_answer_from_last_query,
 )
-from splendor.commands.health import run_health
+from splendor.commands.health import run_health_checks
 from splendor.commands.ingest import drain_pending_ingest_jobs, ingest_source
 from splendor.commands.init import initialize_workspace
+from splendor.commands.lint import run_lint_checks
+from splendor.commands.maintenance import execute_maintenance_command, render_report_json
 from splendor.commands.materialize_source import materialize_source
 from splendor.commands.planning import (
     create_decision,
@@ -102,7 +102,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     materialize_parser.set_defaults(handler=handle_materialize_source)
 
+    lint_parser = subparsers.add_parser("lint", help="Run deterministic maintenance checks")
+    lint_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    lint_parser.set_defaults(handler=handle_lint)
+
     health_parser = subparsers.add_parser("health", help="Validate source storage state")
+    health_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
     health_parser.set_defaults(handler=handle_health)
 
     query_parser = subparsers.add_parser("query", help="Query maintained wiki and planning records")
@@ -363,22 +378,45 @@ def handle_materialize_source(args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_health(args: argparse.Namespace) -> int:
-    root = args.root.resolve()
-    try:
-        result = run_health(root)
-    except (ValueError, RuntimeError, OSError, yaml.YAMLError) as exc:
-        print(f"Error: {exc}")
-        return 1
-    print(f"Checked sources: {result.checked_sources}")
-    if not result.issues:
-        print("Health check passed")
-        return 0
+def _print_maintenance_stdout(command: str, report, *, json_output: bool) -> None:
+    if json_output:
+        print(render_report_json(report), end="")
+        return
 
-    print(f"Health check failed: {len(result.issues)} issue(s)")
-    for issue in result.issues:
-        print(f"- {issue.source_id}: {issue.message}")
-    return 1
+    if report.status == "error":
+        print(f"Error: {report.fatal_error}")
+        return
+
+    label = "sources" if command == "health" else "items"
+    print(f"Checked {label}: {report.checked_count}")
+    if report.status == "passed":
+        print(f"{command.title()} check passed")
+        return
+
+    print(f"{command.title()} check failed: {report.issue_count} issue(s)")
+    for issue in report.issues:
+        subject = issue.record_id or issue.path or issue.check_name or issue.code
+        print(f"- {subject}: {issue.message}")
+
+
+def handle_lint(args: argparse.Namespace) -> int:
+    result = execute_maintenance_command(
+        args.root.resolve(),
+        command="lint",
+        run_checks=run_lint_checks,
+    )
+    _print_maintenance_stdout("lint", result.report, json_output=args.json_output)
+    return result.exit_code
+
+
+def handle_health(args: argparse.Namespace) -> int:
+    result = execute_maintenance_command(
+        args.root.resolve(),
+        command="health",
+        run_checks=run_health_checks,
+    )
+    _print_maintenance_stdout("health", result.report, json_output=args.json_output)
+    return result.exit_code
 
 
 def handle_query(args: argparse.Namespace) -> int:
