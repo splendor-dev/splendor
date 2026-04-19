@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from splendor.commands.planning import UpdateQuestionAnswerResult
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, QueryMatchSnapshot
@@ -41,7 +42,7 @@ def file_answer_from_last_query(
     *,
     title: str,
     page_id: str | None,
-    question_update,
+    question_update: UpdateQuestionAnswerResult | None = None,
 ) -> FileAnswerResult:
     layout = resolve_layout(root, load_config(root))
     snapshot = load_query_snapshot(last_query_path_for(layout))

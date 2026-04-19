@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import splendor.cli as cli_module
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
 from splendor.schemas import KnowledgePageFrontmatter
@@ -491,6 +492,25 @@ def test_cli_query_command_persists_snapshot_for_json_output(tmp_path: Path, cap
     assert snapshot.query == "query"
 
 
+def test_cli_query_command_reports_snapshot_write_failure(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    capsys.readouterr()
+
+    def fail_write(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli_module, "write_query_snapshot", fail_write)
+
+    exit_code = main(["--root", str(tmp_path), "query", "query"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Error: disk full" in captured.out
+
+
 def test_cli_query_command_reports_no_matches(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     capsys.readouterr()
@@ -642,6 +662,32 @@ def test_cli_file_answer_updates_explicit_question(tmp_path: Path, capsys) -> No
     assert "answer_page_ref: wiki/topics/answer-ranking-answer.md" in question
     assert "## Answer" in question
     assert "[Ranking answer](../../wiki/topics/answer-ranking-answer.md)" in question
+
+
+def test_cli_file_answer_reports_write_failure(tmp_path: Path, capsys, monkeypatch) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "query", "nothing"])
+    capsys.readouterr()
+
+    def fail_file_answer(*args, **kwargs):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(cli_module, "file_answer_from_last_query", fail_file_answer)
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "file-answer",
+            "--from-last-query",
+            "--title",
+            "Ranking answer",
+        ]
+    )
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Error: read-only file system" in captured.out
 
 
 def test_cli_file_answer_errors_without_saved_query(tmp_path: Path, capsys) -> None:

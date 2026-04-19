@@ -389,31 +389,35 @@ def handle_query(args: argparse.Namespace) -> int:
         print(f"Error: {exc}")
         return 1
 
-    layout = resolve_layout(root, load_config(root))
-    snapshot = QuerySnapshot(
-        query=result.query,
-        summary=result.summary,
-        match_count=result.match_count,
-        created_at=utc_now_iso(),
-        matches=[
-            QueryMatchSnapshot(
-                rank=match.rank,
-                score=match.score,
-                document_class=match.document_class,
-                kind=match.kind,
-                record_id=match.record_id,
-                title=match.title,
-                path=match.path,
-                status=match.status,
-                snippet=match.snippet,
-                source_refs=match.source_refs,
-                generated_by_run_ids=match.generated_by_run_ids,
-                tags=match.tags,
-            )
-            for match in result.matches
-        ],
-    )
-    write_query_snapshot(last_query_path_for(layout), snapshot)
+    try:
+        layout = resolve_layout(root, load_config(root))
+        snapshot = QuerySnapshot(
+            query=result.query,
+            summary=result.summary,
+            match_count=result.match_count,
+            created_at=utc_now_iso(),
+            matches=[
+                QueryMatchSnapshot(
+                    rank=match.rank,
+                    score=match.score,
+                    document_class=match.document_class,
+                    kind=match.kind,
+                    record_id=match.record_id,
+                    title=match.title,
+                    path=match.path,
+                    status=match.status,
+                    snippet=match.snippet,
+                    source_refs=match.source_refs,
+                    generated_by_run_ids=match.generated_by_run_ids,
+                    tags=match.tags,
+                )
+                for match in result.matches
+            ],
+        )
+        write_query_snapshot(last_query_path_for(layout), snapshot)
+    except OSError as exc:
+        print(f"Error: {exc}")
+        return 1
 
     if args.json_output:
         payload = {
@@ -481,7 +485,7 @@ def handle_file_answer(args: argparse.Namespace) -> int:
             page_id=args.page_id,
             question_update=question_update,
         )
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         print(f"Error: {exc}")
         return 1
 
