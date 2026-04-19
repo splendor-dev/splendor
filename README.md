@@ -123,12 +123,13 @@ uv run pre-commit run --all-files
 
 ## What comes next
 
-`M4-P1` is now implemented: `splendor lint` and `splendor health` share a deterministic maintenance
-framework, both commands can emit JSON to stdout, and every run files timestamped JSON/Markdown
-reports into `reports/lint/` or `reports/health/`.
+`M4-P2` is now implemented: `splendor lint` still performs workspace bootstrap checks, and now also
+loads wiki pages, planning records, and source manifests non-fatally, validates cross-record
+references, flags broken local markdown links, and reports duplicate identifiers through the shared
+maintenance reporting framework.
 
-The next planned slice is `M4-P2`, which will add the first wiki/planning/source integrity checks on
-top of that maintenance framework.
+The next planned slice is `M4-P3`, which will extend deterministic maintenance into queue/run
+integrity checks and repair diagnostics.
 
 ## Additional documentation
 

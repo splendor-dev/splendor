@@ -263,6 +263,11 @@ Ship the first strong maintenance layer without overusing LLMs.
 - `M4-P2` Wiki/planning/source integrity checks
 - `M4-P3` Queue/run integrity checks and repair diagnostics
 
+### Milestone 4 status
+
+`M4-P1` and `M4-P2` are implemented. The next planned Milestone 4 PR is `M4-P3`, which adds
+queue/run integrity checks and repair-oriented diagnostics on top of the current maintenance layer.
+
 ---
 
 ## Milestone 5 — MVP release hardening
