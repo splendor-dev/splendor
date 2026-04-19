@@ -1,5 +1,6 @@
 """Schema exports."""
 
+from splendor.schemas.maintenance import MaintenanceCommand, MaintenanceIssue, MaintenanceReport
 from splendor.schemas.planning import (
     DecisionRecord,
     MilestoneRecord,
@@ -16,6 +17,9 @@ from splendor.schemas.wiki import KnowledgePageFrontmatter
 __all__ = [
     "DecisionRecord",
     "KnowledgePageFrontmatter",
+    "MaintenanceCommand",
+    "MaintenanceIssue",
+    "MaintenanceReport",
     "MilestoneRecord",
     "QueryMatchSnapshot",
     "QuerySnapshot",

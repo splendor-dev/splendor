@@ -24,6 +24,8 @@ are implemented:
   maintained wiki and planning markdown
 - `splendor file-answer --from-last-query --title "..."` for filing the latest saved query result
   back into `wiki/topics/`
+- `splendor lint` and `splendor health --json` for deterministic maintenance checks with durable
+  timestamped reports under `reports/lint/` and `reports/health/`
 - Pydantic schema foundations for source, wiki, planning, queue, and run records
 - unit tests, linting, coverage, pre-commit, and GitHub Actions automation
 
@@ -87,6 +89,9 @@ uv run splendor file-answer --from-last-query --title "Query ranking answer"
 ### Run checks
 
 ```bash
+uv run splendor lint
+uv run splendor health
+uv run splendor health --json
 uv run ruff format --check .
 uv run ruff check .
 uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml
@@ -110,14 +115,20 @@ uv run pre-commit run --all-files
 - `src/splendor/commands/query.py` provides deterministic retrieval across `wiki/` and `planning/`
 - `src/splendor/commands/file_answer.py` files the latest saved query snapshot into `wiki/topics/`
   and can link an explicit question record
+- `src/splendor/commands/lint.py`, `src/splendor/commands/health.py`, and
+  `src/splendor/commands/maintenance.py` provide the first shared deterministic maintenance/reporting
+  layer and write timestamped JSON/Markdown reports under `reports/`
 - `src/splendor/schemas/` defines the initial schema contracts
 - `.github/workflows/` contains CI, PR context, autofix-trigger, and weekly repo-review workflows
 
 ## What comes next
 
-`M3-P3` is now implemented: successful queries persist `state/queries/last-query.json`, and
-`splendor file-answer --from-last-query --title "..."` files that deterministic result back into
-`wiki/topics/`, optionally linking an explicit question record.
+`M4-P1` is now implemented: `splendor lint` and `splendor health` share a deterministic maintenance
+framework, both commands can emit JSON to stdout, and every run files timestamped JSON/Markdown
+reports into `reports/lint/` or `reports/health/`.
+
+The next planned slice is `M4-P2`, which will add the first wiki/planning/source integrity checks on
+top of that maintenance framework.
 
 ## Additional documentation
 
