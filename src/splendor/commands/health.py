@@ -60,17 +60,36 @@ def _append_issue(
 
 
 def _parse_timestamp(value: str, *, context: str) -> datetime:
+    normalized_value = f"{value[:-1]}+00:00" if value.endswith("Z") else value
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(normalized_value)
     except ValueError as exc:
         msg = f"{context} is not a valid ISO timestamp: {value!r}"
         raise ValueError(msg) from exc
+    if parsed.tzinfo is None:
+        msg = f"{context} must include a timezone offset: {value!r}"
+        raise ValueError(msg)
+    return parsed.astimezone(UTC)
 
 
-def _require_runtime_directory(path: Path, *, label: str) -> None:
+def _check_runtime_directory(
+    *,
+    root: Path,
+    path: Path,
+    label: str,
+    issues: list[MaintenanceIssue],
+    check_name: str,
+) -> bool:
     if not path.is_dir():
-        msg = f"{label} directory is missing or unreadable: {path}"
-        raise RuntimeError(msg)
+        _append_issue(
+            issues,
+            code="missing-directory",
+            message=f"{label} directory is missing or unreadable",
+            path=workspace_relative_path(root, path),
+            check_name=check_name,
+        )
+        return False
+    return True
 
 
 def _load_source_records(
@@ -78,8 +97,8 @@ def _load_source_records(
     *,
     root: Path,
     issues: list[MaintenanceIssue],
-) -> tuple[dict[str, SourceRecord], set[str], int]:
-    records: dict[str, SourceRecord] = {}
+) -> tuple[dict[str, tuple[Path, SourceRecord]], set[str], int]:
+    records: dict[str, tuple[Path, SourceRecord]] = {}
     invalid_ids: set[str] = set()
     checked_count = 0
 
@@ -102,7 +121,7 @@ def _load_source_records(
                 check_name="source-storage",
             )
             continue
-        records[source_id] = source
+        records[source_id] = (manifest_path, source)
 
     return records, invalid_ids, checked_count
 
@@ -176,7 +195,8 @@ def _validate_queue_record(
     root: Path,
     queue_path: Path,
     queue_record: QueueItemRecord,
-    source_records: dict[str, SourceRecord],
+    layout: ResolvedLayout,
+    source_records: dict[str, tuple[Path, SourceRecord]],
     invalid_source_ids: set[str],
     now: datetime,
     issues: list[MaintenanceIssue],
@@ -323,8 +343,8 @@ def _validate_queue_record(
     if expected_source_id in invalid_source_ids:
         return
 
-    source_record = source_records.get(expected_source_id)
-    if source_record is None:
+    source_entry = source_records.get(expected_source_id)
+    if source_entry is None:
         _append_issue(
             issues,
             code="missing-queue-source-record",
@@ -337,6 +357,7 @@ def _validate_queue_record(
             check_name="queue-payload",
         )
         return
+    canonical_manifest_path, _ = source_entry
 
     try:
         payload_source = load_source_record(manifest_path)
@@ -363,11 +384,9 @@ def _validate_queue_record(
             record_id=queue_record.job_id,
             check_name="queue-payload",
         )
-    if manifest_path.name != f"{source_record.source_id}.json":
-        canonical_manifest_relpath = workspace_relative_path(
-            root,
-            root / "state" / "manifests" / "sources" / f"{source_record.source_id}.json",
-        )
+    canonical_manifest_relpath = workspace_relative_path(root, canonical_manifest_path)
+    payload_manifest_relpath = workspace_relative_path(root, manifest_path)
+    if payload_manifest_relpath != canonical_manifest_relpath:
         _append_issue(
             issues,
             code="queue-payload-path-mismatch",
@@ -480,14 +499,15 @@ def _validate_run_record(
 
 def _validate_source_runtime_state(
     *,
-    root: Path,
-    source_records: dict[str, SourceRecord],
+    layout: ResolvedLayout,
+    source_records: dict[str, tuple[Path, SourceRecord]],
     run_records: dict[str, tuple[Path, RunRecord]],
     invalid_run_ids: set[str],
     issues: list[MaintenanceIssue],
 ) -> None:
-    for source_id, source_record in source_records.items():
-        manifest_relpath = f"state/manifests/sources/{source_id}.json"
+    for source_id, source_entry in source_records.items():
+        manifest_path, source_record = source_entry
+        manifest_relpath = workspace_relative_path(layout.root, manifest_path)
 
         if source_record.status == "registered":
             if source_record.last_run_id is not None:
@@ -589,32 +609,65 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
     checked_count = 0
     now = datetime.now(UTC)
 
-    _require_runtime_directory(layout.source_records_dir, label="Source manifest")
-    _require_runtime_directory(layout.queue_dir, label="Queue")
-    _require_runtime_directory(layout.runs_dir, label="Run")
+    if _check_runtime_directory(
+        root=root,
+        path=layout.source_records_dir,
+        label="Source manifest",
+        issues=issues,
+        check_name="workspace-layout",
+    ):
+        source_records, invalid_source_ids, loaded_sources = _load_source_records(
+            layout,
+            root=root,
+            issues=issues,
+        )
+        checked_count += loaded_sources
+    else:
+        source_records = {}
+        invalid_source_ids = set()
+        checked_count += 1
 
-    source_records, invalid_source_ids, loaded_sources = _load_source_records(
-        layout,
+    if _check_runtime_directory(
         root=root,
+        path=layout.queue_dir,
+        label="Queue",
         issues=issues,
-    )
-    queue_records, _, loaded_queues = _load_queue_records(
-        layout,
+        check_name="workspace-layout",
+    ):
+        queue_records, _, loaded_queues = _load_queue_records(
+            layout,
+            root=root,
+            issues=issues,
+        )
+        checked_count += loaded_queues
+    else:
+        queue_records = {}
+        checked_count += 1
+
+    if _check_runtime_directory(
         root=root,
+        path=layout.runs_dir,
+        label="Run",
         issues=issues,
-    )
-    run_records, invalid_run_ids, loaded_runs = _load_run_records(
-        layout,
-        root=root,
-        issues=issues,
-    )
-    checked_count += loaded_sources + loaded_queues + loaded_runs
+        check_name="workspace-layout",
+    ):
+        run_records, invalid_run_ids, loaded_runs = _load_run_records(
+            layout,
+            root=root,
+            issues=issues,
+        )
+        checked_count += loaded_runs
+    else:
+        run_records = {}
+        invalid_run_ids = set()
+        checked_count += 1
 
     for queue_path, queue_record in queue_records.values():
         _validate_queue_record(
             root=root,
             queue_path=queue_path,
             queue_record=queue_record,
+            layout=layout,
             source_records=source_records,
             invalid_source_ids=invalid_source_ids,
             now=now,
@@ -630,7 +683,7 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         )
 
     _validate_source_runtime_state(
-        root=root,
+        layout=layout,
         source_records=source_records,
         run_records=run_records,
         invalid_run_ids=invalid_run_ids,

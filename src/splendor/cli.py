@@ -387,7 +387,7 @@ def _print_maintenance_stdout(command: str, report, *, json_output: bool) -> Non
         print(f"Error: {report.fatal_error}")
         return
 
-    label = "sources" if command == "health" else "items"
+    label = "records" if command == "health" else "items"
     print(f"Checked {label}: {report.checked_count}")
     if report.status == "passed":
         print(f"{command.title()} check passed")
