@@ -24,8 +24,9 @@ are implemented:
   maintained wiki and planning markdown
 - `splendor file-answer --from-last-query --title "..."` for filing the latest saved query result
   back into `wiki/topics/`
-- `splendor lint` and `splendor health --json` for deterministic maintenance checks with durable
-  timestamped reports under `reports/lint/` and `reports/health/`
+- `splendor lint`, `splendor health`, and JSON report output for deterministic maintenance checks
+  across source, queue, and run state with durable timestamped reports under `reports/lint/` and
+  `reports/health/`
 - Pydantic schema foundations for source, wiki, planning, queue, and run records
 - unit tests, linting, coverage, pre-commit, and GitHub Actions automation
 
@@ -116,20 +117,21 @@ uv run pre-commit run --all-files
 - `src/splendor/commands/file_answer.py` files the latest saved query snapshot into `wiki/topics/`
   and can link an explicit question record
 - `src/splendor/commands/lint.py`, `src/splendor/commands/health.py`, and
-  `src/splendor/commands/maintenance.py` provide the first shared deterministic maintenance/reporting
-  layer and write timestamped JSON/Markdown reports under `reports/`
+  `src/splendor/commands/maintenance.py` provide the shared deterministic maintenance/reporting
+  layer for content integrity, source storage, and queue/run diagnostics, and write timestamped
+  JSON/Markdown reports under `reports/`
 - `src/splendor/schemas/` defines the initial schema contracts
 - `.github/workflows/` contains CI, PR context, autofix-trigger, and weekly repo-review workflows
 
 ## What comes next
 
-`M4-P2` is now implemented: `splendor lint` still performs workspace bootstrap checks, and now also
-loads wiki pages, planning records, and source manifests non-fatally, validates cross-record
-references, flags broken local markdown links, and reports duplicate identifiers through the shared
-maintenance reporting framework.
+`M4-P3` is now implemented: `splendor health` still validates source storage/materialization, and
+now also inventories queue items and run records non-fatally, flags malformed runtime records,
+expired leases, unfinished runs, queue payload mismatches, and source-to-last-run inconsistencies
+through the shared maintenance reporting framework.
 
-The next planned slice is `M4-P3`, which will extend deterministic maintenance into queue/run
-integrity checks and repair diagnostics.
+The next planned slice is `M5-P1`, which will focus on MVP docs, quickstart flow, and an example
+workspace.
 
 ## Additional documentation
 
