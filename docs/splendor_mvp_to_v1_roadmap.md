@@ -265,8 +265,12 @@ Ship the first strong maintenance layer without overusing LLMs.
 
 ### Milestone 4 status
 
-`M4-P1` and `M4-P2` are implemented. The next planned Milestone 4 PR is `M4-P3`, which adds
-queue/run integrity checks and repair-oriented diagnostics on top of the current maintenance layer.
+`M4-P1`, `M4-P2`, and `M4-P3` are implemented. Milestone 4 now covers bootstrap linting,
+wiki/planning/source integrity checks, and queue/run repair diagnostics through the shared
+maintenance reporting layer.
+
+The next planned PR is `M5-P1`, which moves into MVP docs, quickstart flow, and an example
+workspace.
 
 ---
 
