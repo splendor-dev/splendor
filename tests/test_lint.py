@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from splendor.commands.add_source import add_source
@@ -196,6 +197,52 @@ def test_run_lint_checks_reports_missing_linked_pages_and_source_ref_mismatch(
         issue for issue in result.issues if issue.code == "linked-page-source-mismatch"
     )
     assert mismatch_issue.path == linked_page.relative_to(tmp_path).as_posix()
+
+
+def test_run_lint_checks_reports_invalid_linked_page_refs_separately(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("hello\n", encoding="utf-8")
+    add_source(tmp_path, source_path)
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source_record = load_source_record(manifest_path)
+    updated_record = source_record.model_copy(
+        update={"linked_pages": ["../outside.md", "/tmp/absolute.md"]}
+    )
+    write_source_record(manifest_path, updated_record)
+
+    result = _run_lint(tmp_path)
+
+    assert {issue.code for issue in result.issues} == {"invalid-linked-page-ref"}
+    assert len(result.issues) == 2
+    assert all(
+        issue.path == manifest_path.relative_to(tmp_path).as_posix() for issue in result.issues
+    )
+
+
+def test_run_lint_checks_ignores_markdown_target_resolution_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "links.md",
+        title="Links",
+        page_id="concept-links",
+        body="[loop](loop.md)\n",
+    )
+
+    original_resolve = Path.resolve
+
+    def bad_resolve(self: Path, *args, **kwargs):
+        if self.name == "loop.md":
+            raise RuntimeError("symlink loop")
+        return original_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", bad_resolve)
+
+    result = _run_lint(tmp_path)
+
+    assert result.issues == []
 
 
 def test_run_lint_checks_reports_duplicate_ids_once_per_duplicate_value(tmp_path: Path) -> None:

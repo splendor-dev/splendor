@@ -592,9 +592,18 @@ def _linked_page_issues(
     for linked_page in source.linked_pages:
         try:
             resolved = resolve_workspace_path(root, linked_page, context="Linked page")
-        except ValueError:
-            resolved = None
-        if resolved is None or not resolved.is_file():
+        except ValueError as exc:
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-linked-page-ref",
+                    message=str(exc),
+                    path=workspace_relative_path(root, source_manifest.manifest_path),
+                    record_id=source.source_id,
+                    check_name="reference-integrity",
+                )
+            )
+            continue
+        if not resolved.is_file():
             issues.append(
                 MaintenanceIssue(
                     code="missing-linked-page",
@@ -678,8 +687,6 @@ def _resolve_local_markdown_target(root: Path, path: Path, target: str) -> Path 
     parsed = urlsplit(target)
     if parsed.scheme or parsed.netloc:
         return None
-    if parsed.path.startswith("mailto:"):
-        return None
     candidate_text = parsed.path
     if not candidate_text.endswith(".md"):
         return None
@@ -691,7 +698,7 @@ def _resolve_local_markdown_target(root: Path, path: Path, target: str) -> Path 
         resolved = candidate.resolve()
         resolved.relative_to(root.resolve())
         return resolved
-    except ValueError:
+    except (OSError, RuntimeError, ValueError):
         return None
 
 
