@@ -527,6 +527,27 @@ def test_cli_lint_command_supports_json_output(tmp_path: Path, capsys) -> None:
     assert payload["issue_count"] == 0
 
 
+def test_cli_lint_command_reports_dirty_workspace_issues_in_json_output(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+    bad_page = tmp_path / "wiki" / "concepts" / "bad.md"
+    bad_page.write_text("---\nkind: concept\nbogus: true\n---\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "lint", "--json"])
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "lint"
+    assert payload["status"] == "failed"
+    assert payload["issue_count"] == 1
+    assert payload["issues"][0]["code"] == "invalid-wiki-frontmatter"
+    json_report, markdown_report = latest_report_paths(tmp_path, "lint")
+    assert json.loads(json_report.read_text(encoding="utf-8"))["status"] == "failed"
+    assert "invalid-wiki-frontmatter" in markdown_report.read_text(encoding="utf-8")
+
+
 def write_queryable_wiki_page(path: Path, *, title: str, page_id: str, body: str) -> None:
     frontmatter = KnowledgePageFrontmatter(
         kind="concept",
