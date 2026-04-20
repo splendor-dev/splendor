@@ -65,6 +65,9 @@ def test_run_lint_checks_reports_invalid_wiki_frontmatter_without_fatal_error(
     result = _run_lint(tmp_path)
 
     assert [issue.code for issue in result.issues] == ["invalid-wiki-frontmatter"]
+    assert result.issues[0].path == "wiki/concepts/bad.md"
+    assert "\n" not in result.issues[0].message
+    assert str(tmp_path) not in result.issues[0].message
 
 
 def test_run_lint_checks_reports_invalid_planning_frontmatter_without_fatal_error(
@@ -77,6 +80,9 @@ def test_run_lint_checks_reports_invalid_planning_frontmatter_without_fatal_erro
     result = _run_lint(tmp_path)
 
     assert [issue.code for issue in result.issues] == ["invalid-planning-frontmatter"]
+    assert result.issues[0].path == "planning/tasks/task-bad.md"
+    assert "\n" not in result.issues[0].message
+    assert str(tmp_path) not in result.issues[0].message
 
 
 def test_run_lint_checks_reports_invalid_source_manifest(tmp_path: Path) -> None:
@@ -87,6 +93,8 @@ def test_run_lint_checks_reports_invalid_source_manifest(tmp_path: Path) -> None
     result = _run_lint(tmp_path)
 
     assert [issue.code for issue in result.issues] == ["invalid-source-manifest"]
+    assert "\n" not in result.issues[0].message
+    assert str(tmp_path) not in result.issues[0].message
 
 
 def test_run_lint_checks_reports_missing_wiki_refs_and_related_pages(tmp_path: Path) -> None:
@@ -171,7 +179,7 @@ def test_run_lint_checks_reports_missing_linked_pages_and_source_ref_mismatch(
     updated_record = source_record.model_copy(
         update={
             "linked_pages": [
-                linked_page.relative_to(tmp_path).as_posix(),
+                f"./{linked_page.relative_to(tmp_path).as_posix()}",
                 "wiki/sources/missing.md",
             ]
         }
@@ -184,6 +192,10 @@ def test_run_lint_checks_reports_missing_linked_pages_and_source_ref_mismatch(
         "linked-page-source-mismatch",
         "missing-linked-page",
     }
+    mismatch_issue = next(
+        issue for issue in result.issues if issue.code == "linked-page-source-mismatch"
+    )
+    assert mismatch_issue.path == linked_page.relative_to(tmp_path).as_posix()
 
 
 def test_run_lint_checks_reports_duplicate_ids_once_per_duplicate_value(tmp_path: Path) -> None:

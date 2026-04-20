@@ -30,6 +30,7 @@ _PLANNING_MODELS = {
     "decision": DecisionRecord,
     "question": QuestionRecord,
 }
+_WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
 @dataclass(frozen=True)
@@ -158,7 +159,7 @@ def _inventory_content_records(root: Path, layout: ResolvedLayout) -> _LintCheck
             issues.append(
                 MaintenanceIssue(
                     code="invalid-wiki-frontmatter",
-                    message=str(exc),
+                    message=_normalize_issue_exception(root, path, exc),
                     path=workspace_relative_path(root, path),
                     check_name="wiki-schema",
                 )
@@ -179,7 +180,7 @@ def _inventory_content_records(root: Path, layout: ResolvedLayout) -> _LintCheck
                 issues.append(
                     MaintenanceIssue(
                         code="invalid-planning-frontmatter",
-                        message=str(exc),
+                        message=_normalize_issue_exception(root, path, exc),
                         path=workspace_relative_path(root, path),
                         check_name="planning-schema",
                     )
@@ -202,7 +203,7 @@ def _inventory_content_records(root: Path, layout: ResolvedLayout) -> _LintCheck
                 issues.append(
                     MaintenanceIssue(
                         code="invalid-source-manifest",
-                        message=str(exc),
+                        message=_normalize_issue_exception(root, path, exc),
                         path=workspace_relative_path(root, path),
                         check_name="source-manifest",
                     )
@@ -604,7 +605,8 @@ def _linked_page_issues(
                 )
             )
             continue
-        page = wiki_by_path.get(linked_page)
+        normalized_linked_page = workspace_relative_path(root, resolved)
+        page = wiki_by_path.get(normalized_linked_page)
         if page is None or page.frontmatter is None:
             continue
         if source.source_id in page.frontmatter.source_refs:
@@ -613,14 +615,37 @@ def _linked_page_issues(
             MaintenanceIssue(
                 code="linked-page-source-mismatch",
                 message=(
-                    f"Linked wiki page does not include the source ID in source_refs: {linked_page}"
+                    "Linked wiki page does not include the source ID in source_refs: "
+                    f"{normalized_linked_page}"
                 ),
-                path=linked_page,
+                path=normalized_linked_page,
                 record_id=source.source_id,
                 check_name="reference-integrity",
             )
         )
     return issues
+
+
+def _normalize_issue_exception(root: Path, path: Path, exc: Exception) -> str:
+    message = str(exc).strip()
+    if not message:
+        return exc.__class__.__name__
+
+    absolute_path = str(path)
+    workspace_path = workspace_relative_path(root, path)
+    patterns = [
+        f"Wiki page {absolute_path} ",
+        f"Planning record {absolute_path} ",
+        f"{absolute_path} ",
+        absolute_path,
+    ]
+    for pattern in patterns:
+        if message.startswith(pattern):
+            message = message.removeprefix(pattern)
+            break
+
+    message = message.replace(absolute_path, workspace_path)
+    return _WHITESPACE_PATTERN.sub(" ", message).strip()
 
 
 def _markdown_link_issues(
