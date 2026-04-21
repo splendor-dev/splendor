@@ -24,6 +24,8 @@ What it does:
 - uploads a `coverage-xml` artifact
 - uploads coverage to Codecov
 - publishes a `pr-agent-context` comment on pull requests
+  - pinned to `shaypal5/pr-agent-context/.github/workflows/pr-agent-context.yml@v4.0.19`
+  - uses the `coverage-xml` artifact directly for patch coverage context
 
 Permissions:
 
@@ -45,19 +47,35 @@ Runs on:
 - pull request reviews
 - pull request review comments
 - completed external check runs
+- scheduled fallback fanout every 15 minutes
+- manual dispatch for explicit PR/SHA-targeted refreshes
 
 What it does:
 
 - refreshes the managed PR context comment after review or check state changes
+- dispatches repo-owned fallback refresh runs for same-repo PRs when approval-gated bot events
+  leave event-driven refresh stuck
+- passes explicit PR number, base SHA, and head SHA overrides into the reusable workflow for
+  fallback-triggered refreshes
 - reuses the `coverage-xml` artifact from the matching CI run when possible
 - suppresses no-op refresh comments
 - includes outdated review threads when refreshing managed PR context
+- dedupes scheduled fallback dispatches against both recent refresh comments and recent or in-flight
+  refresh `workflow_dispatch` runs for the same PR head SHA
 
 Permissions:
 
 - `contents: read`
 - `actions: read`
 - `pull-requests: write`
+
+Scheduled dispatcher details:
+
+- enumerates only open same-repo PRs
+- looks back over a bounded recent comment window
+- isolates dispatch failures per PR instead of failing the entire fanout job
+- uses the `actions/github-script` `github.rest.*` method names
+- uses SHA-aware concurrency keys for dispatched refresh runs
 
 ## `pre-commit.ci autofix trigger`
 
