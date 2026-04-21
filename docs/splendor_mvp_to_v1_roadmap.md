@@ -269,8 +269,8 @@ Ship the first strong maintenance layer without overusing LLMs.
 wiki/planning/source integrity checks, and queue/run repair diagnostics through the shared
 maintenance reporting layer.
 
-The next planned PR is `M5-P1`, which moves into MVP docs, quickstart flow, and an example
-workspace.
+That work now hands off into Milestone 5, starting with MVP docs, quickstart flow, and an example
+workspace in `M5-P1`.
 
 ---
 
@@ -310,6 +310,15 @@ Ship a first public MVP that is stable enough for real project use.
 ### Planned PR slices
 - `M5-P1` MVP docs, quickstart, and example workspace
 - `M5-P2` MVP hardening: coverage, errors, packaging, polish
+
+### Milestone 5 status
+
+`M5-P1` is implemented. The repository now has an MVP entrypoint README, a dedicated quickstart,
+companion-repo setup guidance, a committed in-repo example workspace, and smoke tests that keep
+the docs and sample artifacts aligned with the current CLI behavior.
+
+The next planned PR is `M5-P2`, which focuses on broader hardening: coverage expansion, error
+polish, packaging, and release-quality cleanup.
 
 ---
 

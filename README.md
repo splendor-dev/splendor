@@ -5,136 +5,122 @@
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/splendor-dev/splendor/main.svg)](https://results.pre-commit.ci/latest/github/splendor-dev/splendor/main)
 
 Splendor is a local-first, git-native, schema-driven knowledge compiler for code-and-research
-repositories. It is designed to keep a maintained project wiki, durable provenance records, and
-planning objects inside version control instead of rebuilding context from scratch on every query.
+repositories. It keeps a durable project wiki, source manifests, runtime records, and planning
+objects inside version control instead of rebuilding context from scratch on every query.
 
-## Status
-
-This repository is in the bootstrap phase. Milestone 0 is established and the earliest Milestone 1
-surface, the first deterministic Milestone 2 ingest path, and the first Milestone 3 planning slice
-are implemented:
-
-- Python package scaffold with `src/` layout and a minimal CLI
-- `splendor init` for repository layout creation
-- `splendor add-source <path>` for deterministic source registration
-- `splendor ingest <source-id>` for deterministic single-source ingestion into `wiki/sources/`
-- `splendor task create|list`, `splendor milestone create|list`, `splendor decision create`, and
-  `splendor question create` for structured planning objects under `planning/`
-- `splendor query "<question>"` and `splendor query "<question>" --json` for deterministic retrieval across
-  maintained wiki and planning markdown
-- `splendor file-answer --from-last-query --title "..."` for filing the latest saved query result
-  back into `wiki/topics/`
-- `splendor lint`, `splendor health`, and JSON report output for deterministic maintenance checks
-  across source, queue, and run state with durable timestamped reports under `reports/lint/` and
-  `reports/health/`
-- Pydantic schema foundations for source, wiki, planning, queue, and run records
-- unit tests, linting, coverage, pre-commit, and GitHub Actions automation
-
-Not implemented yet:
-
-- OCR and derived extraction workflows
-- web UI
-- advanced code-aware repository scanning
-
-## Product shape
-
-The current design follows two repository contracts:
-
-- immutable raw and derived artifacts under `raw/` and `derived/`
-- maintained markdown knowledge and planning state under `wiki/`, `planning/`, and `state/`
-
-The authoritative product inputs for this repository live in:
-
-- [`docs/splendor_product_spec.md`](docs/splendor_product_spec.md)
-- [`docs/splendor_mvp_to_v1_roadmap.md`](docs/splendor_mvp_to_v1_roadmap.md)
-
-## Local development
+## Install
 
 ### Prerequisites
 
 - Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/)
 
-### Install
+### Local setup
 
 ```bash
 uv sync --dev
+uv run splendor --help
 ```
 
-### Initialize the workspace
+## 5 Minute Quickstart
+
+This is the primary MVP flow: one repository that contains both your project files and the
+Splendor workspace.
+
+Run the commands below from the Splendor checkout you set up in the install step, and point
+`--root` at the target repository. If you want to run the commands directly from an arbitrary repo
+instead, install Splendor into that repo's environment first and drop the explicit `--root`.
 
 ```bash
-uv run splendor init
+mkdir /tmp/demo-repo
+
+uv run splendor --root /tmp/demo-repo init
+
+cat > /tmp/demo-repo/product-note.md <<'EOF'
+# Product note
+
+Splendor keeps a durable project wiki in git.
+EOF
+
+uv run splendor --root /tmp/demo-repo add-source /tmp/demo-repo/product-note.md
+# Copy the printed src-... identifier from the command output.
+
+uv run splendor --root /tmp/demo-repo ingest <source-id>
+uv run splendor --root /tmp/demo-repo task create "Publish MVP docs" --priority high --source-ref <source-id>
+uv run splendor --root /tmp/demo-repo query "durable wiki"
+uv run splendor --root /tmp/demo-repo lint
+uv run splendor --root /tmp/demo-repo health
 ```
 
-### Register a source
+The repo now contains:
 
-```bash
-uv run splendor add-source docs/splendor_product_spec.md
-```
+- `wiki/` with maintained markdown knowledge pages
+- `planning/` with task, milestone, decision, and question records
+- `state/` with source manifests plus queue/run/query state
+- `reports/` with timestamped lint and health reports
 
-### Ingest a registered source
+For a fuller walkthrough, see [docs/quickstart.md](docs/quickstart.md).
 
-```bash
-uv run splendor ingest <source-id>
-```
+## Example Workspace
 
-### Query maintained knowledge
+A small runnable example lives under [examples/in-repo-workspace](examples/in-repo-workspace). It
+shows the post-`init` layout plus:
 
-```bash
-uv run splendor query "How should query ranking work"
-uv run splendor query "How should query ranking work" --json
-uv run splendor file-answer --from-last-query --title "Query ranking answer"
-```
+- one registered and ingested source
+- one planning task linked to that source by source ID
+- queue and run records from the ingest
 
-### Run checks
+The companion-repo guidance and sample agent instructions live in
+[docs/companion_repo_setup.md](docs/companion_repo_setup.md) and
+[examples/companion-repo/AGENTS.md](examples/companion-repo/AGENTS.md).
 
-```bash
-uv run splendor lint
-uv run splendor health
-uv run splendor health --json
-uv run ruff format --check .
-uv run ruff check .
-uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml
-```
+## What Splendor Is
 
-### Run pre-commit locally
+- A deterministic CLI for initializing and maintaining a repo-native knowledge workspace
+- A filesystem-first system that stores wiki pages, manifests, and runtime state in git-friendly
+  files
+- A project-management substrate with structured milestones, tasks, decisions, and questions
 
-```bash
-uv run pre-commit install
-uv run pre-commit run --all-files
-```
+## What Splendor Is Not
 
-## What is implemented now
+- A hosted service
+- A web UI product in the current MVP
+- An OCR or rich-media ingestion pipeline in the current MVP
+- A mandatory GitHub-only workflow
 
-- `src/splendor/cli.py` exposes the CLI entrypoint
-- `src/splendor/commands/init.py` creates the baseline Splendor layout safely and idempotently
-- `src/splendor/commands/add_source.py` registers immutable source files and writes validated
-  source manifests
-- `src/splendor/commands/ingest.py` performs deterministic single-source ingestion and writes queue,
-  run, and wiki updates
-- `src/splendor/commands/query.py` provides deterministic retrieval across `wiki/` and `planning/`
-- `src/splendor/commands/file_answer.py` files the latest saved query snapshot into `wiki/topics/`
-  and can link an explicit question record
-- `src/splendor/commands/lint.py`, `src/splendor/commands/health.py`, and
-  `src/splendor/commands/maintenance.py` provide the shared deterministic maintenance/reporting
-  layer for content integrity, source storage, and queue/run diagnostics, and write timestamped
-  JSON/Markdown reports under `reports/`
-- `src/splendor/schemas/` defines the initial schema contracts
-- `.github/workflows/` contains CI, PR context, autofix-trigger, and weekly repo-review workflows
+## Current MVP Surface
 
-## What comes next
+Implemented today:
 
-`M4-P3` is now implemented: `splendor health` still validates source storage/materialization, and
-now also inventories queue items and run records non-fatally, flags malformed runtime records,
-expired leases, unfinished runs, queue payload mismatches, and source-to-last-run inconsistencies
-through the shared maintenance reporting framework.
+- `splendor init`
+- `splendor add-source <path>`
+- `splendor ingest <source-id>` and `splendor ingest --pending`
+- `splendor materialize-source <source-id>`
+- `splendor query "<question>"` and `splendor query "<question>" --json`
+- `splendor file-answer --from-last-query --title "..."`
+- `splendor task|milestone|decision|question ...`
+- `splendor lint` and `splendor health`
 
-The next planned slice is `M5-P1`, which will focus on MVP docs, quickstart flow, and an example
-workspace.
+Not implemented yet:
 
-## Additional documentation
+- OCR and image extraction flows
+- local web UI
+- code-aware repo scan and refresh commands
 
-- [`docs/schema_contracts.md`](docs/schema_contracts.md)
-- [`docs/ci_and_repo_automation.md`](docs/ci_and_repo_automation.md)
-- [`docs/github_automation_architecture.md`](docs/github_automation_architecture.md)
+## Documentation
+
+- [docs/quickstart.md](docs/quickstart.md)
+- [docs/companion_repo_setup.md](docs/companion_repo_setup.md)
+- [docs/splendor_product_spec.md](docs/splendor_product_spec.md)
+- [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md)
+- [docs/schema_contracts.md](docs/schema_contracts.md)
+- [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
+
+## What Comes Next
+
+`M5-P1` is implemented in this branch: the repository now has an MVP entrypoint README, a dedicated
+quickstart, companion-repo guidance, a committed example workspace, and smoke tests that keep the
+example materials aligned with the current CLI behavior.
+
+The next planned slice is `M5-P2`, which will focus on MVP hardening: broader coverage, error
+polish, packaging, and release-quality cleanup.

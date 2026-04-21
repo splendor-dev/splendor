@@ -1,0 +1,26 @@
+{
+  "added_at": "2026-04-21T10:53:14+00:00",
+  "checksum": "639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+  "derived_artifacts": [],
+  "kind": "source",
+  "last_run_id": "run-src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34-20260421T105314456203Z",
+  "linked_pages": [
+    "wiki/sources/src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34.md"
+  ],
+  "materialized_at": null,
+  "origin_url": null,
+  "original_path": "demo-brief.md",
+  "path": "demo-brief.md",
+  "pipeline_version": "0.1.0a0",
+  "review_state": "unreviewed",
+  "schema_version": "1",
+  "source_commit": null,
+  "source_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+  "source_ref": "demo-brief.md",
+  "source_ref_kind": "workspace_path",
+  "source_type": "md",
+  "status": "ingested",
+  "storage_mode": "none",
+  "storage_path": null,
+  "title": "demo brief"
+}
