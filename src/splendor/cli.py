@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from splendor import __version__
 from splendor.commands.add_source import add_source
 from splendor.commands.file_answer import (
     default_answer_page_id,
@@ -45,10 +46,15 @@ from splendor.utils.time import utc_now_iso
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="splendor", description="Splendor knowledge compiler CLI")
     parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
+    parser.add_argument(
         "--root",
         default=Path.cwd(),
         type=Path,
-        help="Repository root to operate on. Defaults to the current working directory.",
+        help="Workspace root to operate on. Defaults to the current working directory.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -56,7 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.set_defaults(handler=handle_init)
 
     add_source_parser = subparsers.add_parser("add-source", help="Register a new immutable source")
-    add_source_parser.add_argument("path", type=Path, help="Path to the source file to register")
+    add_source_parser.add_argument(
+        "path",
+        type=Path,
+        help="Path to the source file to register.",
+    )
     add_source_parser.add_argument(
         "--storage-mode",
         choices=STORAGE_MODES,
@@ -94,7 +104,10 @@ def build_parser() -> argparse.ArgumentParser:
     materialize_parser = subparsers.add_parser(
         "materialize-source", help="Create or refresh a source storage artifact"
     )
-    materialize_parser.add_argument("source_id", help="Registered source identifier to materialize")
+    materialize_parser.add_argument(
+        "source_id",
+        help="Registered source identifier to materialize.",
+    )
     materialize_parser.add_argument(
         "--storage-mode",
         choices=tuple(mode for mode in STORAGE_MODES if mode != "none"),
@@ -121,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     health_parser.set_defaults(handler=handle_health)
 
     query_parser = subparsers.add_parser("query", help="Query maintained wiki and planning records")
-    query_parser.add_argument("question", nargs="+", help="Question or search phrase")
+    query_parser.add_argument("question", nargs="+", help="Question or search phrase.")
     query_parser.add_argument(
         "--json",
         action="store_true",
@@ -141,10 +154,10 @@ def build_parser() -> argparse.ArgumentParser:
     file_answer_parser.add_argument(
         "--title",
         required=True,
-        help="Title for the filed answer page",
+        help="Title for the filed answer page.",
     )
-    file_answer_parser.add_argument("--page-id", help="Explicit page identifier override")
-    file_answer_parser.add_argument("--question-id", help="Explicit question to mark answered")
+    file_answer_parser.add_argument("--page-id", help="Explicit page identifier override.")
+    file_answer_parser.add_argument("--question-id", help="Explicit question to mark answered.")
     file_answer_parser.set_defaults(handler=handle_file_answer)
 
     task_parser = subparsers.add_parser("task", help="Create or inspect task records")
@@ -293,6 +306,16 @@ def handle_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _error_message(exc: Exception) -> str:
+    message = " ".join(str(exc).splitlines()).strip()
+    return message or exc.__class__.__name__
+
+
+def _print_error(exc: Exception) -> int:
+    print(f"Error: {_error_message(exc)}")
+    return 1
+
+
 def handle_add_source(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     candidate_path = args.path.expanduser()
@@ -305,8 +328,7 @@ def handle_add_source(args: argparse.Namespace) -> int:
             capture_source_commit=args.capture_source_commit,
         )
     except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
     action = "Already registered" if result.already_registered else "Registered"
     print(f"{action} source {result.source_id}")
     print(f"Manifest: {result.manifest_path}")
@@ -323,8 +345,7 @@ def handle_ingest(args: argparse.Namespace) -> int:
         try:
             result = drain_pending_ingest_jobs(root)
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
-            print(f"Error: {exc}")
-            return 1
+            return _print_error(exc)
 
         if result.total == 0:
             print("No pending ingest jobs")
@@ -344,8 +365,7 @@ def handle_ingest(args: argparse.Namespace) -> int:
     try:
         result = ingest_source(root, args.source_id)
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     if result.no_op:
         print(f"Source {result.source_id} is already ingested for the current pipeline version")
@@ -367,8 +387,7 @@ def handle_materialize_source(args: argparse.Namespace) -> int:
     try:
         result = materialize_source(root, args.source_id, storage_mode=args.storage_mode)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     print(f"Materialized source {result.source_id}")
     print(f"Manifest: {result.manifest_path}")
@@ -384,7 +403,7 @@ def _print_maintenance_stdout(command: str, report, *, json_output: bool) -> Non
         return
 
     if report.status == "error":
-        print(f"Error: {report.fatal_error}")
+        print(f"Error: {_error_message(ValueError(report.fatal_error or 'unknown error'))}")
         return
 
     label = "records" if command == "health" else "items"
@@ -424,8 +443,7 @@ def handle_query(args: argparse.Namespace) -> int:
     try:
         result = run_query(root, " ".join(args.question))
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     try:
         layout = resolve_layout(root, load_config(root))
@@ -454,8 +472,7 @@ def handle_query(args: argparse.Namespace) -> int:
         )
         write_query_snapshot(last_query_path_for(layout), snapshot)
     except OSError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     if args.json_output:
         payload = {
@@ -498,8 +515,7 @@ def handle_query(args: argparse.Namespace) -> int:
 
 def handle_file_answer(args: argparse.Namespace) -> int:
     if not args.from_last_query:
-        print("Error: file-answer currently requires --from-last-query")
-        return 1
+        return _print_error(ValueError("file-answer currently requires --from-last-query"))
 
     root = args.root.resolve()
     question_update = None
@@ -513,8 +529,7 @@ def handle_file_answer(args: argparse.Namespace) -> int:
                 answer_title=args.title,
             )
         except ValueError as exc:
-            print(f"Error: {exc}")
-            return 1
+            return _print_error(exc)
 
     try:
         result = file_answer_from_last_query(
@@ -524,8 +539,7 @@ def handle_file_answer(args: argparse.Namespace) -> int:
             question_update=question_update,
         )
     except (OSError, ValueError) as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     print(f"Filed answer {result.page_id}")
     print(f"Page: {result.page_path}")
@@ -555,8 +569,7 @@ def handle_task_create(args: argparse.Namespace) -> int:
             source_refs=args.source_ref,
         )
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     print(f"Created task {result.record_id}")
     print(f"Path: {result.path}")
@@ -572,8 +585,7 @@ def handle_task_list(args: argparse.Namespace) -> int:
             milestone_ref=args.milestone_ref,
         )
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     for row in rows:
         print(f"{row.task_id}  {row.status}  {row.priority}  {row.title}")
@@ -593,8 +605,7 @@ def handle_milestone_create(args: argparse.Namespace) -> int:
             question_refs=args.question_ref,
         )
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     print(f"Created milestone {result.record_id}")
     print(f"Path: {result.path}")
@@ -605,8 +616,7 @@ def handle_milestone_list(args: argparse.Namespace) -> int:
     try:
         rows = list_milestones(args.root.resolve(), status=args.status)
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     for row in rows:
         target_date = row.target_date or "-"
@@ -628,8 +638,7 @@ def handle_decision_create(args: argparse.Namespace) -> int:
             related_questions=args.related_question,
         )
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     print(f"Created decision {result.record_id}")
     print(f"Path: {result.path}")
@@ -648,8 +657,7 @@ def handle_question_create(args: argparse.Namespace) -> int:
             related_decisions=args.related_decision,
         )
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        return _print_error(exc)
 
     print(f"Created question {result.record_id}")
     print(f"Path: {result.path}")

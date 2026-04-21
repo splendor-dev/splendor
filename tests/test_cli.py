@@ -2,14 +2,16 @@ import json
 import re
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
 import splendor.cli as cli_module
+from splendor import __version__
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
-from splendor.schemas import KnowledgePageFrontmatter
+from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
 from splendor.state.query_snapshot import load_query_snapshot
 from splendor.state.runtime import load_queue_item
 
@@ -30,6 +32,14 @@ def test_cli_init_command(tmp_path: Path, capsys) -> None:
     assert (tmp_path / "wiki" / "index.md").exists()
     captured = capsys.readouterr()
     assert "Initialized Splendor workspace" in captured.out
+
+
+def test_cli_version_flag_prints_package_version(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--version"])
+
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out == f"splendor {__version__}\n"
 
 
 def test_cli_add_source_capture_source_commit_flags_are_tri_state() -> None:
@@ -351,6 +361,37 @@ def test_cli_ingest_pending_continues_after_failure(tmp_path: Path, capsys) -> N
     assert "Drain summary: processed=2 succeeded=1 failed=1 skipped=0" in captured.out
 
 
+def test_cli_ingest_pending_reports_failed_and_skipped_mix(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    skipped_source = tmp_path / "skipped.md"
+    skipped_source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(skipped_source)])
+    skipped_source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", skipped_source_id])
+    capsys.readouterr()
+    enqueue_ingest_job(tmp_path, skipped_source_id)
+
+    missing_source = tmp_path / "missing.md"
+    missing_source.write_text("missing file content\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(missing_source)])
+    manifest_paths = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    failing_source_id = next(path.stem for path in manifest_paths if path.stem != skipped_source_id)
+    missing_source.unlink()
+    enqueue_ingest_job(tmp_path, failing_source_id)
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert (
+        f"{skipped_source_id}: skipped (already ingested for the current pipeline version)"
+        in captured.out
+    )
+    assert f"{failing_source_id}: failed (Workspace source is missing: missing.md)" in captured.out
+    assert "Drain summary: processed=1 succeeded=0 failed=1 skipped=1" in captured.out
+
+
 def test_cli_materialize_source_command(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -467,6 +508,48 @@ def test_cli_health_command_supports_json_output(tmp_path: Path, capsys) -> None
     assert payload["command"] == "health"
     assert payload["status"] == "passed"
     assert payload["issue_count"] == 0
+
+
+def test_cli_health_command_uses_issue_code_when_no_subject_fields_exist(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = MaintenanceReport(
+        command="health",
+        created_at="2026-04-21T10:00:00+00:00",
+        status="failed",
+        checked_count=0,
+        issue_count=1,
+        issues=[MaintenanceIssue(code="fallback-code", message="fallback message")],
+    )
+
+    fake_result = SimpleNamespace(exit_code=1, report=report)
+
+    monkeypatch.setattr(
+        cli_module,
+        "execute_maintenance_command",
+        lambda *args, **kwargs: fake_result,
+    )
+
+    exit_code = main(["--root", str(tmp_path), "health"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "- fallback-code: fallback message" in captured.out
+
+
+def test_cli_query_command_collapses_multiline_errors(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        cli_module,
+        "run_query",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("first line\nsecond line")),
+    )
+
+    exit_code = main(["--root", str(tmp_path), "query", "test"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Error: first line second line\n"
 
 
 def test_cli_lint_command_passes_for_initialized_workspace(tmp_path: Path, capsys) -> None:

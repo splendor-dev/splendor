@@ -10,7 +10,8 @@ turning GitHub into the product runtime.
 2. The same CI workflow uploads `coverage.xml`, sends coverage to Codecov, and invokes
    `pr-agent-context` to publish a managed PR context comment.
 3. Follow-up review and check events trigger `pr-agent-context-refresh` to keep that context
-   current as comments and external checks evolve.
+   current as comments and external checks evolve; a repo-owned scheduled dispatcher backstops
+   approval-gated refresh events for same-repo PRs.
 4. `pre-commit.ci autofix trigger` listens for bot PR events and late-arriving `pre-commit.ci`
    failures, then applies the `pre-commit.ci autofix` label when the reusable workflow decides the
    PR is eligible.
@@ -62,7 +63,7 @@ Caveats:
 
 Pinned reusable workflow:
 
-- `shaypal5/pr-agent-context@v4.0.18`
+- `shaypal5/pr-agent-context@v4.0.19`
   - Refresh flow uses `include_outdated_review_threads: true` to keep managed PR context aligned
     with both active and outdated review discussions.
 
@@ -70,17 +71,24 @@ Chosen behavior:
 
 - initial PR runs publish a managed context comment
 - refresh runs are triggered on review activity and completed external checks
+- scheduled fallback runs dispatch explicit refreshes for same-repo PRs when approval-gated bot
+  events do not execute the event-triggered refresh workflow
 - refresh runs suppress no-op all-clear comments
 - refresh runs include outdated review threads for richer PR context updates
 - coverage comes from the `coverage-xml` artifact produced by CI
 - the repository provides a custom prompt template at `.github/pr-agent-context-template.md`
+- scheduled/dispatch-triggered refresh runs pass explicit PR number, base SHA, and head SHA
+  overrides into the reusable workflow
 
 Refresh flow:
 
 1. `CI` completes and posts the initial managed comment.
 2. A review, review-comment, or external check completion event fires.
 3. `pr-agent-context-refresh` re-invokes the reusable workflow in refresh mode.
-4. The latest actionable managed comment is refreshed with up-to-date unresolved comments, failing
+4. If approval-gated bot activity prevents that event-driven refresh from running, the scheduled
+   dispatcher wakes as the repository, dedupes against recent refresh comments and recent/in-flight
+   scheduled dispatches for the same head SHA, then re-dispatches explicit refresh runs.
+5. The latest actionable managed comment is refreshed with up-to-date unresolved comments, failing
    checks, and patch-coverage context.
 
 ## `repo-review-automation`

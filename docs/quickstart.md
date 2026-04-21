@@ -3,18 +3,35 @@
 This quickstart walks through the current MVP in the primary supported mode: one repository that
 contains both your normal project files and the Splendor workspace.
 
-## 1. Install the dev environment
+## 1. Install Splendor
 
-From the Splendor repository checkout:
+Choose one of these supported MVP install paths.
+
+### Contributor checkout
 
 ```bash
 uv sync --dev
 uv run splendor --help
 ```
 
-The rest of this guide assumes you keep running `uv run splendor ...` from that same checkout and
-use `--root` to target the repository you want Splendor to manage. If you install Splendor into a
-different repo's environment instead, you can run the same commands from there without `--root`.
+### Local package install
+
+```bash
+uv pip install .
+splendor --help
+```
+
+### Built wheel install
+
+```bash
+uv build
+uv pip install dist/splendor-*.whl
+splendor --help
+```
+
+The examples below use `uv run splendor ... --root ...` from a contributor checkout. If you
+installed Splendor into an environment instead, replace `uv run splendor` with `splendor`. If that
+environment lives inside the target repository, you can also drop `--root`.
 
 ## 2. Create a demo repository
 
