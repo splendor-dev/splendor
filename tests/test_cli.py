@@ -379,7 +379,7 @@ def test_cli_health_command_passes_for_valid_sources(tmp_path: Path, capsys) -> 
 
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Checked sources: 1" in captured.out
+    assert "Checked records: 1" in captured.out
     assert "Health check passed" in captured.out
     json_report, markdown_report = latest_report_paths(tmp_path, "health")
     assert json_report.stem == markdown_report.stem
@@ -446,7 +446,11 @@ def test_cli_health_command_fails_when_source_manifest_dir_is_missing(
 
     assert exit_code == 1
     captured = capsys.readouterr()
+    assert "Health check failed: 1 issue(s)" in captured.out
     assert "Source manifest directory is missing or unreadable" in captured.out
+    payload = json.loads(latest_report_paths(tmp_path, "health")[0].read_text(encoding="utf-8"))
+    assert payload["issues"][0]["code"] == "missing-directory"
+    assert payload["issues"][0]["path"] == "state/manifests/sources"
 
 
 def test_cli_health_command_supports_json_output(tmp_path: Path, capsys) -> None:
