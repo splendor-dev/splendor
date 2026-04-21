@@ -19,6 +19,6 @@ sources:
   in_repo_storage_mode: none
   external_storage_mode: copy
   imported_storage_mode: copy
-  capture_source_commit: true
+  capture_source_commit: false
   summarize_in_repo_extracts_as: excerpt
   summarize_external_extracts_as: full

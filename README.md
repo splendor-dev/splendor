@@ -96,7 +96,7 @@ Implemented today:
 - `splendor add-source <path>`
 - `splendor ingest <source-id>` and `splendor ingest --pending`
 - `splendor materialize-source <source-id>`
-- `splendor query "<question>"` and `splendor query --json`
+- `splendor query "<question>"` and `splendor query "<question>" --json`
 - `splendor file-answer --from-last-query --title "..."`
 - `splendor task|milestone|decision|question ...`
 - `splendor lint` and `splendor health`
