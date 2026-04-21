@@ -46,11 +46,16 @@ def test_run_health_checks_normalizes_z_timestamps_and_rejects_naive_timestamps(
     added = add_source(tmp_path, source)
     queue_path = enqueue_ingest_job(tmp_path, added.source_id)
     queue_record = QueueItemRecord.model_validate_json(queue_path.read_text(encoding="utf-8"))
+    expired_lease_z = (
+        (datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=5))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
     z_queue = queue_record.model_copy(
         update={
             "status": "leased",
             "lease_owner": "local-cli:123",
-            "lease_expires_at": "2026-04-20T09:00:00Z",
+            "lease_expires_at": expired_lease_z,
         }
     )
     write_queue_item(queue_path, z_queue)

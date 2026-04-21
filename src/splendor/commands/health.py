@@ -131,9 +131,8 @@ def _load_queue_records(
     *,
     root: Path,
     issues: list[MaintenanceIssue],
-) -> tuple[dict[str, tuple[Path, QueueItemRecord]], set[str], int]:
+) -> tuple[dict[str, tuple[Path, QueueItemRecord]], int]:
     records: dict[str, tuple[Path, QueueItemRecord]] = {}
-    invalid_ids: set[str] = set()
     checked_count = 0
 
     for queue_path in sorted(layout.queue_dir.glob("*.json")):
@@ -143,7 +142,6 @@ def _load_queue_records(
         try:
             queue_record = load_queue_item(queue_path)
         except Exception as exc:
-            invalid_ids.add(queue_id)
             _append_issue(
                 issues,
                 code="invalid-queue-record",
@@ -155,7 +153,7 @@ def _load_queue_records(
             continue
         records[queue_id] = (queue_path, queue_record)
 
-    return records, invalid_ids, checked_count
+    return records, checked_count
 
 
 def _load_run_records(
@@ -195,7 +193,6 @@ def _validate_queue_record(
     root: Path,
     queue_path: Path,
     queue_record: QueueItemRecord,
-    layout: ResolvedLayout,
     source_records: dict[str, tuple[Path, SourceRecord]],
     invalid_source_ids: set[str],
     now: datetime,
@@ -634,7 +631,7 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         issues=issues,
         check_name="workspace-layout",
     ):
-        queue_records, _, loaded_queues = _load_queue_records(
+        queue_records, loaded_queues = _load_queue_records(
             layout,
             root=root,
             issues=issues,
@@ -667,7 +664,6 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
             root=root,
             queue_path=queue_path,
             queue_record=queue_record,
-            layout=layout,
             source_records=source_records,
             invalid_source_ids=invalid_source_ids,
             now=now,
