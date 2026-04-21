@@ -271,6 +271,11 @@ def test_run_health_checks_reports_queue_and_run_shape_mismatches(tmp_path: Path
         "run-id-mismatch",
         "unsupported-run-job-type",
     }
+    issue_by_code = {issue.code: issue for issue in result.issues}
+    assert issue_by_code["queue-job-id-mismatch"].record_id == queue_path.stem
+    assert issue_by_code["unsupported-queue-job-type"].record_id == queue_path.stem
+    assert issue_by_code["run-id-mismatch"].record_id == run_path.stem
+    assert issue_by_code["unsupported-run-job-type"].record_id == run_path.stem
 
 
 def test_run_health_checks_reports_invalid_queue_runtime_details(tmp_path: Path) -> None:

@@ -199,17 +199,18 @@ def _validate_queue_record(
     issues: list[MaintenanceIssue],
 ) -> None:
     queue_relpath = workspace_relative_path(root, queue_path)
+    canonical_job_id = queue_path.stem
 
-    if queue_record.job_id != queue_path.stem:
+    if queue_record.job_id != canonical_job_id:
         _append_issue(
             issues,
             code="queue-job-id-mismatch",
             message=(
-                f"Queue filename expects job_id={queue_path.stem!r}, "
+                f"Queue filename expects job_id={canonical_job_id!r}, "
                 f"but record stores {queue_record.job_id!r}"
             ),
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-record",
         )
 
@@ -219,7 +220,7 @@ def _validate_queue_record(
             code="unsupported-queue-job-type",
             message=f"Unsupported queue job type for current runtime: {queue_record.job_type!r}",
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-record",
         )
         return
@@ -234,7 +235,7 @@ def _validate_queue_record(
                     "operators can decide whether to reclaim them."
                 ),
                 path=queue_relpath,
-                record_id=queue_record.job_id,
+                record_id=canonical_job_id,
                 check_name="queue-state",
             )
         else:
@@ -249,7 +250,7 @@ def _validate_queue_record(
                     code="invalid-queue-lease-expiry",
                     message=str(exc),
                     path=queue_relpath,
-                    record_id=queue_record.job_id,
+                    record_id=canonical_job_id,
                     check_name="queue-state",
                 )
             else:
@@ -262,7 +263,7 @@ def _validate_queue_record(
                             "reclaiming or resetting the job."
                         ),
                         path=queue_relpath,
-                        record_id=queue_record.job_id,
+                        record_id=canonical_job_id,
                         check_name="queue-state",
                     )
     elif queue_record.lease_owner is not None or queue_record.lease_expires_at is not None:
@@ -271,7 +272,7 @@ def _validate_queue_record(
             code="invalid-queue-lease-state",
             message="Only leased queue items may carry lease_owner or lease_expires_at values.",
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-state",
         )
 
@@ -282,7 +283,7 @@ def _validate_queue_record(
                 code="invalid-queue-error-state",
                 message="Failed queue items should persist last_error for repair diagnostics.",
                 path=queue_relpath,
-                record_id=queue_record.job_id,
+                record_id=canonical_job_id,
                 check_name="queue-state",
             )
     elif queue_record.last_error is not None:
@@ -291,7 +292,7 @@ def _validate_queue_record(
             code="invalid-queue-error-state",
             message="Only failed queue items should persist last_error details.",
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-state",
         )
 
@@ -304,7 +305,7 @@ def _validate_queue_record(
                 f"max_attempts={queue_record.max_attempts}"
             ),
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-state",
         )
 
@@ -320,7 +321,7 @@ def _validate_queue_record(
             code="invalid-queue-payload-ref",
             message=str(exc),
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-payload",
         )
         return
@@ -331,12 +332,12 @@ def _validate_queue_record(
             code="missing-queue-payload",
             message=f"Queue payload is missing source manifest: {queue_record.payload_ref}",
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-payload",
         )
         return
 
-    expected_source_id = _source_id_from_job_id(queue_record.job_id)
+    expected_source_id = _source_id_from_job_id(canonical_job_id)
     if expected_source_id in invalid_source_ids:
         return
 
@@ -350,7 +351,7 @@ def _validate_queue_record(
                 "but no valid source record was loaded."
             ),
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-payload",
         )
         return
@@ -364,7 +365,7 @@ def _validate_queue_record(
             code="invalid-queue-payload-manifest",
             message=str(exc),
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-payload",
         )
         return
@@ -378,7 +379,7 @@ def _validate_queue_record(
                 f"but job_id expects {expected_source_id!r}"
             ),
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-payload",
         )
     canonical_manifest_relpath = workspace_relative_path(root, canonical_manifest_path)
@@ -392,7 +393,7 @@ def _validate_queue_record(
                 f"manifest path for this source is {canonical_manifest_relpath!r}"
             ),
             path=queue_relpath,
-            record_id=queue_record.job_id,
+            record_id=canonical_job_id,
             check_name="queue-payload",
         )
 
@@ -405,17 +406,18 @@ def _validate_run_record(
     issues: list[MaintenanceIssue],
 ) -> None:
     run_relpath = workspace_relative_path(root, run_path)
+    canonical_run_id = run_path.stem
 
-    if run_record.run_id != run_path.stem:
+    if run_record.run_id != canonical_run_id:
         _append_issue(
             issues,
             code="run-id-mismatch",
             message=(
-                f"Run filename expects run_id={run_path.stem!r}, "
+                f"Run filename expects run_id={canonical_run_id!r}, "
                 f"but record stores {run_record.run_id!r}"
             ),
             path=run_relpath,
-            record_id=run_record.run_id,
+            record_id=canonical_run_id,
             check_name="run-record",
         )
 
@@ -425,7 +427,7 @@ def _validate_run_record(
             code="unsupported-run-job-type",
             message=f"Unsupported run job type for current runtime: {run_record.job_type!r}",
             path=run_relpath,
-            record_id=run_record.run_id,
+            record_id=canonical_run_id,
             check_name="run-record",
         )
         return
@@ -437,7 +439,7 @@ def _validate_run_record(
                 code="invalid-run-finish-state",
                 message="Running runs must not set finished_at before completion.",
                 path=run_relpath,
-                record_id=run_record.run_id,
+                record_id=canonical_run_id,
                 check_name="run-state",
             )
         _append_issue(
@@ -448,7 +450,7 @@ def _validate_run_record(
                 "marking the run terminal or retrying the queue item."
             ),
             path=run_relpath,
-            record_id=run_record.run_id,
+            record_id=canonical_run_id,
             check_name="run-state",
         )
     elif run_record.finished_at is None:
@@ -457,7 +459,7 @@ def _validate_run_record(
             code="invalid-run-finish-state",
             message="Terminal runs must set finished_at for auditability and repair decisions.",
             path=run_relpath,
-            record_id=run_record.run_id,
+            record_id=canonical_run_id,
             check_name="run-state",
         )
 
@@ -467,7 +469,7 @@ def _validate_run_record(
             code="invalid-run-error-state",
             message="Succeeded runs must not retain errors.",
             path=run_relpath,
-            record_id=run_record.run_id,
+            record_id=canonical_run_id,
             check_name="run-state",
         )
     if run_record.status == "failed" and not run_record.errors:
@@ -476,7 +478,7 @@ def _validate_run_record(
             code="invalid-run-error-state",
             message="Failed runs should preserve at least one error for repair diagnostics.",
             path=run_relpath,
-            record_id=run_record.run_id,
+            record_id=canonical_run_id,
             check_name="run-state",
         )
 
@@ -489,7 +491,7 @@ def _validate_run_record(
                 code="invalid-run-reference",
                 message=str(exc),
                 path=run_relpath,
-                record_id=run_record.run_id,
+                record_id=canonical_run_id,
                 check_name="run-state",
             )
 
