@@ -1,0 +1,24 @@
+schema_version: '1'
+project_name: in-repo-workspace
+layout:
+  raw_dir: raw
+  raw_sources_dir: raw/sources
+  raw_assets_dir: raw/assets
+  raw_imports_dir: raw/imports
+  derived_dir: derived
+  derived_ocr_dir: derived/ocr
+  derived_parsed_dir: derived/parsed
+  derived_metadata_dir: derived/metadata
+  derived_summaries_dir: derived/summaries
+  wiki_dir: wiki
+  planning_dir: planning
+  state_dir: state
+  reports_dir: reports
+  source_records_dir: state/manifests/sources
+sources:
+  in_repo_storage_mode: none
+  external_storage_mode: copy
+  imported_storage_mode: copy
+  capture_source_commit: true
+  summarize_in_repo_extracts_as: excerpt
+  summarize_external_extracts_as: full
