@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 import splendor.cli as cli_module
+from splendor import __version__
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
@@ -38,7 +39,7 @@ def test_cli_version_flag_prints_package_version(capsys) -> None:
         main(["--version"])
 
     assert exc_info.value.code == 0
-    assert capsys.readouterr().out == "splendor 0.1.0a0\n"
+    assert capsys.readouterr().out == f"splendor {__version__}\n"
 
 
 def test_cli_add_source_capture_source_commit_flags_are_tri_state() -> None:

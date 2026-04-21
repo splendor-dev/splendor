@@ -25,15 +25,17 @@ def test_built_wheel_exposes_splendor_cli(tmp_path: Path) -> None:
         text=True,
     )
     bin_dir = venv_dir / ("Scripts" if sys.platform == "win32" else "bin")
+    python_executable = bin_dir / ("python.exe" if sys.platform == "win32" else "python")
+    splendor_executable = bin_dir / ("splendor.exe" if sys.platform == "win32" else "splendor")
     subprocess.run(
-        ["uv", "pip", "install", "--python", str(bin_dir / "python"), str(wheel_path)],
+        ["uv", "pip", "install", "--python", str(python_executable), str(wheel_path)],
         check=True,
         capture_output=True,
         text=True,
     )
 
     result = subprocess.run(
-        [str(bin_dir / "splendor"), "--help"],
+        [str(splendor_executable), "--help"],
         check=True,
         capture_output=True,
         text=True,
