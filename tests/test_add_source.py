@@ -13,6 +13,8 @@ from splendor.state.source_registry import (
     _write_workspace_symlink,
     load_source_record,
     materializing_storage_mode_for_source,
+    resolve_manifest_storage_path,
+    validate_stored_source_location,
     write_source_record,
 )
 
@@ -61,6 +63,47 @@ def test_add_source_registers_workspace_file_without_copy_by_default(tmp_path: P
     assert manifest.materialized_at is None
     assert manifest.original_path == "note.md"
     assert not (tmp_path / "raw" / "sources" / result.source_id).exists()
+
+
+def test_resolve_manifest_storage_path_rejects_absolute_paths(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="escapes workspace root"):
+        resolve_manifest_storage_path(tmp_path, "/tmp/source.md")
+
+
+def test_resolve_manifest_storage_path_rejects_escaping_paths(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="escapes workspace root"):
+        resolve_manifest_storage_path(tmp_path, "../outside.md")
+
+
+def test_validate_stored_source_location_rejects_paths_outside_raw_sources(tmp_path: Path) -> None:
+    raw_sources_dir = tmp_path / "raw" / "sources"
+    raw_sources_dir.mkdir(parents=True)
+    outside = tmp_path / "elsewhere" / "source.md"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("hello\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside the configured raw source storage area"):
+        validate_stored_source_location(
+            outside,
+            raw_sources_dir,
+            "src-123",
+            "elsewhere/source.md",
+        )
+
+
+def test_validate_stored_source_location_rejects_wrong_source_directory(tmp_path: Path) -> None:
+    raw_sources_dir = tmp_path / "raw" / "sources"
+    stored = raw_sources_dir / "src-other" / "source.md"
+    stored.parent.mkdir(parents=True)
+    stored.write_text("hello\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside the expected source directory"):
+        validate_stored_source_location(
+            stored,
+            raw_sources_dir,
+            "src-123",
+            "raw/sources/src-other/source.md",
+        )
 
 
 def test_add_source_stores_workspace_relative_source_ref_for_nested_sources(tmp_path: Path) -> None:

@@ -313,12 +313,13 @@ Ship a first public MVP that is stable enough for real project use.
 
 ### Milestone 5 status
 
-`M5-P1` is implemented. The repository now has an MVP entrypoint README, a dedicated quickstart,
-companion-repo setup guidance, a committed in-repo example workspace, and smoke tests that keep
-the docs and sample artifacts aligned with the current CLI behavior.
+`M5-P1` and `M5-P2` are implemented. The repository now has an MVP entrypoint README, a dedicated
+quickstart, companion-repo setup guidance, a committed in-repo example workspace, broader
+regression coverage for operational edge cases, consistent one-line CLI error output, and a
+package-install smoke path that validates the built CLI.
 
-The next planned PR is `M5-P2`, which focuses on broader hardening: coverage expansion, error
-polish, packaging, and release-quality cleanup.
+The next planned PR is `M6-P1`, which expands review-state and provenance modeling for stronger
+post-MVP trust and auditability.
 
 ---
 

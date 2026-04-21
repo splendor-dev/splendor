@@ -363,6 +363,41 @@ def test_run_ingest_job_rejects_escaping_queue_payload_ref(tmp_path: Path) -> No
     )
 
 
+def test_run_ingest_job_rejects_missing_queue_manifest(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    added.manifest_path.unlink()
+
+    with pytest.raises(FileNotFoundError, match="Queue payload is missing source manifest"):
+        run_ingest_job(tmp_path, queue_path)
+
+    updated_queue = load_queue_item(queue_path)
+    assert updated_queue.status == "failed"
+    assert "missing source manifest" in updated_queue.last_error
+
+
+def test_run_ingest_job_rejects_manifest_source_id_mismatch(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={"source_id": "src-other"}
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    with pytest.raises(ValueError, match="does not match queued job"):
+        run_ingest_job(tmp_path, queue_path)
+
+    updated_queue = load_queue_item(queue_path)
+    assert updated_queue.status == "failed"
+    assert "does not match queued job" in updated_queue.last_error
+
+
 def test_run_ingest_job_claims_once_and_clears_lease_on_success(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"

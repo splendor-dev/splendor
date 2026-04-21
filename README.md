@@ -15,11 +15,28 @@ objects inside version control instead of rebuilding context from scratch on eve
 - Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/)
 
-### Local setup
+### Contributor setup
 
 ```bash
 uv sync --dev
 uv run splendor --help
+```
+
+### Local package install
+
+Inside any Python 3.12 environment:
+
+```bash
+uv pip install .
+splendor --help
+```
+
+### Built wheel install
+
+```bash
+uv build
+uv pip install dist/splendor-*.whl
+splendor --help
 ```
 
 ## 5 Minute Quickstart
@@ -27,9 +44,9 @@ uv run splendor --help
 This is the primary MVP flow: one repository that contains both your project files and the
 Splendor workspace.
 
-Run the commands below from the Splendor checkout you set up in the install step, and point
-`--root` at the target repository. If you want to run the commands directly from an arbitrary repo
-instead, install Splendor into that repo's environment first and drop the explicit `--root`.
+If you are running from a contributor checkout, use `uv run splendor ...` and point `--root` at the
+target repository. If you installed Splendor into an environment, replace `uv run splendor` with
+`splendor`; if that environment lives inside the target repo, you can drop the explicit `--root`.
 
 ```bash
 mkdir /tmp/demo-repo
@@ -118,9 +135,9 @@ Not implemented yet:
 
 ## What Comes Next
 
-`M5-P1` is implemented in this branch: the repository now has an MVP entrypoint README, a dedicated
-quickstart, companion-repo guidance, a committed example workspace, and smoke tests that keep the
-example materials aligned with the current CLI behavior.
+`M5-P2` is implemented in this branch: the repository now pairs the MVP docs/example slice with
+hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
+install validation.
 
-The next planned slice is `M5-P2`, which will focus on MVP hardening: broader coverage, error
-polish, packaging, and release-quality cleanup.
+The next planned slice is `M6-P1`, which will focus on review-state and provenance model
+expansion.

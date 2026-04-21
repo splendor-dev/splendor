@@ -233,6 +233,21 @@ def test_resolve_source_content_pointer_source_rejects_malformed_pointer_artifac
         resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
 
 
+def test_resolve_source_content_pointer_source_rejects_escaping_pointer_path(
+    tmp_path: Path,
+) -> None:
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/pointer.json",
+        storage_mode="pointer",
+        storage_path="../outside/pointer.json",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+    )
+
+    with pytest.raises(ValueError, match="escapes workspace root"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
 def test_resolve_source_content_pointer_source_rejects_source_ref_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -354,6 +369,28 @@ def test_resolve_source_content_symlink_source_rejects_regular_file_artifact(
     )
 
     with pytest.raises(ValueError, match="Source symlink artifact is not a symlink"):
+        resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
+
+
+def test_resolve_source_content_symlink_source_rejects_wrong_source_directory(
+    tmp_path: Path,
+) -> None:
+    source_file = tmp_path / "docs" / "spec.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("hello\n", encoding="utf-8")
+    artifact = tmp_path / "raw" / "sources" / "src-other" / "spec.md"
+    artifact.parent.mkdir(parents=True)
+    artifact.symlink_to(Path("../../../docs/spec.md"))
+    source = make_source_record(
+        path="raw/sources/src-1234567890abcdef/spec.md",
+        storage_mode="symlink",
+        storage_path="raw/sources/src-other/spec.md",
+        source_ref="docs/spec.md",
+        source_ref_kind="workspace_path",
+        checksum="5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+    )
+
+    with pytest.raises(ValueError, match="outside the expected source directory"):
         resolve_source_content(tmp_path, source, tmp_path / "raw" / "sources")
 
 
