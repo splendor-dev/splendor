@@ -19,11 +19,7 @@ def test_documented_quickstart_flow_succeeds_end_to_end(tmp_path: Path, capsys) 
 
     source = tmp_path / "product-note.md"
     source.write_text(
-        (
-            "# Product note\n\n"
-            "Splendor is a local-first knowledge compiler for code-and-research repositories.\n"
-            "The MVP keeps a durable wiki in git.\n"
-        ),
+        "# Product note\n\nSplendor keeps a durable project wiki in git.\n",
         encoding="utf-8",
     )
 
@@ -31,7 +27,9 @@ def test_documented_quickstart_flow_succeeds_end_to_end(tmp_path: Path, capsys) 
     assert exit_code == 0
     capsys.readouterr()
 
-    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    manifest_paths = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    assert len(manifest_paths) == 1
+    manifest_path = manifest_paths[0]
     source_id = manifest_path.stem
 
     exit_code = main(["--root", str(tmp_path), "ingest", source_id])
@@ -52,11 +50,11 @@ def test_documented_quickstart_flow_succeeds_end_to_end(tmp_path: Path, capsys) 
     )
     assert exit_code == 0
 
-    exit_code = main(["--root", str(tmp_path), "query", "knowledge", "compiler"])
+    exit_code = main(["--root", str(tmp_path), "query", "durable", "wiki"])
     assert exit_code == 0
 
     snapshot = load_query_snapshot(tmp_path / "state" / "queries" / "last-query.json")
-    assert snapshot.query == "knowledge compiler"
+    assert snapshot.query == "durable wiki"
     assert snapshot.match_count >= 1
     assert any(match.record_id == source_id for match in snapshot.matches)
 

@@ -27,26 +27,29 @@ uv run splendor --help
 This is the primary MVP flow: one repository that contains both your project files and the
 Splendor workspace.
 
+Run the commands below from the Splendor checkout you set up in the install step, and point
+`--root` at the target repository. If you want to run the commands directly from an arbitrary repo
+instead, install Splendor into that repo's environment first and drop the explicit `--root`.
+
 ```bash
-mkdir demo-repo
-cd demo-repo
+mkdir /tmp/demo-repo
 
-uv run splendor init
+uv run splendor --root /tmp/demo-repo init
 
-cat > product-note.md <<'EOF'
+cat > /tmp/demo-repo/product-note.md <<'EOF'
 # Product note
 
 Splendor keeps a durable project wiki in git.
 EOF
 
-uv run splendor add-source product-note.md
+uv run splendor --root /tmp/demo-repo add-source /tmp/demo-repo/product-note.md
 # Copy the printed src-... identifier from the command output.
 
-uv run splendor ingest <source-id>
-uv run splendor task create "Publish MVP docs" --priority high --source-ref <source-id>
-uv run splendor query "durable wiki"
-uv run splendor lint
-uv run splendor health
+uv run splendor --root /tmp/demo-repo ingest <source-id>
+uv run splendor --root /tmp/demo-repo task create "Publish MVP docs" --priority high --source-ref <source-id>
+uv run splendor --root /tmp/demo-repo query "durable wiki"
+uv run splendor --root /tmp/demo-repo lint
+uv run splendor --root /tmp/demo-repo health
 ```
 
 The repo now contains:
@@ -93,7 +96,7 @@ Implemented today:
 - `splendor add-source <path>`
 - `splendor ingest <source-id>` and `splendor ingest --pending`
 - `splendor materialize-source <source-id>`
-- `splendor query "<question>"` and `query --json`
+- `splendor query "<question>"` and `splendor query --json`
 - `splendor file-answer --from-last-query --title "..."`
 - `splendor task|milestone|decision|question ...`
 - `splendor lint` and `splendor health`

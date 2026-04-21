@@ -16,11 +16,25 @@ Use this mode when:
 ~/work/my-app-knowledge/    # Splendor workspace
 ```
 
+You need a Splendor runtime available when running commands against the knowledge repo. In the
+current MVP, use one of these approaches:
+
+- run `uv run splendor ... --root ~/work/my-app-knowledge` from the Splendor repository checkout
+- install Splendor into the knowledge repo's own environment, then run `splendor ...` or
+  `uv run splendor ...` directly there
+
 Initialize the knowledge repo normally:
 
 ```bash
 cd ~/work/my-app-knowledge
-uv run splendor init
+splendor init
+```
+
+If you are running from the Splendor checkout instead of installing Splendor into the knowledge
+repo, use:
+
+```bash
+uv run splendor --root ~/work/my-app-knowledge init
 ```
 
 ## Register a file from the code repo

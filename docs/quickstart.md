@@ -12,13 +12,16 @@ uv sync --dev
 uv run splendor --help
 ```
 
+The rest of this guide assumes you keep running `uv run splendor ...` from that same checkout and
+use `--root` to target the repository you want Splendor to manage. If you install Splendor into a
+different repo's environment instead, you can run the same commands from there without `--root`.
+
 ## 2. Create a demo repository
 
 ```bash
-mkdir demo-repo
-cd demo-repo
+mkdir /tmp/demo-repo
 
-uv run splendor init
+uv run splendor --root /tmp/demo-repo init
 ```
 
 After `init`, the workspace contains:
@@ -34,7 +37,7 @@ After `init`, the workspace contains:
 Create a small text-native source file in the repo:
 
 ```bash
-cat > product-note.md <<'EOF'
+cat > /tmp/demo-repo/product-note.md <<'EOF'
 # Product note
 
 Splendor keeps a durable project wiki in git.
@@ -44,7 +47,7 @@ EOF
 Register it:
 
 ```bash
-uv run splendor add-source product-note.md
+uv run splendor --root /tmp/demo-repo add-source /tmp/demo-repo/product-note.md
 ```
 
 The command prints:
@@ -61,7 +64,7 @@ workspace file directly instead of copying it into `raw/sources/`.
 Copy the `src-...` identifier from the `add-source` output, then run:
 
 ```bash
-uv run splendor ingest <source-id>
+uv run splendor --root /tmp/demo-repo ingest <source-id>
 ```
 
 This creates:
@@ -76,7 +79,7 @@ This creates:
 Planning records should link back to sources by source ID, not by raw file path.
 
 ```bash
-uv run splendor task create "Publish MVP docs" --priority high --source-ref <source-id>
+uv run splendor --root /tmp/demo-repo task create "Publish MVP docs" --priority high --source-ref <source-id>
 ```
 
 That writes a task markdown record under `planning/tasks/`.
@@ -84,8 +87,8 @@ That writes a task markdown record under `planning/tasks/`.
 ## 6. Query the maintained workspace
 
 ```bash
-uv run splendor query "durable wiki"
-uv run splendor query "durable wiki" --json
+uv run splendor --root /tmp/demo-repo query "durable wiki"
+uv run splendor --root /tmp/demo-repo query "durable wiki" --json
 ```
 
 The query command searches maintained wiki pages and planning records. The JSON form is useful for
@@ -94,9 +97,9 @@ agent or script integration.
 ## 7. Run deterministic checks
 
 ```bash
-uv run splendor lint
-uv run splendor health
-uv run splendor health --json
+uv run splendor --root /tmp/demo-repo lint
+uv run splendor --root /tmp/demo-repo health
+uv run splendor --root /tmp/demo-repo health --json
 ```
 
 - `lint` validates workspace layout, wiki/planning schemas, and reference integrity
