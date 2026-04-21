@@ -135,7 +135,7 @@ Not implemented yet:
 
 ## What Comes Next
 
-`M5-P2` is implemented in this branch: the repository now pairs the MVP docs/example slice with
+`M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
 install validation.
 
