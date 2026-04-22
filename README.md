@@ -139,5 +139,13 @@ Not implemented yet:
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
 install validation.
 
-The next planned slice is `M6-P1`, which will focus on review-state and provenance model
-expansion.
+Planning notation now distinguishes parent slices such as `M6-P1` from concrete PR sub-slices such
+as `M6-P1.1`, `M6-P1.2`, and `M6-P2.1`.
+
+`M6-P1` is now implemented through `M6-P1.1` and `M6-P1.2`: the repository has review-state and
+provenance schema support, ingest writes structured source/page/run provenance, source-summary
+pages persist `machine-generated` review state, query surfaces that metadata, and lint/health
+validate the cross-links.
+
+The next planned PR sub-slice is `M6-P2.1`, under the parent slice `M6-P2`, which will focus on
+contradiction surfacing and review-task linkage.

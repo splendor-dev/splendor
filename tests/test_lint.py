@@ -10,7 +10,7 @@ from splendor.commands.lint import run_lint_checks
 from splendor.commands.planning import create_task
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import KnowledgePageFrontmatter, QuestionRecord, TaskRecord
+from splendor.schemas import KnowledgePageFrontmatter, ProvenanceLink, QuestionRecord, TaskRecord
 from splendor.state.source_registry import load_source_record, write_source_record
 
 
@@ -218,6 +218,51 @@ def test_run_lint_checks_reports_invalid_linked_page_refs_separately(tmp_path: P
     assert all(
         issue.path == manifest_path.relative_to(tmp_path).as_posix() for issue in result.issues
     )
+
+
+def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("hello\n", encoding="utf-8")
+    added = add_source(tmp_path, source_path)
+    manifest = load_source_record(added.manifest_path).model_copy(
+        update={
+            "provenance_links": [
+                ProvenanceLink(page_id="missing-page", role="generated-page"),
+                ProvenanceLink(path_ref="../outside.md", role="input"),
+            ]
+        }
+    )
+    write_source_record(added.manifest_path, manifest)
+    source_summary_path = tmp_path / "wiki" / "sources" / f"{manifest.source_id}.md"
+    _write_wiki_page(
+        source_summary_path,
+        title="Source summary",
+        page_id=manifest.source_id,
+        source_refs=[],
+    )
+    source_summary_path.write_text(
+        source_summary_path.read_text(encoding="utf-8").replace(
+            "kind: concept", "kind: source-summary"
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_lint(tmp_path)
+
+    assert {
+        issue.code
+        for issue in result.issues
+        if issue.code.startswith("missing-provenance")
+        or issue.code.startswith("invalid-provenance")
+        or issue.code.startswith("source-summary")
+    } == {
+        "missing-provenance-page-ref",
+        "invalid-provenance-path-ref",
+        "source-summary-source-ref-mismatch",
+        "source-summary-linked-page-mismatch",
+        "source-summary-provenance-mismatch",
+    }
 
 
 def test_run_lint_checks_ignores_markdown_target_resolution_errors(

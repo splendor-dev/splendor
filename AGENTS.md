@@ -21,6 +21,12 @@
 - Use a descriptive branch name.
 - Default agent branches should use `codex/<topic>`.
 - Cleanup or tooling branches may use `refactor/<topic>`.
+- Planning notation uses two levels:
+  - milestone slices such as `M6-P1`
+  - concrete PR sub-slices such as `M6-P1.1`, `M6-P1.2`, and `M6-P2.1`
+- When a planned slice spans multiple PRs, every PR should carry the next available dotted
+  sub-slice under that parent slice instead of reusing the parent notation as if it were a
+  single-PR unit.
 - Keep commits scoped to one logical change.
 - Do not rewrite history on shared branches unless explicitly requested.
 - Feature or PR work is not complete at local commit time, after local tests pass, or after the
@@ -37,6 +43,8 @@
   that its labels and milestone are set before treating the task as done.
 - When a PR implements work from a plan, update the versioned planning state in the same PR:
   `.agent-plan.md`, `README.md`, and any affected human-facing planning document in `docs/`.
+- PR titles, descriptions, and planning updates should use the concrete PR sub-slice notation when
+  one exists, while still naming the parent milestone slice that the PR advances.
 
 ## Architecture Boundaries
 

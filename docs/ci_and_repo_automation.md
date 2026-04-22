@@ -160,6 +160,15 @@ versioned planning documents as part of the same change. At minimum that means:
 This keeps the plan aligned with merged work and avoids stale roadmap or milestone guidance after a
 planned slice lands.
 
+Use two-level planning notation in those updates:
+
+- parent planned slices such as `M6-P1`
+- concrete PR sub-slices such as `M6-P1.1`, `M6-P1.2`, and `M6-P2.1`
+
+When one planned slice takes multiple PRs, each PR should use the next dotted sub-slice in its
+title, body, and plan updates instead of pretending the parent slice maps one-to-one with a single
+PR.
+
 ## Agent completion rule for PR work
 
 For agent-driven feature or PR work in this repository, local implementation is not the terminal

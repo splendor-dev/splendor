@@ -82,8 +82,13 @@ def test_committed_example_workspace_is_structurally_valid() -> None:
     page_path = root / source.linked_pages[0]
     parsed_page = parse_wiki_markdown(page_path)
     assert parsed_page.frontmatter.page_id == source.source_id
+    assert parsed_page.frontmatter.review_state == "machine-generated"
     assert parsed_page.frontmatter.source_refs == [source.source_id]
     assert source.last_run_id in parsed_page.frontmatter.generated_by_run_ids
+    assert parsed_page.frontmatter.last_generated_at is not None
+    assert any(
+        link.source_id == source.source_id for link in parsed_page.frontmatter.provenance_links
+    )
 
     task_path = layout.planning_dir / "tasks" / "task-publish-mvp-docs.md"
     task = parse_planning_document(task_path, TaskRecord).record
@@ -97,6 +102,8 @@ def test_committed_example_workspace_is_structurally_valid() -> None:
     run_path = layout.runs_dir / f"{source.last_run_id}.json"
     run_record = load_run_record(run_path)
     assert run_record.status == "succeeded"
+    assert run_record.source_ids == [source.source_id]
+    assert run_record.page_ids == [source.source_id]
     assert page_path.relative_to(root).as_posix() in run_record.output_refs
 
     lint_result = run_lint_checks(root, layout)

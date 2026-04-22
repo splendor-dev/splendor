@@ -7,12 +7,19 @@ from pathlib import Path
 
 from splendor.commands.maintenance import MaintenanceCheckResult, workspace_relative_path
 from splendor.layout import ResolvedLayout
-from splendor.schemas import MaintenanceIssue, QueueItemRecord, RunRecord, SourceRecord
+from splendor.schemas import (
+    KnowledgePageFrontmatter,
+    MaintenanceIssue,
+    QueueItemRecord,
+    RunRecord,
+    SourceRecord,
+)
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_compat import effective_storage_mode
 from splendor.state.source_registry import load_source_record
 from splendor.state.source_resolver import resolve_source_content
+from splendor.utils.wiki import parse_wiki_markdown
 
 
 def _source_id_from_job_id(job_id: str) -> str:
@@ -186,6 +193,38 @@ def _load_run_records(
         records[run_id] = (run_path, run_record)
 
     return records, invalid_ids, checked_count
+
+
+def _load_wiki_pages(
+    layout: ResolvedLayout,
+    *,
+    root: Path,
+    issues: list[MaintenanceIssue],
+) -> tuple[dict[str, tuple[Path, KnowledgePageFrontmatter]], set[str], int]:
+    pages: dict[str, tuple[Path, KnowledgePageFrontmatter]] = {}
+    invalid_ids: set[str] = set()
+    checked_count = 0
+
+    for page_path in sorted(layout.wiki_dir.rglob("*.md")):
+        if page_path.name == ".gitkeep" or page_path in {layout.index_file, layout.log_file}:
+            continue
+        checked_count += 1
+        page_relpath = workspace_relative_path(root, page_path)
+        try:
+            parsed = parse_wiki_markdown(page_path)
+        except Exception as exc:
+            invalid_ids.add(page_relpath)
+            _append_issue(
+                issues,
+                code="invalid-wiki-page-runtime",
+                message=str(exc),
+                path=page_relpath,
+                record_id=page_path.stem,
+                check_name="wiki-runtime",
+            )
+            continue
+        pages[parsed.frontmatter.page_id] = (page_path, parsed.frontmatter)
+    return pages, invalid_ids, checked_count
 
 
 def _validate_queue_record(
@@ -403,6 +442,9 @@ def _validate_run_record(
     root: Path,
     run_path: Path,
     run_record: RunRecord,
+    source_records: dict[str, tuple[Path, SourceRecord]],
+    wiki_pages: dict[str, tuple[Path, KnowledgePageFrontmatter]],
+    run_records: dict[str, tuple[Path, RunRecord]],
     issues: list[MaintenanceIssue],
 ) -> None:
     run_relpath = workspace_relative_path(root, run_path)
@@ -495,12 +537,166 @@ def _validate_run_record(
                 check_name="run-state",
             )
 
+    for source_id in run_record.source_ids:
+        if source_id in source_records:
+            continue
+        _append_issue(
+            issues,
+            code="missing-run-source-id",
+            message=f"Run references unknown source_id: {source_id}",
+            path=run_relpath,
+            record_id=canonical_run_id,
+            check_name="run-provenance",
+        )
+
+    page_paths_by_id = {
+        page_id: workspace_relative_path(root, page_path)
+        for page_id, (page_path, _) in wiki_pages.items()
+    }
+    for page_id in run_record.page_ids:
+        if page_id in wiki_pages:
+            continue
+        _append_issue(
+            issues,
+            code="missing-run-page-id",
+            message=f"Run references unknown page_id: {page_id}",
+            path=run_relpath,
+            record_id=canonical_run_id,
+            check_name="run-provenance",
+        )
+
+    for page_ref in run_record.page_refs:
+        try:
+            resolved = resolve_workspace_path(root, page_ref, context="Run page reference")
+        except ValueError as exc:
+            _append_issue(
+                issues,
+                code="invalid-run-page-ref",
+                message=str(exc),
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+            continue
+        if not resolved.is_file():
+            _append_issue(
+                issues,
+                code="missing-run-page-ref",
+                message=f"Run page reference does not exist: {page_ref}",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+
+    for link in run_record.provenance_links:
+        if link.source_id is not None and link.source_id not in source_records:
+            _append_issue(
+                issues,
+                code="missing-run-provenance-source-ref",
+                message=f"Run provenance references unknown source: {link.source_id}",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+        if link.page_id is not None and link.page_id not in wiki_pages:
+            _append_issue(
+                issues,
+                code="missing-run-provenance-page-ref",
+                message=f"Run provenance references unknown page: {link.page_id}",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+        if (
+            link.run_id is not None
+            and link.run_id != canonical_run_id
+            and link.run_id not in run_records
+        ):
+            _append_issue(
+                issues,
+                code="missing-run-provenance-run-ref",
+                message=f"Run provenance references unknown run: {link.run_id}",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+        if link.path_ref is None:
+            continue
+        try:
+            resolved = resolve_workspace_path(root, link.path_ref, context="Run provenance path")
+        except ValueError as exc:
+            _append_issue(
+                issues,
+                code="invalid-run-provenance-path-ref",
+                message=str(exc),
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+            continue
+        if not resolved.exists():
+            _append_issue(
+                issues,
+                code="missing-run-provenance-path",
+                message=f"Run provenance path does not exist: {link.path_ref}",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+
+    if run_record.status == "succeeded":
+        if not run_record.page_ids:
+            _append_issue(
+                issues,
+                code="succeeded-run-missing-page-ids",
+                message="Succeeded runs should persist page_ids for generated pages.",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+        if not run_record.page_refs:
+            _append_issue(
+                issues,
+                code="succeeded-run-missing-page-refs",
+                message="Succeeded runs should persist page_refs for generated pages.",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+        if not any(link.page_id is not None for link in run_record.provenance_links):
+            _append_issue(
+                issues,
+                code="succeeded-run-missing-generated-page-provenance",
+                message="Succeeded runs should persist generated-page provenance links.",
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+
+    for page_id in run_record.page_ids:
+        page_path = page_paths_by_id.get(page_id)
+        if page_path is None:
+            continue
+        if page_path not in run_record.page_refs:
+            _append_issue(
+                issues,
+                code="run-page-ref-mismatch",
+                message=(
+                    f"Run page_ids references {page_id!r}, but page_refs does not include "
+                    f"{page_path!r}"
+                ),
+                path=run_relpath,
+                record_id=canonical_run_id,
+                check_name="run-provenance",
+            )
+
 
 def _validate_source_runtime_state(
     *,
     layout: ResolvedLayout,
     source_records: dict[str, tuple[Path, SourceRecord]],
     run_records: dict[str, tuple[Path, RunRecord]],
+    wiki_pages: dict[str, tuple[Path, KnowledgePageFrontmatter]],
     invalid_run_ids: set[str],
     issues: list[MaintenanceIssue],
 ) -> None:
@@ -601,6 +797,51 @@ def _validate_source_runtime_state(
                 record_id=source_id,
                 check_name="source-runtime",
             )
+        if source_record.status == "ingested":
+            if source_record.last_run_id not in source_record.generated_by_run_ids:
+                _append_issue(
+                    issues,
+                    code="source-generated-by-run-mismatch",
+                    message=(
+                        "Ingested source last_run_id should also appear in generated_by_run_ids."
+                    ),
+                    path=manifest_relpath,
+                    record_id=source_id,
+                    check_name="source-runtime",
+                )
+            if source_id not in run_record.source_ids:
+                _append_issue(
+                    issues,
+                    code="source-last-run-source-id-mismatch",
+                    message="Source last run does not list this source ID in run.source_ids.",
+                    path=manifest_relpath,
+                    record_id=source_id,
+                    check_name="source-runtime",
+                )
+            for linked_page in source_record.linked_pages:
+                page_entry = next(
+                    (
+                        entry
+                        for page_id, entry in wiki_pages.items()
+                        if workspace_relative_path(layout.root, entry[0]) == linked_page
+                    ),
+                    None,
+                )
+                if page_entry is None:
+                    continue
+                _, frontmatter = page_entry
+                if source_record.last_run_id not in frontmatter.generated_by_run_ids:
+                    _append_issue(
+                        issues,
+                        code="page-generated-by-run-mismatch",
+                        message=(
+                            "Linked page does not include the source last_run_id in "
+                            "generated_by_run_ids."
+                        ),
+                        path=linked_page,
+                        record_id=source_id,
+                        check_name="source-runtime",
+                    )
 
 
 def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckResult:
@@ -661,6 +902,13 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         invalid_run_ids = set()
         checked_count += 1
 
+    wiki_pages, invalid_page_ids, loaded_pages = _load_wiki_pages(
+        layout,
+        root=root,
+        issues=issues,
+    )
+    checked_count += loaded_pages
+
     for queue_path, queue_record in queue_records.values():
         _validate_queue_record(
             root=root,
@@ -677,6 +925,9 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
             root=root,
             run_path=run_path,
             run_record=run_record,
+            source_records=source_records,
+            wiki_pages=wiki_pages,
+            run_records=run_records,
             issues=issues,
         )
 
@@ -684,6 +935,7 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         layout=layout,
         source_records=source_records,
         run_records=run_records,
+        wiki_pages=wiki_pages,
         invalid_run_ids=invalid_run_ids,
         issues=issues,
     )

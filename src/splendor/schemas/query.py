@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from splendor.schemas.common import StrictRecord
+from splendor.schemas.provenance import ProvenanceLink
 
 
 class QueryMatchSnapshot(StrictRecord):
@@ -16,9 +17,12 @@ class QueryMatchSnapshot(StrictRecord):
     title: str
     path: str
     status: str | None = None
+    review_state: str | None = None
+    last_generated_at: str | None = None
     snippet: str
     source_refs: list[str] = Field(default_factory=list)
     generated_by_run_ids: list[str] = Field(default_factory=list)
+    provenance_links: list[ProvenanceLink] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
 

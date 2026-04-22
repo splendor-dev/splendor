@@ -161,6 +161,13 @@ Minimal frontmatter contract for wiki pages:
 - `tags`
 - `provenance_links`
 
+Current runtime behavior:
+
+- source-summary pages written by `splendor ingest` now use `review_state: machine-generated`
+- those pages persist `last_generated_at`
+- those pages persist structured provenance links back to the source manifest, ingest run, and
+  source-content path actually read
+
 ## Planning objects
 
 Strict record contracts currently exist for:
@@ -193,6 +200,14 @@ free-form `output_refs` values:
 - `page_ids`
 - `page_refs`
 - `provenance_links`
+
+Current runtime behavior:
+
+- ingest populates `source_ids` as soon as the run is created
+- successful ingest runs populate `page_ids`, `page_refs`, and structured generated-page
+  provenance while preserving `input_refs` and `output_refs` for compatibility
+- failed runs retain only the source/input-side structured provenance that was actually known at
+  failure time
 
 ## Current storage decision
 

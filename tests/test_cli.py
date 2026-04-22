@@ -687,6 +687,9 @@ def test_cli_query_command_supports_json_output(tmp_path: Path, capsys) -> None:
     assert payload["match_count"] == 1
     assert payload["matches"][0]["path"] == "planning/tasks/task-ship-query.md"
     assert payload["matches"][0]["generated_by_run_ids"] == []
+    assert payload["matches"][0]["review_state"] is None
+    assert payload["matches"][0]["last_generated_at"] is None
+    assert payload["matches"][0]["provenance_links"] == []
     assert payload["matches"][0]["tags"] == []
 
 
@@ -755,6 +758,42 @@ def test_cli_query_command_rejects_degenerate_queries(tmp_path: Path, capsys) ->
     captured = capsys.readouterr()
     assert "Query must contain at least one ASCII letter or number" in captured.out
     assert not (tmp_path / "state" / "queries" / "last-query.json").exists()
+
+
+def test_cli_query_command_prints_review_state_and_provenance(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    page = tmp_path / "wiki" / "sources" / "src-123.md"
+    frontmatter = KnowledgePageFrontmatter(
+        kind="source-summary",
+        title="Generated source summary",
+        page_id="src-123",
+        status="active",
+        review_state="machine-generated",
+        source_refs=["src-123"],
+        generated_by_run_ids=["run-123"],
+        last_generated_at="2026-04-22T10:00:00+00:00",
+        confidence=1.0,
+        provenance_links=[
+            {
+                "source_id": "src-123",
+                "run_id": "run-123",
+                "path_ref": "wiki/sources/src-123.md",
+                "role": "generated-from",
+            }
+        ],
+    )
+    page.parent.mkdir(parents=True, exist_ok=True)
+    frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
+    page.write_text(f"---\n{frontmatter_text}\n---\n\nGenerated body\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "generated"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Review state: machine-generated" in out
+    assert "Last generated: 2026-04-22T10:00:00+00:00" in out
+    assert "Provenance:" in out
 
 
 def test_cli_file_answer_reports_invalid_saved_query_snapshot(tmp_path: Path, capsys) -> None:
