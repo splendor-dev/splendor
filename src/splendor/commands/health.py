@@ -663,7 +663,10 @@ def _validate_run_record(
                 record_id=canonical_run_id,
                 check_name="run-provenance",
             )
-        if not any(link.page_id is not None for link in run_record.provenance_links):
+        if not any(
+            link.page_id is not None and link.role == "generated-page" and link.path_ref is not None
+            for link in run_record.provenance_links
+        ):
             _append_issue(
                 issues,
                 code="succeeded-run-missing-generated-page-provenance",

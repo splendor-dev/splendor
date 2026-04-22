@@ -784,7 +784,7 @@ def _source_summary_alignment_issues(
             MaintenanceIssue(
                 code="source-summary-provenance-mismatch",
                 message="Source manifest provenance is missing the generated page link.",
-                path=page_path,
+                path=workspace_relative_path(root, source_entries[0].manifest_path),
                 record_id=page_id,
                 check_name="reference-integrity",
             )

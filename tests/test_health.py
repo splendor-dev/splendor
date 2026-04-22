@@ -207,6 +207,69 @@ def test_run_health_checks_reports_missing_runtime_provenance_links(tmp_path: Pa
     }
 
 
+def test_run_health_checks_requires_generated_page_role_for_run_provenance(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    run_id = f"run-{added.source_id}-ok"
+    page_path = tmp_path / "wiki" / "sources" / f"{added.source_id}.md"
+    page_path.write_text(
+        (
+            "---\n"
+            f"kind: source-summary\ntitle: Example\npage_id: {added.source_id}\n"
+            "status: active\nreview_state: machine-generated\n"
+            f"source_refs:\n- {added.source_id}\n"
+            f"generated_by_run_ids:\n- {run_id}\n"
+            "confidence: 1.0\n"
+            "---\n\nbody\n"
+        ),
+        encoding="utf-8",
+    )
+    write_run_record(
+        layout.runs_dir / f"{run_id}.json",
+        RunRecord(
+            run_id=run_id,
+            job_id=f"ingest-{added.source_id}",
+            job_type="ingest_source",
+            started_at="2026-04-20T09:00:00+00:00",
+            finished_at="2026-04-20T09:01:00+00:00",
+            status="succeeded",
+            input_refs=[added.manifest_path.relative_to(tmp_path).as_posix(), "brief.md"],
+            output_refs=[page_path.relative_to(tmp_path).as_posix()],
+            pipeline_version=__version__,
+            source_ids=[added.source_id],
+            page_ids=[added.source_id],
+            page_refs=[page_path.relative_to(tmp_path).as_posix()],
+            provenance_links=[
+                {
+                    "page_id": added.source_id,
+                    "path_ref": page_path.relative_to(tmp_path).as_posix(),
+                    "role": "output",
+                }
+            ],
+        ),
+    )
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "status": "ingested",
+            "last_run_id": run_id,
+            "linked_pages": [page_path.relative_to(tmp_path).as_posix()],
+            "generated_by_run_ids": [run_id],
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == [
+        "succeeded-run-missing-generated-page-provenance"
+    ]
+
+
 def test_run_health_checks_reports_missing_runtime_directories_nonfatally(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     for path in (

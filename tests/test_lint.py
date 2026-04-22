@@ -263,6 +263,13 @@ def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path
         "source-summary-linked-page-mismatch",
         "source-summary-provenance-mismatch",
     }
+    manifest_issue = next(
+        issue
+        for issue in result.issues
+        if issue.code == "source-summary-provenance-mismatch"
+        and issue.message == "Source manifest provenance is missing the generated page link."
+    )
+    assert manifest_issue.path == added.manifest_path.relative_to(tmp_path).as_posix()
 
 
 def test_run_lint_checks_requires_expected_provenance_roles_for_source_summary(
