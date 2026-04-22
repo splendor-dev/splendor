@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import Field
 
 from splendor.schemas.common import StrictRecord
+from splendor.schemas.provenance import ProvenanceLink
 
 
 class QueueItemRecord(StrictRecord):
@@ -37,3 +38,7 @@ class RunRecord(StrictRecord):
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     pipeline_version: str
+    source_ids: list[str] = Field(default_factory=list)
+    page_ids: list[str] = Field(default_factory=list)
+    page_refs: list[str] = Field(default_factory=list)
+    provenance_links: list[ProvenanceLink] = Field(default_factory=list)
