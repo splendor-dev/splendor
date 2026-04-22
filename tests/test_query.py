@@ -69,6 +69,9 @@ def test_run_query_returns_ranked_matches_from_wiki_and_planning(tmp_path: Path)
     wiki_match = next(match for match in result.matches if match.document_class == "wiki")
     assert wiki_match.generated_by_run_ids == ["run-123"]
     assert wiki_match.source_refs == ["src-123"]
+    assert wiki_match.review_state == "draft"
+    assert wiki_match.last_generated_at is None
+    assert wiki_match.provenance_links == []
 
 
 def test_run_query_excludes_index_and_log(tmp_path: Path) -> None:
@@ -239,6 +242,40 @@ def test_run_query_result_is_json_serializable(tmp_path: Path) -> None:
     assert parsed["query"] == "query"
     assert parsed["match_count"] == 1
     assert parsed["matches"][0]["path"] == "planning/tasks/task-ship-query.md"
+
+
+def test_run_query_surfaces_wiki_provenance_fields(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    frontmatter = KnowledgePageFrontmatter(
+        kind="source-summary",
+        title="Generated source summary",
+        page_id="src-123",
+        status="active",
+        review_state="machine-generated",
+        source_refs=["src-123"],
+        generated_by_run_ids=["run-123"],
+        last_generated_at="2026-04-22T10:00:00+00:00",
+        confidence=1.0,
+        provenance_links=[
+            {
+                "source_id": "src-123",
+                "run_id": "run-123",
+                "path_ref": "state/manifests/sources/src-123.json",
+                "role": "generated-from",
+            }
+        ],
+    )
+    path = tmp_path / "wiki" / "sources" / "src-123.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
+    path.write_text(f"---\n{frontmatter_text}\n---\n\nGenerated body\n", encoding="utf-8")
+
+    result = run_query(tmp_path, "generated")
+
+    match = result.matches[0]
+    assert match.review_state == "machine-generated"
+    assert match.last_generated_at == "2026-04-22T10:00:00+00:00"
+    assert match.provenance_links[0].run_id == "run-123"
 
 
 def test_query_snapshot_schema_round_trip(tmp_path: Path) -> None:

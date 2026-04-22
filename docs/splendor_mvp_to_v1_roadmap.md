@@ -33,6 +33,16 @@ The roadmap is deliberately conservative at the start. The goal is not to ship a
 5. **GitHub features should be additive**
    - They should improve the system, not define it.
 
+## 2.5 Planning notation
+
+Roadmap notation uses two levels:
+
+- parent milestone slices such as `M6-P1`
+- concrete PR sub-slices such as `M6-P1.1`, `M6-P1.2`, and `M6-P2.1`
+
+The parent slice names the roadmap unit. The dotted sub-slice names the specific PR that advances
+that unit when the work spans more than one pull request.
+
 ## 3. Release Shape
 
 ### MVP
@@ -318,8 +328,13 @@ quickstart, companion-repo setup guidance, a committed in-repo example workspace
 regression coverage for operational edge cases, consistent one-line CLI error output, and a
 package-install smoke path that validates the built CLI.
 
-The next planned PR is `M6-P1`, which expands review-state and provenance modeling for stronger
-post-MVP trust and auditability.
+`M6-P1` is now implemented through `M6-P1.1` and `M6-P1.2`. The repository now persists
+machine-generated review state for source-summary pages, structured source/page/run provenance in
+ingest artifacts, richer query metadata, and deterministic lint/health validation for those
+cross-links.
+
+The next planned PR sub-slice is `M6-P2.1`, under parent slice `M6-P2`, which turns that stronger
+provenance foundation into contradiction surfacing and review-task linkage.
 
 ---
 
@@ -356,6 +371,16 @@ This milestone is especially important for sensitive, policy-heavy, or research-
 ### Planned PR slices
 - `M6-P1` Review-state and provenance model expansion
 - `M6-P2` Contradiction surfacing and review-task linkage
+
+### Current PR sub-slices
+- `M6-P1.1` Schema groundwork and PR completion-gate codification
+- `M6-P1.2` Ingest, wiki rendering, CLI/query, and lint/health provenance threading
+
+### Milestone 6 status
+
+`M6-P1` is implemented. The next planned work in this milestone is `M6-P2.1`, which will use the
+now-persisted provenance and review-state foundation to surface contradictions and create explicit
+review-task linkage.
 
 ---
 

@@ -82,8 +82,12 @@ def test_ingest_source_happy_path(tmp_path: Path) -> None:
     frontmatter, body = parse_frontmatter(result.page_path)
     assert frontmatter.kind == "source-summary"
     assert frontmatter.page_id == added.source_id
+    assert frontmatter.review_state == "machine-generated"
     assert frontmatter.source_refs == [added.source_id]
     assert frontmatter.generated_by_run_ids == [result.run_id]
+    assert frontmatter.last_generated_at is not None
+    assert any(link.source_id == added.source_id for link in frontmatter.provenance_links)
+    assert any(link.run_id == result.run_id for link in frontmatter.provenance_links)
     assert frontmatter.confidence == 1.0
     assert "## Source" in body
     assert "## Summary" in body
@@ -99,11 +103,17 @@ def test_ingest_source_happy_path(tmp_path: Path) -> None:
     run_record = load_run_record(result.run_path)
     assert isinstance(run_record, RunRecord)
     assert run_record.status == "succeeded"
+    assert run_record.source_ids == [added.source_id]
+    assert run_record.page_ids == [added.source_id]
+    assert run_record.page_refs == [result.page_path.relative_to(tmp_path).as_posix()]
+    assert any(link.page_id == added.source_id for link in run_record.provenance_links)
     assert result.page_path.relative_to(tmp_path).as_posix() in run_record.output_refs
 
     source_record = load_source_record(added.manifest_path)
     assert source_record.status == "ingested"
     assert source_record.last_run_id == result.run_id
+    assert source_record.generated_by_run_ids == [result.run_id]
+    assert any(link.page_id == added.source_id for link in source_record.provenance_links)
     assert result.page_path.relative_to(tmp_path).as_posix() in source_record.linked_pages
 
     index_content = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
@@ -194,6 +204,8 @@ def test_ingest_source_rejects_unsupported_type(tmp_path: Path) -> None:
     assert len(run_paths) == 1
     run_record = load_run_record(run_paths[0])
     assert run_record.status == "failed"
+    assert run_record.source_ids == [added.source_id]
+    assert run_record.page_ids == []
     assert run_record.output_refs == []
     assert not (tmp_path / "wiki" / "sources" / f"{added.source_id}.md").exists()
 
@@ -214,7 +226,10 @@ def test_ingest_source_rejects_invalid_utf8_text(tmp_path: Path) -> None:
     assert load_queue_item(queue_path).status == "failed"
     run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
     assert len(run_paths) == 1
-    assert load_run_record(run_paths[0]).status == "failed"
+    run_record = load_run_record(run_paths[0])
+    assert run_record.status == "failed"
+    assert run_record.source_ids == [added.source_id]
+    assert run_record.page_refs == []
 
 
 def test_ingest_source_requires_workspace_index_file(tmp_path: Path) -> None:

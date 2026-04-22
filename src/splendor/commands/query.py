@@ -8,6 +8,7 @@ from pathlib import Path
 
 from splendor.config import load_config
 from splendor.layout import ResolvedLayout, resolve_layout
+from splendor.schemas import ProvenanceLink
 from splendor.utils.planning import (
     iter_planning_paths,
     parse_planning_document,
@@ -31,9 +32,12 @@ class QueryMatch:
     title: str
     path: str
     status: str | None
+    review_state: str | None
+    last_generated_at: str | None
     snippet: str
     source_refs: list[str]
     generated_by_run_ids: list[str]
+    provenance_links: list[ProvenanceLink]
     tags: list[str]
 
 
@@ -56,8 +60,11 @@ class _QueryDocument:
     title: str
     path: str
     status: str | None
+    review_state: str | None
+    last_generated_at: str | None
     source_refs: list[str]
     generated_by_run_ids: list[str]
+    provenance_links: list[ProvenanceLink]
     tags: list[str]
     title_tokens: list[str]
     record_id_tokens: list[str]
@@ -107,9 +114,12 @@ def run_query(root: Path, question: str) -> QueryResult:
             title=item.document.title,
             path=item.document.path,
             status=item.document.status,
+            review_state=item.document.review_state,
+            last_generated_at=item.document.last_generated_at,
             snippet=item.snippet,
             source_refs=item.document.source_refs,
             generated_by_run_ids=item.document.generated_by_run_ids,
+            provenance_links=item.document.provenance_links,
             tags=item.document.tags,
         )
         for index, item in enumerate(scored_documents, start=1)
@@ -141,8 +151,11 @@ def _iter_wiki_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocum
                 title=frontmatter.title,
                 path=path.relative_to(root).as_posix(),
                 status=frontmatter.status,
+                review_state=frontmatter.review_state,
+                last_generated_at=frontmatter.last_generated_at,
                 source_refs=list(frontmatter.source_refs),
                 generated_by_run_ids=list(frontmatter.generated_by_run_ids),
+                provenance_links=list(frontmatter.provenance_links),
                 tags=list(frontmatter.tags),
                 title_tokens=_content_tokens(frontmatter.title),
                 record_id_tokens=_content_tokens(frontmatter.page_id),
@@ -187,8 +200,11 @@ def _iter_planning_documents(root: Path, layout: ResolvedLayout) -> list[_QueryD
                     title=record.title,
                     path=path.relative_to(root).as_posix(),
                     status=status if isinstance(status, str) else None,
+                    review_state=None,
+                    last_generated_at=None,
                     source_refs=source_refs,
                     generated_by_run_ids=[],
+                    provenance_links=[],
                     tags=[],
                     title_tokens=_content_tokens(record.title),
                     record_id_tokens=_content_tokens(record_id),

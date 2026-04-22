@@ -306,6 +306,25 @@ def _run_reference_integrity_checks(
         )
         checked_count += page_link_count
         issues.extend(page_link_issues)
+        checked_count += len(page.frontmatter.provenance_links)
+        issues.extend(
+            _provenance_link_issues(
+                root=root,
+                path=workspace_relative_path(root, page.path),
+                record_id=page.frontmatter.page_id,
+                links=page.frontmatter.provenance_links,
+                valid_source_ids=valid_source_ids,
+                valid_page_ids=valid_page_ids,
+                check_name="wiki-provenance",
+            )
+        )
+        issues.extend(
+            _source_summary_alignment_issues(
+                root=root,
+                page=page,
+                source_by_id=source_by_id,
+            )
+        )
 
     for record in inventory.planning_records:
         if record.record is None or record.record_id is None:
@@ -329,6 +348,18 @@ def _run_reference_integrity_checks(
             continue
         checked_count += len(manifest.record.linked_pages)
         issues.extend(_linked_page_issues(root, manifest, wiki_by_path))
+        checked_count += len(manifest.record.provenance_links)
+        issues.extend(
+            _provenance_link_issues(
+                root=root,
+                path=workspace_relative_path(root, manifest.manifest_path),
+                record_id=manifest.record.source_id,
+                links=manifest.record.provenance_links,
+                valid_source_ids=valid_source_ids,
+                valid_page_ids=valid_page_ids,
+                check_name="source-provenance",
+            )
+        )
 
     return _LintCheckResult(checked_count=checked_count, issues=issues)
 
@@ -629,6 +660,132 @@ def _linked_page_issues(
                 ),
                 path=normalized_linked_page,
                 record_id=source.source_id,
+                check_name="reference-integrity",
+            )
+        )
+    return issues
+
+
+def _provenance_link_issues(
+    *,
+    root: Path,
+    path: str,
+    record_id: str,
+    links,
+    valid_source_ids: set[str],
+    valid_page_ids: set[str],
+    check_name: str,
+) -> list[MaintenanceIssue]:
+    issues: list[MaintenanceIssue] = []
+    for link in links:
+        if link.source_id is not None and link.source_id not in valid_source_ids:
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-provenance-source-ref",
+                    message=f"Provenance references unknown source: {link.source_id}",
+                    path=path,
+                    record_id=record_id,
+                    check_name=check_name,
+                )
+            )
+        if link.page_id is not None and link.page_id not in valid_page_ids:
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-provenance-page-ref",
+                    message=f"Provenance references unknown page: {link.page_id}",
+                    path=path,
+                    record_id=record_id,
+                    check_name=check_name,
+                )
+            )
+        if link.path_ref is None:
+            continue
+        try:
+            resolved = resolve_workspace_path(root, link.path_ref, context="Provenance path")
+        except ValueError as exc:
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-provenance-path-ref",
+                    message=str(exc),
+                    path=path,
+                    record_id=record_id,
+                    check_name=check_name,
+                )
+            )
+            continue
+        if not resolved.exists():
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-provenance-path",
+                    message=f"Provenance path does not exist: {link.path_ref}",
+                    path=path,
+                    record_id=record_id,
+                    check_name=check_name,
+                )
+            )
+    return issues
+
+
+def _source_summary_alignment_issues(
+    *,
+    root: Path,
+    page: _WikiPageInventory,
+    source_by_id: dict[str, list[_SourceInventory]],
+) -> list[MaintenanceIssue]:
+    if page.frontmatter is None or page.frontmatter.kind != "source-summary":
+        return []
+
+    page_id = page.frontmatter.page_id
+    page_path = workspace_relative_path(root, page.path)
+    issues: list[MaintenanceIssue] = []
+    if page_id not in page.frontmatter.source_refs:
+        issues.append(
+            MaintenanceIssue(
+                code="source-summary-source-ref-mismatch",
+                message=f"Source summary page should reference its source ID: {page_id}",
+                path=page_path,
+                record_id=page_id,
+                check_name="reference-integrity",
+            )
+        )
+    source_entries = source_by_id.get(page_id, [])
+    if not source_entries:
+        return issues
+    source = source_entries[0].record
+    assert source is not None
+    if page_path not in source.linked_pages:
+        issues.append(
+            MaintenanceIssue(
+                code="source-summary-linked-page-mismatch",
+                message="Source summary page is not listed in the source manifest linked_pages.",
+                path=page_path,
+                record_id=page_id,
+                check_name="reference-integrity",
+            )
+        )
+    if not any(
+        link.source_id == page_id and link.role == "generated-from" and link.path_ref is not None
+        for link in page.frontmatter.provenance_links
+    ):
+        issues.append(
+            MaintenanceIssue(
+                code="source-summary-provenance-mismatch",
+                message="Source summary page provenance is missing its generated-from source link.",
+                path=page_path,
+                record_id=page_id,
+                check_name="reference-integrity",
+            )
+        )
+    if not any(
+        link.page_id == page_id and link.role == "generated-page" and link.path_ref is not None
+        for link in source.provenance_links
+    ):
+        issues.append(
+            MaintenanceIssue(
+                code="source-summary-provenance-mismatch",
+                message="Source manifest provenance is missing the generated page link.",
+                path=workspace_relative_path(root, source_entries[0].manifest_path),
+                record_id=page_id,
                 check_name="reference-integrity",
             )
         )

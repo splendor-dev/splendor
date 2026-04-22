@@ -20,6 +20,14 @@ Do not treat the work as complete until all of the following are true:
 5. The PR has focused labels that match the change.
 6. The PR is assigned to the appropriate milestone when one exists.
 
+## Planning notation
+
+- Use milestone-slice notation such as `M6-P1` for the parent planned unit.
+- Use dotted PR sub-slice notation such as `M6-P1.1`, `M6-P1.2`, or `M6-P2.1` for each concrete
+  PR under that parent slice.
+- In PR titles, PR bodies, and planning-state updates, prefer the dotted sub-slice when the work is
+  only one PR within a larger planned slice.
+
 ## Tool routing
 
 - Prefer repo-specific GitHub MCP tools for PR metadata updates.

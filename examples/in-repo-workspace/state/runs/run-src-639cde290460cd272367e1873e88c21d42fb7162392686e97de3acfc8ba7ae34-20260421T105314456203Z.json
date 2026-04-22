@@ -13,9 +13,40 @@
     "wiki/index.md",
     "wiki/log.md"
   ],
+  "page_ids": [
+    "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34"
+  ],
+  "page_refs": [
+    "wiki/sources/src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34.md"
+  ],
   "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "source_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+      "path_ref": "state/manifests/sources/src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34.json",
+      "role": "input"
+    },
+    {
+      "source_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+      "path_ref": "demo-brief.md",
+      "role": "input"
+    },
+    {
+      "page_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+      "path_ref": "wiki/sources/src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34.md",
+      "role": "generated-page"
+    },
+    {
+      "page_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+      "run_id": "run-src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34-20260421T105314456203Z",
+      "role": "output"
+    }
+  ],
   "run_id": "run-src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34-20260421T105314456203Z",
   "schema_version": "1",
+  "source_ids": [
+    "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34"
+  ],
   "started_at": "2026-04-21T10:53:14+00:00",
   "status": "succeeded",
   "warnings": []

@@ -29,3 +29,5 @@ repository. It is not the governing `AGENTS.md` for the Splendor project itself.
 - Treat feature work and PR work as incomplete until the branch is pushed and a non-draft GitHub PR
   with a detailed description is open.
 - Published PRs should carry intentional labels and the appropriate milestone when one exists.
+- If a roadmap slice spans more than one PR, keep the parent slice notation such as `M6-P1` and
+  give each concrete PR a dotted sub-slice such as `M6-P1.1` or `M6-P1.2`.

@@ -2,6 +2,9 @@
   "added_at": "2026-04-21T10:53:14+00:00",
   "checksum": "639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
   "derived_artifacts": [],
+  "generated_by_run_ids": [
+    "run-src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34-20260421T105314456203Z"
+  ],
   "kind": "source",
   "last_run_id": "run-src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34-20260421T105314456203Z",
   "linked_pages": [
@@ -13,6 +16,18 @@
   "path": "demo-brief.md",
   "pipeline_version": "0.1.0a0",
   "review_state": "unreviewed",
+  "provenance_links": [
+    {
+      "page_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+      "path_ref": "wiki/sources/src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34.md",
+      "role": "generated-page"
+    },
+    {
+      "source_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",
+      "run_id": "run-src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34-20260421T105314456203Z",
+      "role": "output"
+    }
+  ],
   "schema_version": "1",
   "source_commit": null,
   "source_id": "src-639cde290460cd272367e1873e88c21d42fb7162392686e97de3acfc8ba7ae34",

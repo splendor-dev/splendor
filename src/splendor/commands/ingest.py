@@ -10,7 +10,13 @@ from pathlib import Path
 from splendor import __version__
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord, SourceRecord
+from splendor.schemas import (
+    KnowledgePageFrontmatter,
+    ProvenanceLink,
+    QueueItemRecord,
+    RunRecord,
+    SourceRecord,
+)
 from splendor.schemas.types import SummaryMode
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import (
@@ -34,6 +40,7 @@ from splendor.state.source_registry import (
 )
 from splendor.state.source_resolver import resolve_source_content
 from splendor.utils.fs import write_text_atomic
+from splendor.utils.provenance import dedupe_provenance_links, make_provenance_link
 from splendor.utils.time import utc_now_iso
 from splendor.utils.wiki import (
     WikiUpdatePayload,
@@ -202,6 +209,79 @@ def _lease_is_expired(queue_item: QueueItemRecord, now: datetime) -> bool:
     return expires_at <= now
 
 
+def _page_provenance_links(
+    *,
+    source_id: str,
+    run_id: str,
+    manifest_ref: str,
+    resolved_ref: str,
+) -> list[ProvenanceLink]:
+    return dedupe_provenance_links(
+        [
+            make_provenance_link(
+                source_id=source_id,
+                path_ref=manifest_ref,
+                role="generated-from",
+            ),
+            make_provenance_link(run_id=run_id, role="generated-from"),
+            make_provenance_link(path_ref=resolved_ref, role="input"),
+        ]
+    )
+
+
+def _source_provenance_links(
+    *,
+    source_id: str,
+    run_id: str,
+    page_id: str,
+    page_ref: str,
+    existing_links: list[ProvenanceLink],
+) -> list[ProvenanceLink]:
+    return dedupe_provenance_links(
+        [
+            *existing_links,
+            make_provenance_link(page_id=page_id, path_ref=page_ref, role="generated-page"),
+            make_provenance_link(run_id=run_id, source_id=source_id, role="output"),
+        ]
+    )
+
+
+def _run_input_provenance_links(
+    *,
+    source_id: str,
+    manifest_ref: str,
+    resolved_ref: str,
+) -> list[ProvenanceLink]:
+    return dedupe_provenance_links(
+        [
+            make_provenance_link(source_id=source_id, path_ref=manifest_ref, role="input"),
+            make_provenance_link(source_id=source_id, path_ref=resolved_ref, role="input"),
+        ]
+    )
+
+
+def _run_success_provenance_links(
+    *,
+    source_id: str,
+    manifest_ref: str,
+    resolved_ref: str,
+    page_id: str,
+    page_ref: str,
+    run_id: str,
+) -> list[ProvenanceLink]:
+    return dedupe_provenance_links(
+        [
+            *_run_input_provenance_links(
+                source_id=source_id,
+                manifest_ref=manifest_ref,
+                resolved_ref=resolved_ref,
+            ),
+            make_provenance_link(page_id=page_id, path_ref=page_ref, role="generated-page"),
+            make_provenance_link(run_id=run_id, page_id=page_id, role="output"),
+        ]
+    )
+
+
 def _is_queue_eligible(queue_item: QueueItemRecord, now: datetime) -> bool:
     if queue_item.job_type != "ingest_source":
         return False
@@ -289,6 +369,7 @@ def _finalize_queue_record(
 
 def _mark_attempt_failed(
     *,
+    root: Path,
     queue_path: Path,
     queue_item: QueueItemRecord,
     run_path: Path,
@@ -298,11 +379,27 @@ def _mark_attempt_failed(
     source: SourceRecord | None = None,
     run_id: str | None = None,
 ) -> None:
+    failed_run = run
+    if manifest_path is not None and source is not None:
+        manifest_ref = _relative_to_root(root, manifest_path)
+        resolved_ref = _best_available_source_ref(source)
+        failed_run = run.model_copy(
+            update={
+                "source_ids": [source.source_id],
+                "provenance_links": _run_input_provenance_links(
+                    source_id=source.source_id,
+                    manifest_ref=manifest_ref,
+                    resolved_ref=resolved_ref,
+                ),
+            }
+        )
     failed_run = run.model_copy(
         update={
+            "source_ids": failed_run.source_ids,
             "finished_at": utc_now_iso(),
             "status": "failed",
             "errors": [error_message],
+            "provenance_links": failed_run.provenance_links,
         }
     )
     write_run_record(run_path, failed_run)
@@ -470,6 +567,12 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             _best_available_source_ref(source),
         ],
         pipeline_version=__version__,
+        source_ids=[source.source_id],
+        provenance_links=_run_input_provenance_links(
+            source_id=source.source_id,
+            manifest_ref=_relative_to_root(root, manifest_path),
+            resolved_ref=_best_available_source_ref(source),
+        ),
     )
     write_run_record(run_path, run)
 
@@ -480,7 +583,12 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 "input_refs": [
                     _relative_to_root(root, manifest_path),
                     resolved_source.resolved_ref,
-                ]
+                ],
+                "provenance_links": _run_input_provenance_links(
+                    source_id=source.source_id,
+                    manifest_ref=_relative_to_root(root, manifest_path),
+                    resolved_ref=resolved_source.resolved_ref,
+                ),
             }
         )
         write_run_record(run_path, run)
@@ -499,15 +607,24 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         page_path = _page_path_for(layout.wiki_sources_dir, source.source_id)
         page_relpath = _relative_to_root(root, page_path)
         registered_path = canonical_source_ref(source)
+        finished_at = utc_now_iso()
         frontmatter = KnowledgePageFrontmatter(
             kind="source-summary",
             title=source.title,
             page_id=source.source_id,
             status="active",
+            review_state="machine-generated",
             source_refs=[source.source_id],
             generated_by_run_ids=[run_id],
+            last_generated_at=finished_at,
             confidence=1.0,
             tags=["source-summary", source.source_type],
+            provenance_links=_page_provenance_links(
+                source_id=source.source_id,
+                run_id=run_id,
+                manifest_ref=_relative_to_root(root, manifest_path),
+                resolved_ref=resolved_source.resolved_ref,
+            ),
         )
         page_content = render_source_summary_page(
             frontmatter,
@@ -551,18 +668,36 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             update={
                 "status": "ingested",
                 "last_run_id": run_id,
+                "generated_by_run_ids": sorted(set([*source.generated_by_run_ids, run_id])),
                 "linked_pages": sorted(set([*source.linked_pages, page_relpath])),
+                "provenance_links": _source_provenance_links(
+                    source_id=source.source_id,
+                    run_id=run_id,
+                    page_id=source.source_id,
+                    page_ref=page_relpath,
+                    existing_links=source.provenance_links,
+                ),
             }
         )
         success_run = run.model_copy(
             update={
-                "finished_at": utc_now_iso(),
+                "finished_at": finished_at,
                 "status": "succeeded",
                 "output_refs": [
                     page_relpath,
                     _relative_to_root(root, layout.index_file),
                     _relative_to_root(root, layout.log_file),
                 ],
+                "page_ids": [source.source_id],
+                "page_refs": [page_relpath],
+                "provenance_links": _run_success_provenance_links(
+                    source_id=source.source_id,
+                    manifest_ref=_relative_to_root(root, manifest_path),
+                    resolved_ref=resolved_source.resolved_ref,
+                    page_id=source.source_id,
+                    page_ref=page_relpath,
+                    run_id=run_id,
+                ),
             }
         )
         success_queue = queue_item.model_copy(
@@ -601,6 +736,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         )
     except ValueError as exc:
         _mark_attempt_failed(
+            root=root,
             queue_path=queue_path,
             queue_item=queue_item,
             run_path=run_path,
@@ -613,6 +749,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         raise
     except Exception as exc:
         _mark_attempt_failed(
+            root=root,
             queue_path=queue_path,
             queue_item=queue_item,
             run_path=run_path,
