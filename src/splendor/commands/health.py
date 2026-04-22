@@ -696,6 +696,7 @@ def _validate_source_runtime_state(
     layout: ResolvedLayout,
     source_records: dict[str, tuple[Path, SourceRecord]],
     run_records: dict[str, tuple[Path, RunRecord]],
+    wiki_pages_by_path: dict[str, KnowledgePageFrontmatter],
     wiki_pages: dict[str, tuple[Path, KnowledgePageFrontmatter]],
     invalid_run_ids: set[str],
     issues: list[MaintenanceIssue],
@@ -819,17 +820,9 @@ def _validate_source_runtime_state(
                     check_name="source-runtime",
                 )
             for linked_page in source_record.linked_pages:
-                page_entry = next(
-                    (
-                        entry
-                        for page_id, entry in wiki_pages.items()
-                        if workspace_relative_path(layout.root, entry[0]) == linked_page
-                    ),
-                    None,
-                )
-                if page_entry is None:
+                frontmatter = wiki_pages_by_path.get(linked_page)
+                if frontmatter is None:
                     continue
-                _, frontmatter = page_entry
                 if source_record.last_run_id not in frontmatter.generated_by_run_ids:
                     _append_issue(
                         issues,
@@ -902,12 +895,16 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         invalid_run_ids = set()
         checked_count += 1
 
-    wiki_pages, invalid_page_ids, loaded_pages = _load_wiki_pages(
+    wiki_pages, _invalid_page_ids, loaded_pages = _load_wiki_pages(
         layout,
         root=root,
         issues=issues,
     )
     checked_count += loaded_pages
+    wiki_pages_by_path = {
+        workspace_relative_path(root, page_path): frontmatter
+        for page_path, frontmatter in wiki_pages.values()
+    }
 
     for queue_path, queue_record in queue_records.values():
         _validate_queue_record(
@@ -935,6 +932,7 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         layout=layout,
         source_records=source_records,
         run_records=run_records,
+        wiki_pages_by_path=wiki_pages_by_path,
         wiki_pages=wiki_pages,
         invalid_run_ids=invalid_run_ids,
         issues=issues,

@@ -265,6 +265,57 @@ def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path
     }
 
 
+def test_run_lint_checks_requires_expected_provenance_roles_for_source_summary(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("hello\n", encoding="utf-8")
+    added = add_source(tmp_path, source_path)
+    source_summary_path = tmp_path / "wiki" / "sources" / f"{added.source_id}.md"
+    source_summary = KnowledgePageFrontmatter(
+        kind="source-summary",
+        title="Source summary",
+        page_id=added.source_id,
+        status="active",
+        source_refs=[added.source_id],
+        confidence=1.0,
+        provenance_links=[
+            ProvenanceLink(
+                source_id=added.source_id,
+                path_ref=added.manifest_path.relative_to(tmp_path).as_posix(),
+                role="input",
+            )
+        ],
+    )
+    frontmatter_text = yaml.safe_dump(
+        source_summary.model_dump(mode="json"), sort_keys=False
+    ).strip()
+    source_summary_path.parent.mkdir(parents=True, exist_ok=True)
+    source_summary_path.write_text(f"---\n{frontmatter_text}\n---\n\nSummary\n", encoding="utf-8")
+
+    manifest = load_source_record(added.manifest_path).model_copy(
+        update={
+            "linked_pages": [source_summary_path.relative_to(tmp_path).as_posix()],
+            "provenance_links": [
+                ProvenanceLink(
+                    page_id=added.source_id,
+                    path_ref=source_summary_path.relative_to(tmp_path).as_posix(),
+                    role="output",
+                )
+            ],
+        }
+    )
+    write_source_record(added.manifest_path, manifest)
+
+    result = _run_lint(tmp_path)
+
+    assert [issue.code for issue in result.issues] == [
+        "source-summary-provenance-mismatch",
+        "source-summary-provenance-mismatch",
+    ]
+
+
 def test_run_lint_checks_ignores_markdown_target_resolution_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

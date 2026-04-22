@@ -763,7 +763,10 @@ def _source_summary_alignment_issues(
                 check_name="reference-integrity",
             )
         )
-    if not any(link.source_id == page_id for link in page.frontmatter.provenance_links):
+    if not any(
+        link.source_id == page_id and link.role == "generated-from" and link.path_ref is not None
+        for link in page.frontmatter.provenance_links
+    ):
         issues.append(
             MaintenanceIssue(
                 code="source-summary-provenance-mismatch",
@@ -773,7 +776,10 @@ def _source_summary_alignment_issues(
                 check_name="reference-integrity",
             )
         )
-    if not any(link.page_id == page_id for link in source.provenance_links):
+    if not any(
+        link.page_id == page_id and link.role == "generated-page" and link.path_ref is not None
+        for link in source.provenance_links
+    ):
         issues.append(
             MaintenanceIssue(
                 code="source-summary-provenance-mismatch",
