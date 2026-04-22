@@ -23,3 +23,9 @@ repository. It is not the governing `AGENTS.md` for the Splendor project itself.
 - Use source IDs such as `src-...` when linking planning records back to registered sources.
 - Do not use raw external file paths as planning `source_refs`.
 - Expect external sources to materialize under `raw/sources/` by default in the current MVP.
+
+## Completion gate
+
+- Treat feature work and PR work as incomplete until the branch is pushed and a non-draft GitHub PR
+  with a detailed description is open.
+- Published PRs should carry intentional labels and the appropriate milestone when one exists.

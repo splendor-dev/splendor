@@ -12,7 +12,8 @@ from typing import Literal
 from pydantic import Field
 
 from splendor.schemas.common import StrictRecord
-from splendor.schemas.types import SourceRefKind, StorageMode
+from splendor.schemas.provenance import ProvenanceLink
+from splendor.schemas.types import SourceRefKind, SourceReviewState, StorageMode
 
 
 class SourceRecord(StrictRecord):
@@ -29,8 +30,11 @@ class SourceRecord(StrictRecord):
     pipeline_version: str
     derived_artifacts: list[str] = Field(default_factory=list)
     linked_pages: list[str] = Field(default_factory=list)
+    generated_by_run_ids: list[str] = Field(default_factory=list)
     last_run_id: str | None = None
-    review_state: Literal["unreviewed", "human-reviewed", "stale"] = "unreviewed"
+    review_state: SourceReviewState = "unreviewed"
+    reviewed_at: str | None = None
+    reviewed_by: str | None = None
     origin_url: str | None = None
     original_path: str | None = None
     source_ref: str | None = None
@@ -39,3 +43,4 @@ class SourceRecord(StrictRecord):
     storage_path: str | None = None
     materialized_at: str | None = None
     source_commit: str | None = None
+    provenance_links: list[ProvenanceLink] = Field(default_factory=list)

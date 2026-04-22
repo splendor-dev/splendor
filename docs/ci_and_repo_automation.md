@@ -163,13 +163,18 @@ planned slice lands.
 ## Agent completion rule for PR work
 
 For agent-driven feature or PR work in this repository, local implementation is not the terminal
-state. The work should be treated as complete only after:
+state. Treat GitHub publication as a mandatory completion gate, not as optional follow-up. The work
+should be treated as complete only after:
 
 - the branch is pushed
 - a non-draft pull request is open on GitHub
 - the pull request has a detailed description
 - the pull request has intentional labels
 - the pull request is assigned to the appropriate milestone
+
+Prefer repo-specific GitHub MCP tooling for PR metadata updates and use `gh` only for operations
+the MCP surface does not support cleanly, such as creating a missing label or milestone or opening
+the PR itself.
 
 If any of those publication steps are still missing, the work is still in progress even if the code
 changes are already committed locally.

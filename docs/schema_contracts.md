@@ -28,8 +28,11 @@ Current implementation fields:
 - `pipeline_version`
 - `derived_artifacts`
 - `linked_pages`
+- `generated_by_run_ids`
 - `last_run_id`
 - `review_state`
+- `reviewed_at`
+- `reviewed_by`
 - `origin_url`
 - `original_path`
 - `source_ref`
@@ -38,6 +41,7 @@ Current implementation fields:
 - `storage_path`
 - `materialized_at`
 - `source_commit`
+- `provenance_links`
 
 ### Current source-record shape
 
@@ -64,11 +68,15 @@ Implemented fields:
 - `pipeline_version`
 - `derived_artifacts`
 - `linked_pages`
+- `generated_by_run_ids`
 - `last_run_id`
 - `review_state`
+- `reviewed_at`
+- `reviewed_by`
 - `origin_url`
 - `original_path`
 - `materialized_at`
+- `provenance_links`
 
 ### Field semantics
 
@@ -143,12 +151,15 @@ Minimal frontmatter contract for wiki pages:
 - `title`
 - `page_id`
 - `status`
+- `review_state`
 - `source_refs`
 - `generated_by_run_ids`
+- `last_generated_at`
 - `last_reviewed_at`
 - `confidence`
 - `related_pages`
 - `tags`
+- `provenance_links`
 
 ## Planning objects
 
@@ -173,6 +184,15 @@ Current persisted locations:
 
 - `state/queue/<job_id>.json`
 - `state/runs/<run_id>.json`
+
+Run records now reserve explicit provenance fields beside the original generic refs so later
+pipeline steps can answer questions like "which page did this run generate?" without parsing
+free-form `output_refs` values:
+
+- `source_ids`
+- `page_ids`
+- `page_refs`
+- `provenance_links`
 
 ## Current storage decision
 

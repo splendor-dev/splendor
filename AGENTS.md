@@ -26,9 +26,13 @@
 - Feature or PR work is not complete at local commit time, after local tests pass, or after the
   branch is committed locally. It only ends once the branch is pushed and a non-draft GitHub PR
   with a detailed description is open.
+- Treat that publish step as a universal completion gate for feature work and PR work, not as an
+  optional final polish step.
 - Published PRs should carry intentional GitHub metadata:
   apply the appropriate labels, assign the PR to a milestone, and avoid leaving review-ready work
   as draft unless the user explicitly asks for a draft.
+- Prefer repo-specific GitHub MCP tooling for PR metadata and fall back to `gh` only where the MCP
+  surface is missing, such as creating a missing label or milestone or opening the PR itself.
 - When finishing feature or PR work, explicitly verify that the published PR exists on GitHub and
   that its labels and milestone are set before treating the task as done.
 - When a PR implements work from a plan, update the versioned planning state in the same PR:
