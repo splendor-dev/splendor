@@ -645,7 +645,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             f"Checksum: `{source.checksum}`",
             f"Source ref: `{canonical_source_ref(source)}`",
             f"Added at: `{source.added_at}`",
-            f"Ingested at: `{utc_now_iso()}`",
+            f"Ingested at: `{finished_at}`",
         ]
         provenance_lines = [
             f"Manifest: `{_relative_to_root(root, manifest_path)}`",

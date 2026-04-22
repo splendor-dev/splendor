@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib import error, request
 
-from splendor.commands.planning import _model_for
 from splendor.config import SplendorConfig
 from splendor.layout import ResolvedLayout
 from splendor.schemas import (
@@ -247,12 +246,12 @@ def review_source_summary_contradictions(
     analyzer = build_contradiction_analyzer(config)
     if analyzer is None:
         warning = (
-            "Skipped contradiction review because OPENAI_API_KEY is not configured."
-            if os.environ.get("OPENAI_API_KEY") is None
-            else (
+            (
                 "Skipped contradiction review because the configured contradiction provider is "
                 "unsupported."
             )
+            if contradiction_config.provider != "openai"
+            else "Skipped contradiction review because OPENAI_API_KEY is not configured."
         )
         return ContradictionReviewResult(
             frontmatter=_normalize_review_state(current_frontmatter),
@@ -458,7 +457,7 @@ def _upsert_review_task(
     title = f"Review contradiction: {current.frontmatter.title} vs {candidate.frontmatter.title}"
     timestamp = utc_now_iso()
     if task_path.exists():
-        parsed = parse_planning_document(task_path, _model_for("task"))
+        parsed = parse_planning_document(task_path, TaskRecord)
         assert isinstance(parsed.record, TaskRecord)
         record = parsed.record.model_copy(
             update={
@@ -613,7 +612,14 @@ def _contradiction_id(*, page_ids: list[str], summary: str) -> str:
 
 
 def _review_task_id(*, page_ids: list[str], summary: str) -> str:
-    digest = hashlib.sha256(_normalized_summary(summary).lower().encode("utf-8")).hexdigest()[:10]
+    digest_input = json.dumps(
+        {
+            "page_ids": page_ids,
+            "summary": _normalized_summary(summary).lower(),
+        },
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:10]
     pair = "-".join(_short_page_fragment(page_id) for page_id in page_ids)
     return f"task-review-{pair}-{digest}"
 
