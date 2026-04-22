@@ -271,6 +271,17 @@ def _run_reference_integrity_checks(
     valid_page_ids = set(wiki_by_id)
     valid_source_ids = set(source_by_id)
     valid_planning_ids = {kind: set(values) for kind, values in planning_by_kind.items()}
+    valid_run_refs = {
+        workspace_relative_path(root, path)
+        for path in sorted(layout.runs_dir.glob("*.json"))
+        if path.is_file()
+    }
+    contradiction_task_ids = {
+        contradiction.review_task_id
+        for page in inventory.wiki_pages
+        if page.frontmatter is not None
+        for contradiction in page.frontmatter.contradictions
+    }
 
     for page in inventory.wiki_pages:
         if page.frontmatter is None:
@@ -318,6 +329,17 @@ def _run_reference_integrity_checks(
                 check_name="wiki-provenance",
             )
         )
+        checked_count += len(page.frontmatter.contradictions)
+        issues.extend(
+            _contradiction_issues(
+                root=root,
+                page=page,
+                wiki_by_id=wiki_by_id,
+                valid_source_ids=valid_source_ids,
+                valid_run_refs=valid_run_refs,
+                valid_task_ids=valid_planning_ids["task"],
+            )
+        )
         issues.extend(
             _source_summary_alignment_issues(
                 root=root,
@@ -331,7 +353,15 @@ def _run_reference_integrity_checks(
             continue
         checked_count += _planning_ref_count(record.record)
         issues.extend(
-            _planning_ref_issues(root, layout, record, valid_planning_ids, valid_source_ids)
+            _planning_ref_issues(
+                root,
+                layout,
+                record,
+                valid_planning_ids,
+                valid_source_ids,
+                valid_run_refs,
+                contradiction_task_ids,
+            )
         )
         link_count, link_issues = _markdown_link_issues(
             root,
@@ -432,6 +462,8 @@ def _planning_ref_count(
             + len(record.question_refs)
             + len(record.depends_on)
             + len(record.source_refs)
+            + len(record.page_refs)
+            + len(record.run_refs)
         )
     if isinstance(record, MilestoneRecord):
         return len(record.task_refs) + len(record.decision_refs) + len(record.question_refs)
@@ -456,6 +488,8 @@ def _planning_ref_issues(
     record: _PlanningInventory,
     valid_planning_ids: dict[str, set[str]],
     valid_source_ids: set[str],
+    valid_run_refs: set[str],
+    contradiction_task_ids: set[str],
 ) -> list[MaintenanceIssue]:
     assert record.record is not None
     assert record.record_id is not None
@@ -502,6 +536,48 @@ def _planning_ref_issues(
                 message_prefix="Task references unknown source",
                 path=path,
                 record_id=record.record_id,
+            ),
+            *_existing_workspace_path_issues(
+                root=root,
+                refs=record.record.page_refs,
+                code="missing-page-ref",
+                message_prefix="Task references unknown page",
+                path=path,
+                record_id=record.record_id,
+            ),
+            *_missing_ref_issues(
+                refs=record.record.run_refs,
+                valid_refs=valid_run_refs,
+                code="missing-run-ref",
+                message_prefix="Task references unknown run",
+                path=path,
+                record_id=record.record_id,
+            ),
+            *(
+                []
+                if record.record_id not in contradiction_task_ids or record.record.source_refs
+                else [
+                    MaintenanceIssue(
+                        code="contradiction-task-missing-source-refs",
+                        message="Contradiction-linked tasks must persist source_refs.",
+                        path=path,
+                        record_id=record.record_id,
+                        check_name="reference-integrity",
+                    )
+                ]
+            ),
+            *(
+                []
+                if record.record_id not in contradiction_task_ids or record.record.page_refs
+                else [
+                    MaintenanceIssue(
+                        code="contradiction-task-missing-page-refs",
+                        message="Contradiction-linked tasks must persist page_refs.",
+                        path=path,
+                        record_id=record.record_id,
+                        check_name="reference-integrity",
+                    )
+                ]
             ),
         ]
 
@@ -666,6 +742,135 @@ def _linked_page_issues(
     return issues
 
 
+def _contradiction_issues(
+    *,
+    root: Path,
+    page: _WikiPageInventory,
+    wiki_by_id: dict[str, list[_WikiPageInventory]],
+    valid_source_ids: set[str],
+    valid_run_refs: set[str],
+    valid_task_ids: set[str],
+) -> list[MaintenanceIssue]:
+    assert page.frontmatter is not None
+    path = workspace_relative_path(root, page.path)
+    issues: list[MaintenanceIssue] = []
+    if page.frontmatter.review_state == "contested" and not page.frontmatter.contradictions:
+        issues.append(
+            MaintenanceIssue(
+                code="contested-page-missing-contradictions",
+                message="Contested pages must persist contradiction annotations.",
+                path=path,
+                record_id=page.frontmatter.page_id,
+                check_name="reference-integrity",
+            )
+        )
+    for contradiction in page.frontmatter.contradictions:
+        for page_id in contradiction.related_page_ids:
+            if page_id not in wiki_by_id:
+                issues.append(
+                    MaintenanceIssue(
+                        code="missing-contradiction-page-ref",
+                        message=f"Contradiction references unknown page: {page_id}",
+                        path=path,
+                        record_id=page.frontmatter.page_id,
+                        check_name="reference-integrity",
+                    )
+                )
+        for source_id in contradiction.related_source_ids:
+            if source_id not in valid_source_ids:
+                issues.append(
+                    MaintenanceIssue(
+                        code="missing-contradiction-source-ref",
+                        message=f"Contradiction references unknown source: {source_id}",
+                        path=path,
+                        record_id=page.frontmatter.page_id,
+                        check_name="reference-integrity",
+                    )
+                )
+        if contradiction.review_task_id not in valid_task_ids:
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-contradiction-task-ref",
+                    message=(
+                        "Contradiction references unknown review task: "
+                        f"{contradiction.review_task_id}"
+                    ),
+                    path=path,
+                    record_id=page.frontmatter.page_id,
+                    check_name="reference-integrity",
+                )
+            )
+        for evidence in contradiction.evidence:
+            if evidence.source_id is not None and evidence.source_id not in valid_source_ids:
+                issues.append(
+                    MaintenanceIssue(
+                        code="missing-contradiction-source-ref",
+                        message=(
+                            "Contradiction evidence references unknown source: "
+                            f"{evidence.source_id}"
+                        ),
+                        path=path,
+                        record_id=page.frontmatter.page_id,
+                        check_name="reference-integrity",
+                    )
+                )
+            if evidence.page_id not in wiki_by_id:
+                issues.append(
+                    MaintenanceIssue(
+                        code="missing-contradiction-page-ref",
+                        message=(
+                            f"Contradiction evidence references unknown page: {evidence.page_id}"
+                        ),
+                        path=path,
+                        record_id=page.frontmatter.page_id,
+                        check_name="reference-integrity",
+                    )
+                )
+            if (
+                evidence.run_id is not None
+                and f"state/runs/{evidence.run_id}.json" not in valid_run_refs
+            ):
+                issues.append(
+                    MaintenanceIssue(
+                        code="missing-contradiction-run-ref",
+                        message=f"Contradiction evidence references unknown run: {evidence.run_id}",
+                        path=path,
+                        record_id=page.frontmatter.page_id,
+                        check_name="reference-integrity",
+                    )
+                )
+        counterpart_ids = [
+            page_id
+            for page_id in contradiction.related_page_ids
+            if page_id != page.frontmatter.page_id
+        ]
+        for counterpart_id in counterpart_ids:
+            counterpart_entries = wiki_by_id.get(counterpart_id, [])
+            if not counterpart_entries:
+                continue
+            counterpart = counterpart_entries[0]
+            if counterpart.frontmatter is None:
+                continue
+            if any(
+                item.contradiction_id == contradiction.contradiction_id
+                for item in counterpart.frontmatter.contradictions
+            ):
+                continue
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-reciprocal-contradiction",
+                    message=(
+                        "Contradiction annotation is missing from counterpart page: "
+                        f"{counterpart_id}"
+                    ),
+                    path=path,
+                    record_id=page.frontmatter.page_id,
+                    check_name="reference-integrity",
+                )
+            )
+    return issues
+
+
 def _provenance_link_issues(
     *,
     root: Path,
@@ -723,6 +928,44 @@ def _provenance_link_issues(
                     check_name=check_name,
                 )
             )
+    return issues
+
+
+def _existing_workspace_path_issues(
+    *,
+    root: Path,
+    refs: list[str],
+    code: str,
+    message_prefix: str,
+    path: str,
+    record_id: str,
+) -> list[MaintenanceIssue]:
+    issues: list[MaintenanceIssue] = []
+    for ref in refs:
+        try:
+            resolved = resolve_workspace_path(root, ref, context="Workspace path")
+        except ValueError as exc:
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-workspace-ref",
+                    message=str(exc),
+                    path=path,
+                    record_id=record_id,
+                    check_name="reference-integrity",
+                )
+            )
+            continue
+        if resolved.is_file():
+            continue
+        issues.append(
+            MaintenanceIssue(
+                code=code,
+                message=f"{message_prefix}: {ref}",
+                path=path,
+                record_id=record_id,
+                check_name="reference-integrity",
+            )
+        )
     return issues
 
 

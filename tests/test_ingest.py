@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import splendor.utils.contradictions as contradictions_module
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import (
     drain_pending_ingest_jobs,
@@ -1167,3 +1168,123 @@ def test_ingest_source_symlink_backed_checksum_drift(tmp_path: Path) -> None:
     assert load_queue_item(queue_path).status == "failed"
     assert len(run_paths) == 1
     assert load_run_record(run_paths[0]).status == "failed"
+
+
+def test_ingest_source_records_warning_when_openai_review_is_unconfigured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initialize_workspace(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="copy")
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    run_record = load_run_record(result.run_path)
+    assert run_record.warnings == [
+        "Skipped contradiction review because OPENAI_API_KEY is not configured."
+    ]
+
+
+def test_ingest_source_marks_contradictions_and_creates_review_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initialize_workspace(tmp_path)
+
+    class FakeAnalyzer:
+        def detect(self, *, current, candidate):
+            if candidate.frontmatter.page_id == current.frontmatter.page_id:
+                return []
+            return [
+                contradictions_module.DetectedContradiction(
+                    summary="The pages disagree about the configured storage mode.",
+                    current_excerpt="Storage mode is none.",
+                    candidate_excerpt="Storage mode is copy.",
+                )
+            ]
+
+    monkeypatch.setattr(
+        contradictions_module,
+        "build_contradiction_analyzer",
+        lambda config: FakeAnalyzer(),
+    )
+
+    first_source = tmp_path / "first.md"
+    first_source.write_text("# First\n\nhello world\n", encoding="utf-8")
+    first_added = add_source(tmp_path, first_source, storage_mode="copy")
+    ingest_source(tmp_path, first_added.source_id)
+
+    second_source = tmp_path / "second.md"
+    second_source.write_text("# Second\n\nhello world\n", encoding="utf-8")
+    second_added = add_source(tmp_path, second_source, storage_mode="copy")
+    second_result = ingest_source(tmp_path, second_added.source_id)
+
+    first_page = parse_frontmatter(tmp_path / "wiki" / "sources" / f"{first_added.source_id}.md")[0]
+    second_page = parse_frontmatter(second_result.page_path)[0]
+
+    assert first_page.review_state == "contested"
+    assert second_page.review_state == "contested"
+    assert len(first_page.contradictions) == 1
+    assert (
+        first_page.contradictions[0].contradiction_id
+        == second_page.contradictions[0].contradiction_id
+    )
+
+    task_id = second_page.contradictions[0].review_task_id
+    task_path = tmp_path / "planning" / "tasks" / f"{task_id}.md"
+    assert task_path.exists()
+    task_body = task_path.read_text(encoding="utf-8")
+    assert "## Contradiction" in task_body
+    assert "## Evidence" in task_body
+    assert "## Linked Pages" in task_body
+    assert "## Notes" in task_body
+
+    run_record = load_run_record(second_result.run_path)
+    assert run_record.task_ids == [task_id]
+    assert run_record.contradiction_ids == [second_page.contradictions[0].contradiction_id]
+
+
+def test_ingest_source_dedupes_existing_contradictions_and_review_tasks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initialize_workspace(tmp_path)
+
+    class FakeAnalyzer:
+        def detect(self, *, current, candidate):
+            return [
+                contradictions_module.DetectedContradiction(
+                    summary="The pages disagree about the configured storage mode.",
+                    current_excerpt="Storage mode is none.",
+                    candidate_excerpt="Storage mode is copy.",
+                )
+            ]
+
+    monkeypatch.setattr(
+        contradictions_module,
+        "build_contradiction_analyzer",
+        lambda config: FakeAnalyzer(),
+    )
+
+    first_source = tmp_path / "first.md"
+    first_source.write_text("# First\n\nhello world\n", encoding="utf-8")
+    first_added = add_source(tmp_path, first_source, storage_mode="copy")
+    ingest_source(tmp_path, first_added.source_id)
+
+    second_source = tmp_path / "second.md"
+    second_source.write_text("# Second\n\nhello world\n", encoding="utf-8")
+    second_added = add_source(tmp_path, second_source, storage_mode="copy")
+    first_result = ingest_source(tmp_path, second_added.source_id)
+    assert first_result.page_path is not None
+    first_result.page_path.unlink()
+    second_result = ingest_source(tmp_path, second_added.source_id)
+
+    first_page = parse_frontmatter(first_result.page_path)[0]
+    second_page = parse_frontmatter(second_result.page_path)[0]
+    task_id = second_page.contradictions[0].review_task_id
+    task_paths = list((tmp_path / "planning" / "tasks").glob(f"{task_id}.md"))
+
+    assert len(first_page.contradictions) == 1
+    assert len(second_page.contradictions) == 1
+    assert len(task_paths) == 1
+    assert load_run_record(second_result.run_path).task_ids == [task_id]

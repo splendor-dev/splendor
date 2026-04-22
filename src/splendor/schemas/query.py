@@ -23,6 +23,8 @@ class QueryMatchSnapshot(StrictRecord):
     source_refs: list[str] = Field(default_factory=list)
     generated_by_run_ids: list[str] = Field(default_factory=list)
     provenance_links: list[ProvenanceLink] = Field(default_factory=list)
+    contradiction_count: int = 0
+    review_task_ids: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
 

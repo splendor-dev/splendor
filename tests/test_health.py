@@ -2,6 +2,8 @@ import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import yaml
+
 from splendor import __version__
 from splendor.commands.add_source import add_source
 from splendor.commands.health import run_health_checks
@@ -9,7 +11,7 @@ from splendor.commands.ingest import enqueue_ingest_job
 from splendor.commands.init import initialize_workspace
 from splendor.config import default_config, load_config, write_config
 from splendor.layout import resolve_layout
-from splendor.schemas import QueueItemRecord, RunRecord
+from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
 from splendor.state.runtime import write_queue_item, write_run_record
 from splendor.state.source_registry import load_source_record, write_source_record
 
@@ -204,6 +206,93 @@ def test_run_health_checks_reports_missing_runtime_provenance_links(tmp_path: Pa
         "succeeded-run-missing-generated-page-provenance",
         "source-generated-by-run-mismatch",
         "page-generated-by-run-mismatch",
+    }
+
+
+def test_run_health_checks_reports_missing_task_ids_and_contradiction_ids(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    run_id = f"run-{added.source_id}-ok"
+    page_path = tmp_path / "wiki" / "sources" / f"{added.source_id}.md"
+    frontmatter = KnowledgePageFrontmatter(
+        kind="source-summary",
+        title="Example",
+        page_id=added.source_id,
+        status="active",
+        review_state="contested",
+        source_refs=[added.source_id],
+        generated_by_run_ids=[run_id],
+        confidence=1.0,
+        contradictions=[
+            {
+                "contradiction_id": "contradiction-present",
+                "summary": "Present contradiction.",
+                "detected_at": "2026-04-22T10:00:00+00:00",
+                "related_page_ids": [added.source_id],
+                "related_source_ids": [added.source_id],
+                "review_task_id": "task-review-present",
+                "evidence": [
+                    {
+                        "page_id": added.source_id,
+                        "source_id": added.source_id,
+                        "run_id": run_id,
+                        "path_ref": page_path.relative_to(tmp_path).as_posix(),
+                        "excerpt": "Conflict excerpt.",
+                    }
+                ],
+            }
+        ],
+    )
+    page_path.parent.mkdir(parents=True, exist_ok=True)
+    frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
+    page_path.write_text(
+        f"---\n{frontmatter_text}\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+    write_run_record(
+        layout.runs_dir / f"{run_id}.json",
+        RunRecord(
+            run_id=run_id,
+            job_id=f"ingest-{added.source_id}",
+            job_type="ingest_source",
+            started_at="2026-04-20T09:00:00+00:00",
+            finished_at="2026-04-20T09:01:00+00:00",
+            status="succeeded",
+            input_refs=[added.manifest_path.relative_to(tmp_path).as_posix(), "brief.md"],
+            output_refs=[page_path.relative_to(tmp_path).as_posix()],
+            pipeline_version=__version__,
+            source_ids=[added.source_id],
+            page_ids=[added.source_id],
+            page_refs=[page_path.relative_to(tmp_path).as_posix()],
+            contradiction_ids=["contradiction-missing"],
+            task_ids=["task-review-missing"],
+            provenance_links=[
+                {
+                    "page_id": added.source_id,
+                    "path_ref": page_path.relative_to(tmp_path).as_posix(),
+                    "role": "generated-page",
+                }
+            ],
+        ),
+    )
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={
+            "status": "ingested",
+            "last_run_id": run_id,
+            "linked_pages": [page_path.relative_to(tmp_path).as_posix()],
+            "generated_by_run_ids": [run_id],
+        }
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    result = _run_health(tmp_path)
+
+    assert {issue.code for issue in result.issues} >= {
+        "missing-run-task-id",
+        "missing-run-contradiction-id",
     }
 
 

@@ -13,12 +13,14 @@ from splendor.schemas import (
     QueueItemRecord,
     RunRecord,
     SourceRecord,
+    TaskRecord,
 )
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_compat import effective_storage_mode
 from splendor.state.source_registry import load_source_record
 from splendor.state.source_resolver import resolve_source_content
+from splendor.utils.planning import iter_planning_paths, parse_planning_document, planning_directory
 from splendor.utils.wiki import parse_wiki_markdown
 
 
@@ -225,6 +227,33 @@ def _load_wiki_pages(
             continue
         pages[parsed.frontmatter.page_id] = (page_path, parsed.frontmatter)
     return pages, invalid_ids, checked_count
+
+
+def _load_task_records(
+    layout: ResolvedLayout,
+    *,
+    root: Path,
+    issues: list[MaintenanceIssue],
+) -> tuple[dict[str, Path], int]:
+    records: dict[str, Path] = {}
+    checked_count = 0
+    for task_path in iter_planning_paths(planning_directory(layout, "task")):
+        checked_count += 1
+        task_relpath = workspace_relative_path(root, task_path)
+        try:
+            parsed = parse_planning_document(task_path, TaskRecord)
+        except Exception as exc:
+            _append_issue(
+                issues,
+                code="invalid-task-record",
+                message=str(exc),
+                path=task_relpath,
+                record_id=task_path.stem,
+                check_name="task-runtime",
+            )
+            continue
+        records[parsed.record.task_id] = task_path
+    return records, checked_count
 
 
 def _validate_queue_record(
@@ -445,6 +474,7 @@ def _validate_run_record(
     source_records: dict[str, tuple[Path, SourceRecord]],
     wiki_pages: dict[str, tuple[Path, KnowledgePageFrontmatter]],
     run_records: dict[str, tuple[Path, RunRecord]],
+    task_records: dict[str, Path],
     issues: list[MaintenanceIssue],
 ) -> None:
     run_relpath = workspace_relative_path(root, run_path)
@@ -692,6 +722,38 @@ def _validate_run_record(
                 record_id=canonical_run_id,
                 check_name="run-provenance",
             )
+    for task_id in run_record.task_ids:
+        if task_id in task_records:
+            continue
+        _append_issue(
+            issues,
+            code="missing-run-task-id",
+            message=f"Run references unknown task_id: {task_id}",
+            path=run_relpath,
+            record_id=canonical_run_id,
+            check_name="run-provenance",
+        )
+    if run_record.contradiction_ids and run_record.page_ids:
+        generated_page = wiki_pages.get(run_record.page_ids[0])
+        if generated_page is not None:
+            _, frontmatter = generated_page
+            contradiction_ids = {
+                contradiction.contradiction_id for contradiction in frontmatter.contradictions
+            }
+            for contradiction_id in run_record.contradiction_ids:
+                if contradiction_id in contradiction_ids:
+                    continue
+                _append_issue(
+                    issues,
+                    code="missing-run-contradiction-id",
+                    message=(
+                        "Run contradiction_ids references a contradiction not present on the "
+                        f"generated page: {contradiction_id}"
+                    ),
+                    path=run_relpath,
+                    record_id=canonical_run_id,
+                    check_name="run-provenance",
+                )
 
 
 def _validate_source_runtime_state(
@@ -904,6 +966,8 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         issues=issues,
     )
     checked_count += loaded_pages
+    task_records, loaded_tasks = _load_task_records(layout, root=root, issues=issues)
+    checked_count += loaded_tasks
     wiki_pages_by_path = {
         workspace_relative_path(root, page_path): frontmatter
         for page_path, frontmatter in wiki_pages.values()
@@ -928,6 +992,7 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
             source_records=source_records,
             wiki_pages=wiki_pages,
             run_records=run_records,
+            task_records=task_records,
             issues=issues,
         )
 

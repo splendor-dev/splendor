@@ -635,13 +635,21 @@ def test_cli_lint_command_reports_dirty_workspace_issues_in_json_output(
     assert "invalid-wiki-frontmatter" in markdown_report.read_text(encoding="utf-8")
 
 
-def write_queryable_wiki_page(path: Path, *, title: str, page_id: str, body: str) -> None:
+def write_queryable_wiki_page(
+    path: Path,
+    *,
+    title: str,
+    page_id: str,
+    body: str,
+    contradictions: list[dict] | None = None,
+) -> None:
     frontmatter = KnowledgePageFrontmatter(
         kind="concept",
         title=title,
         page_id=page_id,
         status="active",
         confidence=0.8,
+        contradictions=contradictions or [],
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
@@ -690,6 +698,8 @@ def test_cli_query_command_supports_json_output(tmp_path: Path, capsys) -> None:
     assert payload["matches"][0]["review_state"] is None
     assert payload["matches"][0]["last_generated_at"] is None
     assert payload["matches"][0]["provenance_links"] == []
+    assert payload["matches"][0]["contradiction_count"] == 0
+    assert payload["matches"][0]["review_task_ids"] == []
     assert payload["matches"][0]["tags"] == []
 
 
@@ -794,6 +804,43 @@ def test_cli_query_command_prints_review_state_and_provenance(tmp_path: Path, ca
     assert "Review state: machine-generated" in out
     assert "Last generated: 2026-04-22T10:00:00+00:00" in out
     assert "Provenance:" in out
+
+
+def test_cli_query_command_prints_contradictions_and_review_tasks(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    write_queryable_wiki_page(
+        tmp_path / "wiki" / "sources" / "src-123.md",
+        title="Generated source summary",
+        page_id="src-123",
+        contradictions=[
+            {
+                "contradiction_id": "contradiction-src-123-src-456-1234567890",
+                "summary": "The pages disagree about the configured storage mode.",
+                "detected_at": "2026-04-22T10:05:00+00:00",
+                "related_page_ids": ["src-123", "src-456"],
+                "related_source_ids": ["src-123", "src-456"],
+                "review_task_id": "task-review-src-123-src-456-1234567890",
+                "evidence": [
+                    {
+                        "page_id": "src-123",
+                        "source_id": "src-123",
+                        "run_id": "run-123",
+                        "path_ref": "wiki/sources/src-123.md",
+                        "excerpt": "Storage mode is none.",
+                    }
+                ],
+            }
+        ],
+        body="# Generated source summary\n\nThis page covers local retrieval.\n",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "generated"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Contradictions: 1" in out
+    assert "Review tasks: task-review-src-123-src-456-1234567890" in out
 
 
 def test_cli_file_answer_reports_invalid_saved_query_snapshot(tmp_path: Path, capsys) -> None:

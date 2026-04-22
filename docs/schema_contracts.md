@@ -160,6 +160,7 @@ Minimal frontmatter contract for wiki pages:
 - `related_pages`
 - `tags`
 - `provenance_links`
+- `contradictions`
 
 Current runtime behavior:
 
@@ -167,6 +168,10 @@ Current runtime behavior:
 - those pages persist `last_generated_at`
 - those pages persist structured provenance links back to the source manifest, ingest run, and
   source-content path actually read
+- when contradiction review finds explicit conflicts, both involved source-summary pages switch to
+  `review_state: contested`
+- contested pages persist structured contradiction annotations with linked review-task IDs and
+  evidence snippets for both sides of the conflict
 
 ## Planning objects
 
@@ -179,6 +184,14 @@ Strict record contracts currently exist for:
 
 The implemented fields follow the product spec closely and reserve room for future markdown-backed
 renderers and CLI creation commands.
+
+Task records now also reserve:
+
+- `page_refs`
+- `run_refs`
+
+Those fields let contradiction-review tasks carry explicit links back to the affected wiki pages
+and the ingest run that surfaced the conflict.
 
 ## Queue and run records
 
@@ -199,6 +212,8 @@ free-form `output_refs` values:
 - `source_ids`
 - `page_ids`
 - `page_refs`
+- `contradiction_ids`
+- `task_ids`
 - `provenance_links`
 
 Current runtime behavior:
@@ -206,8 +221,26 @@ Current runtime behavior:
 - ingest populates `source_ids` as soon as the run is created
 - successful ingest runs populate `page_ids`, `page_refs`, and structured generated-page
   provenance while preserving `input_refs` and `output_refs` for compatibility
+- contradiction-reviewed ingest runs also persist the contradiction IDs and linked review-task IDs
+  created or touched during that run
 - failed runs retain only the source/input-side structured provenance that was actually known at
   failure time
+
+## Review config
+
+The workspace config now reserves an optional `reviews.contradictions` section:
+
+- `enabled`
+- `provider`
+- `model`
+- `max_candidate_pages`
+- `review_task_priority`
+
+Current runtime behavior:
+
+- contradiction review is scoped to existing source-summary pages during ingest
+- OpenAI-backed contradiction review runs only when `OPENAI_API_KEY` is configured
+- missing provider credentials degrade cleanly to a run warning instead of failing ingest
 
 ## Current storage decision
 

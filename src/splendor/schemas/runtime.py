@@ -41,4 +41,6 @@ class RunRecord(StrictRecord):
     source_ids: list[str] = Field(default_factory=list)
     page_ids: list[str] = Field(default_factory=list)
     page_refs: list[str] = Field(default_factory=list)
+    contradiction_ids: list[str] = Field(default_factory=list)
+    task_ids: list[str] = Field(default_factory=list)
     provenance_links: list[ProvenanceLink] = Field(default_factory=list)

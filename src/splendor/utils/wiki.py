@@ -77,9 +77,14 @@ def render_source_summary_page(
     summary: str,
     key_facts: list[str],
     extract: str | None,
+    contradictions: list[str] | None = None,
     provenance: list[str],
 ) -> str:
     key_fact_lines = "\n".join(f"- {line}" for line in key_facts)
+    contradiction_section = ""
+    if contradictions:
+        contradiction_lines = "\n".join(f"- {line}" for line in contradictions)
+        contradiction_section = f"## Contradictions\n\n{contradiction_lines}\n\n"
     provenance_lines = "\n".join(f"- {line}" for line in provenance)
     extract_section = ""
     if extract is not None:
@@ -94,6 +99,7 @@ def render_source_summary_page(
         "## Key Facts\n\n"
         f"{key_fact_lines}\n\n"
         f"{extract_section}"
+        f"{contradiction_section}"
         "## Provenance\n\n"
         f"{provenance_lines}\n"
     )

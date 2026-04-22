@@ -328,13 +328,14 @@ quickstart, companion-repo setup guidance, a committed in-repo example workspace
 regression coverage for operational edge cases, consistent one-line CLI error output, and a
 package-install smoke path that validates the built CLI.
 
-`M6-P1` is now implemented through `M6-P1.1` and `M6-P1.2`. The repository now persists
-machine-generated review state for source-summary pages, structured source/page/run provenance in
-ingest artifacts, richer query metadata, and deterministic lint/health validation for those
-cross-links.
+`M6-P1` is implemented through `M6-P1.1` and `M6-P1.2`, and `M6-P2.1` is now implemented on top of
+that foundation. The repository now persists machine-generated and contested review states for
+source-summary pages, structured source/page/run provenance in ingest artifacts, contradiction
+annotations plus linked review tasks for explicit conflicts, richer query metadata, and
+deterministic lint/health validation for those cross-links.
 
-The next planned PR sub-slice is `M6-P2.1`, under parent slice `M6-P2`, which turns that stronger
-provenance foundation into contradiction surfacing and review-task linkage.
+The next planned PR sub-slice is `M7-P1.1`, under parent slice `M7-P1`, which moves the roadmap
+forward into repo scan and code/doc source classification.
 
 ---
 
@@ -378,9 +379,8 @@ This milestone is especially important for sensitive, policy-heavy, or research-
 
 ### Milestone 6 status
 
-`M6-P1` is implemented. The next planned work in this milestone is `M6-P2.1`, which will use the
-now-persisted provenance and review-state foundation to surface contradictions and create explicit
-review-task linkage.
+`M6-P1` and `M6-P2.1` are implemented. This milestone now includes explicit contradiction
+annotations on contested source-summary pages plus linked review tasks created during ingest.
 
 ---
 
