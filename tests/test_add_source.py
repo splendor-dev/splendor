@@ -61,6 +61,9 @@ def test_add_source_registers_workspace_file_without_copy_by_default(tmp_path: P
     assert manifest.storage_mode == "none"
     assert manifest.storage_path is None
     assert manifest.materialized_at is None
+    assert manifest.source_class is None
+    assert manifest.source_labels == []
+    assert manifest.discovered_by is None
     assert manifest.original_path == "note.md"
     assert not (tmp_path / "raw" / "sources" / result.source_id).exists()
 

@@ -13,7 +13,13 @@ from pydantic import Field
 
 from splendor.schemas.common import StrictRecord
 from splendor.schemas.provenance import ProvenanceLink
-from splendor.schemas.types import SourceRefKind, SourceReviewState, StorageMode
+from splendor.schemas.types import (
+    SourceClass,
+    SourceDiscoveryMode,
+    SourceRefKind,
+    SourceReviewState,
+    StorageMode,
+)
 
 
 class SourceRecord(StrictRecord):
@@ -43,4 +49,7 @@ class SourceRecord(StrictRecord):
     storage_path: str | None = None
     materialized_at: str | None = None
     source_commit: str | None = None
+    source_class: SourceClass | None = None
+    source_labels: list[str] = Field(default_factory=list)
+    discovered_by: SourceDiscoveryMode | None = None
     provenance_links: list[ProvenanceLink] = Field(default_factory=list)

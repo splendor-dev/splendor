@@ -16,6 +16,8 @@ from splendor.schemas.source_pointer import SourcePointerArtifact
 from splendor.schemas.types import (
     PageReviewState,
     ProvenanceRole,
+    SourceClass,
+    SourceDiscoveryMode,
     SourceRefKind,
     SourceReviewState,
     StorageMode,
@@ -40,6 +42,8 @@ __all__ = [
     "QuestionRecord",
     "QueueItemRecord",
     "RunRecord",
+    "SourceClass",
+    "SourceDiscoveryMode",
     "SourceRefKind",
     "SourceReviewState",
     "SourcePointerArtifact",

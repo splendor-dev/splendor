@@ -116,13 +116,14 @@ Implemented today:
 - `splendor query "<question>"` and `splendor query "<question>" --json`
 - `splendor file-answer --from-last-query --title "..."`
 - `splendor task|milestone|decision|question ...`
+- `splendor repo scan`
 - `splendor lint` and `splendor health`
 
 Not implemented yet:
 
 - OCR and image extraction flows
 - local web UI
-- code-aware repo scan and refresh commands
+- code-aware repo refresh commands
 
 ## Documentation
 
@@ -134,6 +135,11 @@ Not implemented yet:
 - [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
 
 ## What Comes Next
+
+- Last completed PR sub-slice: `M6-P2.1`
+- Active planned slice: `M7-P1`
+- Active planned PR sub-slice: `M7-P1.1`
+- Next planned slice: `M7-P2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel

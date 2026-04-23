@@ -11,7 +11,7 @@ from splendor import __version__
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourcePointerArtifact, SourceRecord
-from splendor.schemas.types import StorageMode
+from splendor.schemas.types import SourceClass, SourceDiscoveryMode, StorageMode
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.source_compat import (
     canonical_source_ref,
@@ -427,6 +427,10 @@ def register_source(
     *,
     storage_mode: StorageMode | None = None,
     capture_source_commit: bool | None = None,
+    source_class: SourceClass | None = None,
+    source_labels: list[str] | None = None,
+    discovered_by: SourceDiscoveryMode | None = None,
+    refresh_existing_metadata: bool = False,
 ) -> RegisteredSource:
     candidate = source_path.expanduser().resolve()
     if not candidate.exists():
@@ -480,6 +484,23 @@ def register_source(
         existing_stored_path, existing_storage_mode, existing_source_ref = (
             _validated_existing_registration(root=root, layout=layout, existing=existing)
         )
+        if refresh_existing_metadata and existing.source_ref_kind == "workspace_path":
+            updated = existing.model_copy(
+                update={
+                    "source_class": source_class
+                    if source_class is not None
+                    else existing.source_class,
+                    "source_labels": sorted(source_labels or existing.source_labels),
+                    "discovered_by": (
+                        existing.discovered_by
+                        if existing.discovered_by is not None
+                        else discovered_by
+                    ),
+                }
+            )
+            if updated != existing:
+                write_source_record(manifest_path, updated)
+                existing = updated
         return RegisteredSource(
             record=existing,
             manifest_path=manifest_path,
@@ -520,6 +541,9 @@ def register_source(
         ),
         materialized_at=(added_at if stored_path is not None else None),
         source_commit=source_commit,
+        source_class=source_class,
+        source_labels=sorted(source_labels or []),
+        discovered_by=discovered_by,
     )
     write_source_record(manifest_path, record)
     return RegisteredSource(

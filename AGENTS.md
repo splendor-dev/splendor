@@ -43,6 +43,14 @@
   that its labels and milestone are set before treating the task as done.
 - When a PR implements work from a plan, update the versioned planning state in the same PR:
   `.agent-plan.md`, `README.md`, and any affected human-facing planning document in `docs/`.
+- Keep the structured planning-state lines synchronized across `.agent-plan.md`, the `README.md`
+  "What Comes Next" block, and `docs/splendor_mvp_to_v1_roadmap.md`:
+  - `Last completed PR sub-slice`
+  - `Active planned slice`
+  - `Active planned PR sub-slice`
+  - `Next planned slice`
+- Before publishing a roadmap-advancing PR, run `uv run splendor lint` or otherwise verify the
+  planning-state drift check passes so merged work cannot leave those files stale.
 - PR titles, descriptions, and planning updates should use the concrete PR sub-slice notation when
   one exists, while still naming the parent milestone slice that the PR advances.
 

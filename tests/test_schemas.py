@@ -41,6 +41,9 @@ def test_source_record_validation_accepts_valid_expanded_payload() -> None:
         storage_path=None,
         materialized_at="2026-04-10T15:01:00+00:00",
         source_commit="abc123",
+        source_class="documentation",
+        source_labels=["agent-instructions"],
+        discovered_by="repo_scan",
         generated_by_run_ids=["run-src-123"],
         reviewed_at="2026-04-11T15:00:00+00:00",
         reviewed_by="reviewer@example.com",
@@ -56,6 +59,9 @@ def test_source_record_validation_accepts_valid_expanded_payload() -> None:
 
     assert record.source_ref == "docs/spec.md"
     assert record.storage_mode == "none"
+    assert record.source_class == "documentation"
+    assert record.source_labels == ["agent-instructions"]
+    assert record.discovered_by == "repo_scan"
     assert record.generated_by_run_ids == ["run-src-123"]
     assert record.reviewed_by == "reviewer@example.com"
 
@@ -217,6 +223,20 @@ def test_source_record_validation_rejects_invalid_storage_mode() -> None:
             added_at="2026-04-10T15:00:00+00:00",
             pipeline_version="0.1.0a0",
             storage_mode="bogus",
+        )
+
+
+def test_source_record_validation_rejects_invalid_source_class() -> None:
+    with pytest.raises(ValidationError):
+        SourceRecord(
+            source_id="src-1234567890abcdef",
+            title="Spec",
+            source_type="md",
+            path="raw/sources/src-123/spec.md",
+            checksum="a" * 64,
+            added_at="2026-04-10T15:00:00+00:00",
+            pipeline_version="0.1.0a0",
+            source_class="bogus",
         )
 
 
