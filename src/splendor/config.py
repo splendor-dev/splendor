@@ -43,11 +43,28 @@ class SourcesConfig(BaseModel):
     summarize_external_extracts_as: SummaryMode = "full"
 
 
+class ContradictionsReviewConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    provider: str = "openai"
+    model: str | None = None
+    max_candidate_pages: int = Field(default=20, ge=1)
+    review_task_priority: str = "high"
+
+
+class ReviewsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contradictions: ContradictionsReviewConfig = Field(default_factory=ContradictionsReviewConfig)
+
+
 class SplendorConfig(BaseModel):
     schema_version: str = "1"
     project_name: str = "Splendor workspace"
     layout: LayoutConfig = Field(default_factory=LayoutConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
+    reviews: ReviewsConfig = Field(default_factory=ReviewsConfig)
 
 
 def config_path_for(root: Path) -> Path:

@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import Field
 
 from splendor.schemas.common import StrictRecord
+from splendor.schemas.contradictions import ContradictionAnnotation
 from splendor.schemas.provenance import ProvenanceLink
 from splendor.schemas.types import PageReviewState
 
@@ -25,3 +26,4 @@ class KnowledgePageFrontmatter(StrictRecord):
     related_pages: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     provenance_links: list[ProvenanceLink] = Field(default_factory=list)
+    contradictions: list[ContradictionAnnotation] = Field(default_factory=list)

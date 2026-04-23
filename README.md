@@ -142,10 +142,10 @@ install validation.
 Planning notation now distinguishes parent slices such as `M6-P1` from concrete PR sub-slices such
 as `M6-P1.1`, `M6-P1.2`, and `M6-P2.1`.
 
-`M6-P1` is now implemented through `M6-P1.1` and `M6-P1.2`: the repository has review-state and
-provenance schema support, ingest writes structured source/page/run provenance, source-summary
-pages persist `machine-generated` review state, query surfaces that metadata, and lint/health
-validate the cross-links.
+`M6-P2.1` is now implemented on top of the `M6-P1` provenance foundation: ingest can optionally
+run contradiction review for source-summary pages, contested pages persist contradiction
+annotations plus linked review tasks, query surfaces contradiction counts and task IDs, and
+lint/health validate the new page/task/run links.
 
-The next planned PR sub-slice is `M6-P2.1`, under the parent slice `M6-P2`, which will focus on
-contradiction surfacing and review-task linkage.
+The next planned PR sub-slice is `M7-P1.1`, under the parent slice `M7-P1`, which will focus on
+repo scan and code/doc source classification.

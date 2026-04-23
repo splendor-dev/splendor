@@ -20,6 +20,7 @@ def write_wiki_page(
     source_refs: list[str] | None = None,
     generated_by_run_ids: list[str] | None = None,
     tags: list[str] | None = None,
+    contradictions: list[dict] | None = None,
     body: str = "",
 ) -> None:
     frontmatter = KnowledgePageFrontmatter(
@@ -31,6 +32,7 @@ def write_wiki_page(
         generated_by_run_ids=generated_by_run_ids or [],
         confidence=0.8,
         tags=tags or [],
+        contradictions=contradictions or [],
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
@@ -72,6 +74,8 @@ def test_run_query_returns_ranked_matches_from_wiki_and_planning(tmp_path: Path)
     assert wiki_match.review_state == "draft"
     assert wiki_match.last_generated_at is None
     assert wiki_match.provenance_links == []
+    assert wiki_match.contradiction_count == 0
+    assert wiki_match.review_task_ids == []
 
 
 def test_run_query_excludes_index_and_log(tmp_path: Path) -> None:
@@ -276,6 +280,52 @@ def test_run_query_surfaces_wiki_provenance_fields(tmp_path: Path) -> None:
     assert match.review_state == "machine-generated"
     assert match.last_generated_at == "2026-04-22T10:00:00+00:00"
     assert match.provenance_links[0].run_id == "run-123"
+
+
+def test_run_query_surfaces_contradiction_counts_and_review_tasks(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "sources" / "src-123.md",
+        title="Generated source summary",
+        page_id="src-123",
+        kind="source-summary",
+        status="active",
+        source_refs=["src-123"],
+        generated_by_run_ids=["run-123"],
+        contradictions=[
+            {
+                "contradiction_id": "contradiction-src-123-src-456-1234567890",
+                "summary": "The pages disagree about the active storage mode.",
+                "detected_at": "2026-04-22T10:05:00+00:00",
+                "related_page_ids": ["src-123", "src-456"],
+                "related_source_ids": ["src-123", "src-456"],
+                "review_task_id": "task-review-src-123-src-456-1234567890",
+                "evidence": [
+                    {
+                        "page_id": "src-123",
+                        "source_id": "src-123",
+                        "run_id": "run-123",
+                        "path_ref": "wiki/sources/src-123.md",
+                        "excerpt": "Storage mode is none.",
+                    }
+                ],
+            }
+        ],
+        body=(
+            "## Source\n\n- Source ID: `src-123`\n\n"
+            "## Summary\n\nGenerated summary.\n\n"
+            "## Key Facts\n\n- Fact\n\n"
+            "## Contradictions\n\n"
+            "- Contradiction.\n\n"
+            "## Provenance\n\n- Run ID: `run-123`\n"
+        ),
+    )
+
+    result = run_query(tmp_path, "generated")
+
+    match = result.matches[0]
+    assert match.contradiction_count == 1
+    assert match.review_task_ids == ["task-review-src-123-src-456-1234567890"]
 
 
 def test_query_snapshot_schema_round_trip(tmp_path: Path) -> None:

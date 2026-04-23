@@ -10,8 +10,16 @@ from splendor.commands.lint import run_lint_checks
 from splendor.commands.planning import create_task
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import KnowledgePageFrontmatter, ProvenanceLink, QuestionRecord, TaskRecord
+from splendor.schemas import (
+    ContradictionAnnotation,
+    ContradictionEvidence,
+    KnowledgePageFrontmatter,
+    ProvenanceLink,
+    QuestionRecord,
+    TaskRecord,
+)
 from splendor.state.source_registry import load_source_record, write_source_record
+from splendor.utils.wiki import parse_wiki_markdown
 
 
 def _run_lint(root: Path):
@@ -218,6 +226,87 @@ def test_run_lint_checks_reports_invalid_linked_page_refs_separately(tmp_path: P
     assert all(
         issue.path == manifest_path.relative_to(tmp_path).as_posix() for issue in result.issues
     )
+
+
+def test_run_lint_checks_reports_broken_contradiction_links_and_missing_task_fields(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    page_path = tmp_path / "wiki" / "sources" / "src-123.md"
+    _write_wiki_page(
+        page_path,
+        title="Source summary",
+        page_id="src-123",
+        source_refs=[],
+    )
+    _write_wiki_page(
+        tmp_path / "wiki" / "sources" / "src-456.md",
+        title="Other source summary",
+        page_id="src-456",
+        source_refs=[],
+    )
+    page = parse_wiki_markdown(page_path)
+    broken_page = page.frontmatter.model_copy(
+        update={
+            "kind": "source-summary",
+            "review_state": "contested",
+            "contradictions": [
+                ContradictionAnnotation(
+                    contradiction_id="contradiction-src-123-src-456-1234567890",
+                    summary="The pages disagree about storage mode.",
+                    detected_at="2026-04-22T10:05:00+00:00",
+                    related_page_ids=["src-123", "src-456"],
+                    related_source_ids=["src-123", "src-456"],
+                    review_task_id="task-review-src-123-src-456-1234567890",
+                    evidence=[
+                        ContradictionEvidence(
+                            page_id="src-456",
+                            source_id="src-456",
+                            run_id="run-missing",
+                            path_ref="wiki/sources/src-456.md",
+                            excerpt="Storage mode is copy.",
+                        )
+                    ],
+                )
+            ],
+        }
+    )
+    page_path.write_text(
+        "---\n"
+        f"{yaml.safe_dump(broken_page.model_dump(mode='json'), sort_keys=False).strip()}\n"
+        "---\n\n"
+        "## Source\n\n- Source ID: `src-123`\n\n"
+        "## Summary\n\nBody\n\n"
+        "## Key Facts\n\n- Fact\n\n"
+        "## Contradictions\n\n- Broken\n\n"
+        "## Provenance\n\n- Run ID: `run-123`\n",
+        encoding="utf-8",
+    )
+    task = TaskRecord(
+        task_id="task-review-src-123-src-456-1234567890",
+        title="Review contradiction",
+        status="todo",
+        priority="high",
+        created_at="2026-04-22T10:05:00+00:00",
+        updated_at="2026-04-22T10:05:00+00:00",
+        source_refs=[],
+        page_refs=[],
+        run_refs=[],
+    )
+    _write_planning_record(
+        tmp_path / "planning" / "tasks" / "task-review-src-123-src-456-1234567890.md",
+        task,
+    )
+
+    result = _run_lint(tmp_path)
+
+    assert {issue.code for issue in result.issues} >= {
+        "contradiction-task-missing-page-refs",
+        "contradiction-task-missing-source-refs",
+        "missing-contradiction-source-ref",
+        "missing-contradiction-run-ref",
+        "missing-reciprocal-contradiction",
+    }
 
 
 def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path) -> None:

@@ -38,6 +38,8 @@ class QueryMatch:
     source_refs: list[str]
     generated_by_run_ids: list[str]
     provenance_links: list[ProvenanceLink]
+    contradiction_count: int
+    review_task_ids: list[str]
     tags: list[str]
 
 
@@ -65,6 +67,8 @@ class _QueryDocument:
     source_refs: list[str]
     generated_by_run_ids: list[str]
     provenance_links: list[ProvenanceLink]
+    contradiction_count: int
+    review_task_ids: list[str]
     tags: list[str]
     title_tokens: list[str]
     record_id_tokens: list[str]
@@ -120,6 +124,8 @@ def run_query(root: Path, question: str) -> QueryResult:
             source_refs=item.document.source_refs,
             generated_by_run_ids=item.document.generated_by_run_ids,
             provenance_links=item.document.provenance_links,
+            contradiction_count=item.document.contradiction_count,
+            review_task_ids=item.document.review_task_ids,
             tags=item.document.tags,
         )
         for index, item in enumerate(scored_documents, start=1)
@@ -156,6 +162,10 @@ def _iter_wiki_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocum
                 source_refs=list(frontmatter.source_refs),
                 generated_by_run_ids=list(frontmatter.generated_by_run_ids),
                 provenance_links=list(frontmatter.provenance_links),
+                contradiction_count=len(frontmatter.contradictions),
+                review_task_ids=sorted(
+                    {item.review_task_id for item in frontmatter.contradictions}
+                ),
                 tags=list(frontmatter.tags),
                 title_tokens=_content_tokens(frontmatter.title),
                 record_id_tokens=_content_tokens(frontmatter.page_id),
@@ -205,6 +215,8 @@ def _iter_planning_documents(root: Path, layout: ResolvedLayout) -> list[_QueryD
                     source_refs=source_refs,
                     generated_by_run_ids=[],
                     provenance_links=[],
+                    contradiction_count=0,
+                    review_task_ids=[],
                     tags=[],
                     title_tokens=_content_tokens(record.title),
                     record_id_tokens=_content_tokens(record_id),

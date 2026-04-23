@@ -39,6 +39,11 @@ from splendor.state.source_registry import (
     write_source_record,
 )
 from splendor.state.source_resolver import resolve_source_content
+from splendor.utils.contradictions import (
+    render_contradiction_lines,
+    review_source_summary_contradictions,
+    snapshot_from_rendered_page,
+)
 from splendor.utils.fs import write_text_atomic
 from splendor.utils.provenance import dedupe_provenance_links, make_provenance_link
 from splendor.utils.time import utc_now_iso
@@ -626,32 +631,63 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 resolved_ref=resolved_source.resolved_ref,
             ),
         )
+        source_section = "\n".join(
+            [
+                f"- Source ID: `{source.source_id}`",
+                f"- Source type: `{source.source_type}`",
+                f"- Registered path: `{registered_path}`",
+                f"- Source file: `{resolved_source.resolved_ref}`",
+            ]
+        )
+        key_facts = [
+            f"Source ID: `{source.source_id}`",
+            f"Source type: `{source.source_type}`",
+            f"Checksum: `{source.checksum}`",
+            f"Source ref: `{canonical_source_ref(source)}`",
+            f"Added at: `{source.added_at}`",
+            f"Ingested at: `{finished_at}`",
+        ]
+        provenance_lines = [
+            f"Manifest: `{_relative_to_root(root, manifest_path)}`",
+            f"{resolved_source.content_origin_label}: `{resolved_source.resolved_ref}`",
+            f"Run ID: `{run_id}`",
+            f"Pipeline version: `{__version__}`",
+        ]
         page_content = render_source_summary_page(
             frontmatter,
-            source_section="\n".join(
-                [
-                    f"- Source ID: `{source.source_id}`",
-                    f"- Source type: `{source.source_type}`",
-                    f"- Registered path: `{registered_path}`",
-                    f"- Source file: `{resolved_source.resolved_ref}`",
-                ]
-            ),
+            source_section=source_section,
             summary=_build_summary(source),
-            key_facts=[
-                f"Source ID: `{source.source_id}`",
-                f"Source type: `{source.source_type}`",
-                f"Checksum: `{source.checksum}`",
-                f"Source ref: `{canonical_source_ref(source)}`",
-                f"Added at: `{source.added_at}`",
-                f"Ingested at: `{utc_now_iso()}`",
-            ],
+            key_facts=key_facts,
             extract=_rendered_extract(source_text, extract_mode),
-            provenance=[
-                f"Manifest: `{_relative_to_root(root, manifest_path)}`",
-                f"{resolved_source.content_origin_label}: `{resolved_source.resolved_ref}`",
-                f"Run ID: `{run_id}`",
-                f"Pipeline version: `{__version__}`",
-            ],
+            contradictions=render_contradiction_lines(
+                page_ref=page_relpath, contradictions=frontmatter.contradictions
+            ),
+            provenance=provenance_lines,
+        )
+        current_snapshot = snapshot_from_rendered_page(
+            root=root,
+            page_path=page_path,
+            frontmatter=frontmatter,
+            page_content=page_content,
+        )
+        contradiction_review = review_source_summary_contradictions(
+            root=root,
+            layout=layout,
+            config=config,
+            current_snapshot=current_snapshot,
+            run_id=run_id,
+        )
+        frontmatter = contradiction_review.frontmatter
+        page_content = render_source_summary_page(
+            frontmatter,
+            source_section=source_section,
+            summary=_build_summary(source),
+            key_facts=key_facts,
+            extract=_rendered_extract(source_text, extract_mode),
+            contradictions=render_contradiction_lines(
+                page_ref=page_relpath, contradictions=frontmatter.contradictions
+            ),
+            provenance=provenance_lines,
         )
         index_content = update_index_content(
             layout.index_file.read_text(encoding="utf-8"),
@@ -687,9 +723,20 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                     page_relpath,
                     _relative_to_root(root, layout.index_file),
                     _relative_to_root(root, layout.log_file),
+                    *[
+                        _relative_to_root(root, path)
+                        for path, _content in contradiction_review.page_updates
+                    ],
+                    *[
+                        _relative_to_root(root, update.task_path)
+                        for update in contradiction_review.task_updates
+                    ],
                 ],
                 "page_ids": [source.source_id],
                 "page_refs": [page_relpath],
+                "contradiction_ids": contradiction_review.contradiction_ids,
+                "task_ids": contradiction_review.task_ids,
+                "warnings": [*run.warnings, *contradiction_review.warnings],
                 "provenance_links": _run_success_provenance_links(
                     source_id=source.source_id,
                     manifest_ref=_relative_to_root(root, manifest_path),
@@ -722,6 +769,13 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 page_content=page_content,
                 index_content=index_content,
                 log_content=log_content,
+                extra_writes=[
+                    *contradiction_review.page_updates,
+                    *[
+                        (update.task_path, update.content)
+                        for update in contradiction_review.task_updates
+                    ],
+                ],
             ),
         )
         return IngestResult(

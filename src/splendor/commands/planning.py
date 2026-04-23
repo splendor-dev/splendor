@@ -83,6 +83,8 @@ def create_task(
     question_refs: list[str],
     depends_on: list[str],
     source_refs: list[str],
+    page_refs: list[str] | None = None,
+    run_refs: list[str] | None = None,
 ) -> CreatePlanningResult:
     timestamp = utc_now_iso()
     task_id = record_id or default_record_id("task", title)
@@ -99,6 +101,8 @@ def create_task(
         updated_at=timestamp,
         depends_on=depends_on,
         source_refs=source_refs,
+        page_refs=page_refs or [],
+        run_refs=run_refs or [],
     )
     return _write_record(root, record, title=title)
 

@@ -1,5 +1,6 @@
 """Schema exports."""
 
+from splendor.schemas.contradictions import ContradictionAnnotation, ContradictionEvidence
 from splendor.schemas.maintenance import MaintenanceCommand, MaintenanceIssue, MaintenanceReport
 from splendor.schemas.planning import (
     DecisionRecord,
@@ -23,6 +24,8 @@ from splendor.schemas.types import (
 from splendor.schemas.wiki import KnowledgePageFrontmatter
 
 __all__ = [
+    "ContradictionAnnotation",
+    "ContradictionEvidence",
     "DecisionRecord",
     "KnowledgePageFrontmatter",
     "MaintenanceCommand",

@@ -23,6 +23,8 @@ class TaskRecord(StrictRecord):
     updated_at: str
     depends_on: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
+    page_refs: list[str] = Field(default_factory=list)
+    run_refs: list[str] = Field(default_factory=list)
 
 
 class MilestoneRecord(StrictRecord):
