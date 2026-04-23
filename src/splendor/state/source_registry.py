@@ -485,12 +485,15 @@ def register_source(
             _validated_existing_registration(root=root, layout=layout, existing=existing)
         )
         if refresh_existing_metadata and existing.source_ref_kind == "workspace_path":
-            updated = existing.model_copy(
-                update={
+            updated = SourceRecord.model_validate(
+                existing.model_dump(mode="json")
+                | {
                     "source_class": source_class
                     if source_class is not None
                     else existing.source_class,
-                    "source_labels": sorted(source_labels or existing.source_labels),
+                    "source_labels": sorted(
+                        source_labels if source_labels is not None else existing.source_labels
+                    ),
                     "discovered_by": (
                         existing.discovered_by
                         if existing.discovered_by is not None

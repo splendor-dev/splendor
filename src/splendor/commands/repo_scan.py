@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,19 +53,28 @@ def scan_repo(root: Path) -> RepoScanResult:
     ignored = 0
     unsupported = 0
 
-    for path in sorted(
-        root.rglob("*"), key=lambda candidate: candidate.relative_to(root).as_posix()
-    ):
-        if not path.is_file():
-            continue
-        relative_path = path.relative_to(root).as_posix()
-        if _is_ignored_path(path, root, layout):
-            ignored += 1
-            continue
-        if path.suffix.lstrip(".") not in SUPPORTED_SOURCE_TYPES:
-            unsupported += 1
-            continue
-        supported_paths.append(path)
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+        current_dir = Path(dirpath)
+        dirnames[:] = [
+            dirname
+            for dirname in sorted(dirnames)
+            if not _is_ignored_dir(current_dir / dirname, root, layout)
+        ]
+        ignored += len(filenames) - len(
+            [
+                filename
+                for filename in filenames
+                if not _is_ignored_path(current_dir / filename, root, layout)
+            ]
+        )
+        for filename in sorted(filenames):
+            path = current_dir / filename
+            if _is_ignored_path(path, root, layout):
+                continue
+            if path.suffix.lstrip(".") not in SUPPORTED_SOURCE_TYPES:
+                unsupported += 1
+                continue
+            supported_paths.append(path)
 
     touched_sources: list[RepoScanItem] = []
     class_counts = {name: 0 for name in ("code", "documentation", "configuration", "other")}
@@ -137,6 +147,19 @@ def _is_ignored_path(path: Path, root: Path, layout) -> bool:
     if not relative.parts:
         return False
     first = relative.parts[0]
+    return first in _ignored_top_level_dirs(root, layout)
+
+
+def _is_ignored_dir(path: Path, root: Path, layout) -> bool:
+    relative = path.relative_to(root)
+    if not relative.parts:
+        return False
+    if len(relative.parts) == 1:
+        return relative.parts[0] in _ignored_top_level_dirs(root, layout)
+    return False
+
+
+def _ignored_top_level_dirs(root: Path, layout) -> set[str]:
     ignored_top_level_dirs = _IGNORED_TOP_LEVEL_DIRS | {
         layout.raw_dir.relative_to(root).parts[0],
         layout.derived_dir.relative_to(root).parts[0],
@@ -145,7 +168,7 @@ def _is_ignored_path(path: Path, root: Path, layout) -> bool:
         layout.wiki_dir.relative_to(root).parts[0],
         layout.planning_dir.relative_to(root).parts[0],
     }
-    return first in ignored_top_level_dirs
+    return ignored_top_level_dirs
 
 
 def _classify_path(path: Path, relative_path: str) -> SourceClass:

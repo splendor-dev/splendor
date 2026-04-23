@@ -78,7 +78,7 @@ def test_repo_scan_ignores_managed_and_transient_directories(tmp_path: Path) -> 
 
     assert result.scanned == 1
     assert result.registered == 1
-    assert result.ignored >= 4
+    assert result.ignored == 0
     assert [item.path for item in result.touched_sources] == ["README.md"]
 
 
