@@ -28,6 +28,7 @@ from splendor.commands.planning import (
     update_question_answer,
 )
 from splendor.commands.query import run_query
+from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import (
@@ -296,6 +297,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--related-decision", action="append", default=[], help="Related decision reference"
     )
     question_create_parser.set_defaults(handler=handle_question_create)
+
+    repo_parser = subparsers.add_parser("repo", help="Inspect repository-native sources")
+    repo_subparsers = repo_parser.add_subparsers(dest="repo_command", required=True)
+    repo_scan_parser = repo_subparsers.add_parser(
+        "scan", help="Scan the workspace and register supported in-repo sources"
+    )
+    repo_scan_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    repo_scan_parser.set_defaults(handler=handle_repo_scan)
     return parser
 
 
@@ -533,6 +547,40 @@ def handle_query(args: argparse.Namespace) -> int:
             print(f"   Contradictions: {match.contradiction_count}")
         if match.review_task_ids:
             print(f"   Review tasks: {', '.join(match.review_task_ids)}")
+    return 0
+
+
+def handle_repo_scan(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = scan_repo(root)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_repo_scan_json(result))
+        return 0
+
+    print(
+        "Repo scan summary: "
+        f"scanned={result.scanned} "
+        f"registered={result.registered} "
+        f"already_registered={result.already_registered} "
+        f"unsupported={result.unsupported} "
+        f"ignored={result.ignored}"
+    )
+    print(
+        "Class counts: "
+        + " ".join(f"{name}={count}" for name, count in result.class_counts.items())
+    )
+    if result.touched_sources:
+        print("Touched sources:")
+        for item in result.touched_sources:
+            labels = ", ".join(item.source_labels) if item.source_labels else "-"
+            print(
+                f"- {item.path}: {item.status} "
+                f"(source_id={item.source_id} class={item.source_class} labels={labels})"
+            )
     return 0
 
 

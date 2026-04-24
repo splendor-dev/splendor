@@ -64,6 +64,87 @@ def test_run_lint_checks_returns_no_issues_for_initialized_workspace(tmp_path: P
     assert result.issues == []
 
 
+def test_run_lint_checks_skips_planning_state_guard_when_files_are_absent(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+
+    result = _run_lint(tmp_path)
+
+    assert all(issue.check_name != "planning-state" for issue in result.issues)
+
+
+def test_run_lint_checks_reports_planning_state_drift(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "## Current System State\n\n"
+        "- Last completed PR sub-slice: `M6-P2.1`\n"
+        "- Active planned slice: `M7-P1`\n"
+        "- Active planned PR sub-slice: `M7-P1.1`\n"
+        "- Next planned slice: `M7-P2`\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "## What Comes Next\n\n"
+        "- Last completed PR sub-slice: `M6-P2.1`\n"
+        "- Active planned slice: `M7-P1`\n"
+        "- Active planned PR sub-slice: `M7-P1.1`\n"
+        "- Next planned slice: `M8-P1`\n",
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "splendor_mvp_to_v1_roadmap.md").write_text(
+        "- Last completed PR sub-slice: `M6-P2.1`\n"
+        "- Active planned slice: `M7-P1`\n"
+        "- Active planned PR sub-slice: `M7-P1.1`\n"
+        "- Next planned slice: `M7-P2`\n",
+        encoding="utf-8",
+    )
+
+    result = _run_lint(tmp_path)
+
+    planning_issues = [issue for issue in result.issues if issue.check_name == "planning-state"]
+    assert len(planning_issues) == 1
+    assert planning_issues[0].code == "planning-state-drift"
+    assert planning_issues[0].path == "README.md"
+
+
+def test_run_lint_checks_reports_missing_planning_state_line(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "## Current System State\n\n"
+        "- Last completed PR sub-slice: `M6-P2.1`\n"
+        "- Active planned slice: `M7-P1`\n"
+        "- Active planned PR sub-slice: `M7-P1.1`\n"
+        "- Next planned slice: `M7-P2`\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "## What Comes Next\n\n"
+        "- Last completed PR sub-slice: `M6-P2.1`\n"
+        "- Active planned slice: `M7-P1`\n"
+        "- Active planned PR sub-slice: `M7-P1.1`\n"
+        "- Next planned slice: `M7-P2`\n",
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "splendor_mvp_to_v1_roadmap.md").write_text(
+        "- Last completed PR sub-slice: `M6-P2.1`\n"
+        "- Active planned slice: `M7-P1`\n"
+        "- Next planned slice: `M7-P2`\n",
+        encoding="utf-8",
+    )
+
+    result = _run_lint(tmp_path)
+
+    planning_issues = [issue for issue in result.issues if issue.check_name == "planning-state"]
+    assert len(planning_issues) == 1
+    assert planning_issues[0].code == "missing-planning-state"
+    assert planning_issues[0].path == "docs/splendor_mvp_to_v1_roadmap.md"
+
+
 def test_run_lint_checks_reports_invalid_wiki_frontmatter_without_fatal_error(
     tmp_path: Path,
 ) -> None:

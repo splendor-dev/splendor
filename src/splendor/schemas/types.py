@@ -7,6 +7,8 @@ from typing import Literal
 StorageMode = Literal["none", "copy", "symlink", "pointer"]
 SummaryMode = Literal["none", "excerpt", "full"]
 SourceRefKind = Literal["workspace_path", "external_path", "url", "imported", "stored_artifact"]
+SourceClass = Literal["code", "documentation", "configuration", "other"]
+SourceDiscoveryMode = Literal["manual", "repo_scan"]
 PageReviewState = Literal["draft", "machine-generated", "human-reviewed", "contested", "stale"]
 SourceReviewState = Literal[
     "unreviewed",

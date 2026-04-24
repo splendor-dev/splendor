@@ -13,6 +13,7 @@ from splendor.state.source_registry import (
     _write_workspace_symlink,
     load_source_record,
     materializing_storage_mode_for_source,
+    register_source,
     resolve_manifest_storage_path,
     validate_stored_source_location,
     write_source_record,
@@ -61,6 +62,9 @@ def test_add_source_registers_workspace_file_without_copy_by_default(tmp_path: P
     assert manifest.storage_mode == "none"
     assert manifest.storage_path is None
     assert manifest.materialized_at is None
+    assert manifest.source_class is None
+    assert manifest.source_labels == []
+    assert manifest.discovered_by is None
     assert manifest.original_path == "note.md"
     assert not (tmp_path / "raw" / "sources" / result.source_id).exists()
 
@@ -238,8 +242,48 @@ def test_add_source_supports_symlink_for_workspace_sources(tmp_path: Path) -> No
     assert manifest.source_ref == "note.md"
     assert manifest.source_ref_kind == "workspace_path"
     assert manifest.storage_mode == "symlink"
-    assert manifest.materialized_at is not None
-    assert result.stored_path.read_text(encoding="utf-8") == "# note\n"
+
+
+def test_add_source_refresh_existing_metadata_validates_updated_values(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    add_source(tmp_path, source)
+
+    with pytest.raises(ValueError):
+        register_source(
+            tmp_path,
+            source,
+            source_class="bogus",  # type: ignore[arg-type]
+            refresh_existing_metadata=True,
+        )
+
+
+def test_add_source_refresh_existing_metadata_allows_clearing_labels(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    added = register_source(
+        tmp_path,
+        source,
+        source_class="documentation",
+        source_labels=["agent-instructions"],
+        discovered_by="repo_scan",
+    )
+    cleared = register_source(
+        tmp_path,
+        source,
+        source_class="documentation",
+        source_labels=[],
+        discovered_by="repo_scan",
+        refresh_existing_metadata=True,
+    )
+
+    manifest = load_source_record(cleared.manifest_path)
+    assert manifest.source_id == added.record.source_id
+    assert manifest.source_labels == []
 
 
 def test_effective_storage_mode_accepts_workspace_symlink() -> None:

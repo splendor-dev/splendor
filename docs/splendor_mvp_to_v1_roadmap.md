@@ -334,6 +334,11 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
+- Last completed PR sub-slice: `M6-P2.1`
+- Active planned slice: `M7-P1`
+- Active planned PR sub-slice: `M7-P1.1`
+- Next planned slice: `M7-P2`
+
 The next planned PR sub-slice is `M7-P1.1`, under parent slice `M7-P1`, which moves the roadmap
 forward into repo scan and code/doc source classification.
 

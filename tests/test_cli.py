@@ -54,6 +54,16 @@ def test_cli_add_source_capture_source_commit_flags_are_tri_state() -> None:
     assert no_capture_flag.capture_source_commit is False
 
 
+def test_cli_repo_scan_parser_accepts_json_flag() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["repo", "scan", "--json"])
+
+    assert args.command == "repo"
+    assert args.repo_command == "scan"
+    assert args.json_output is True
+
+
 def test_cli_add_source_command_reports_workspace_backed_registration(
     tmp_path: Path, capsys
 ) -> None:

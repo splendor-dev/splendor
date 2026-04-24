@@ -24,6 +24,17 @@ from splendor.utils.planning import iter_planning_paths, parse_planning_document
 from splendor.utils.wiki import parse_wiki_markdown
 
 _MARKDOWN_LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]+]\(([^)]+)\)")
+_PLANNING_STATE_LABELS = (
+    "Last completed PR sub-slice",
+    "Active planned slice",
+    "Active planned PR sub-slice",
+    "Next planned slice",
+)
+_PLANNING_STATE_PATTERN = re.compile(
+    r"^- (?P<label>Last completed PR sub-slice|Active planned slice|"
+    r"Active planned PR sub-slice|Next planned slice): (?P<value>`[^`]+`|.+)$",
+    re.MULTILINE,
+)
 _PLANNING_MODELS = {
     "task": TaskRecord,
     "milestone": MilestoneRecord,
@@ -391,7 +402,74 @@ def _run_reference_integrity_checks(
             )
         )
 
+    planning_state_checked_count, planning_state_issues = _planning_state_issues(root)
+    checked_count += planning_state_checked_count
+    issues.extend(planning_state_issues)
+
     return _LintCheckResult(checked_count=checked_count, issues=issues)
+
+
+def _planning_state_issues(root: Path) -> tuple[int, list[MaintenanceIssue]]:
+    paths = {
+        "agent-plan": root / ".agent-plan.md",
+        "readme": root / "README.md",
+        "roadmap": root / "docs" / "splendor_mvp_to_v1_roadmap.md",
+    }
+    if not all(path.is_file() for path in paths.values()):
+        return 0, []
+
+    checked_count = len(_PLANNING_STATE_LABELS) * len(paths)
+    parsed = {
+        name: _parse_planning_state(path.read_text(encoding="utf-8"))
+        for name, path in paths.items()
+    }
+    issues: list[MaintenanceIssue] = []
+    for name, values in parsed.items():
+        path = workspace_relative_path(root, paths[name])
+        for label in _PLANNING_STATE_LABELS:
+            if label in values:
+                continue
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-planning-state",
+                    message=f"Planning state line is missing: {label}",
+                    path=path,
+                    record_id=label,
+                    check_name="planning-state",
+                )
+            )
+
+    canonical = parsed["agent-plan"]
+    for name in ("readme", "roadmap"):
+        path = workspace_relative_path(root, paths[name])
+        for label in _PLANNING_STATE_LABELS:
+            if label not in canonical or label not in parsed[name]:
+                continue
+            if parsed[name][label] == canonical[label]:
+                continue
+            issues.append(
+                MaintenanceIssue(
+                    code="planning-state-drift",
+                    message=(
+                        f"{label} does not match .agent-plan.md: "
+                        f"expected {canonical[label]}, found {parsed[name][label]}"
+                    ),
+                    path=path,
+                    record_id=label,
+                    check_name="planning-state",
+                )
+            )
+    return checked_count, issues
+
+
+def _parse_planning_state(text: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for match in _PLANNING_STATE_PATTERN.finditer(text):
+        value = match.group("value").strip()
+        if value.startswith("`") and value.endswith("`"):
+            value = value[1:-1]
+        values[match.group("label")] = value
+    return values
 
 
 def _duplicate_id_issues(

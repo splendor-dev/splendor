@@ -41,6 +41,9 @@ Current implementation fields:
 - `storage_path`
 - `materialized_at`
 - `source_commit`
+- `source_class`
+- `source_labels`
+- `discovered_by`
 - `provenance_links`
 
 ### Current source-record shape
@@ -76,6 +79,10 @@ Implemented fields:
 - `origin_url`
 - `original_path`
 - `materialized_at`
+- `source_commit`
+- `source_class`
+- `source_labels`
+- `discovered_by`
 - `provenance_links`
 
 ### Field semantics
@@ -112,6 +119,21 @@ Implemented fields:
   - Timestamp indicating when `storage_path` was created or last refreshed.
 - `source_commit`
   - Optional git commit SHA captured for clean tracked workspace files.
+- `source_class`
+  - Deterministic repo-scan classification.
+  - One of:
+    - `code`
+    - `documentation`
+    - `configuration`
+    - `other`
+- `source_labels`
+  - Deterministic path-role labels such as `test`, `example`, `automation`, and
+    `agent-instructions`.
+- `discovered_by`
+  - Optional registration origin marker.
+  - One of:
+    - `manual`
+    - `repo_scan`
 
 ### Recommended default policy
 
@@ -133,7 +155,7 @@ Splendor currently supports both:
 
 1. legacy manifests that only have `path` and are treated as copied-source records at read time
 2. new manifests that write `source_ref`, `source_ref_kind`, `storage_mode`, `storage_path`,
-   `materialized_at`, and `source_commit`
+   `materialized_at`, `source_commit`, and optional repo-scan classification fields
 
 In this release:
 
@@ -225,6 +247,17 @@ Current runtime behavior:
   created or touched during that run
 - failed runs retain only the source/input-side structured provenance that was actually known at
   failure time
+
+## Repo scan
+
+The CLI now includes `splendor repo scan` for deterministic repo-native discovery.
+
+Current runtime behavior:
+
+- scan supported in-repo text/code files without ingesting them
+- register newly discovered files through the existing source manifest workflow
+- backfill deterministic classification metadata on already-registered workspace-backed sources
+- ignore Splendor-managed directories and transient cache/build directories
 
 ## Review config
 
