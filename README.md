@@ -117,13 +117,14 @@ Implemented today:
 - `splendor file-answer --from-last-query --title "..."`
 - `splendor task|milestone|decision|question ...`
 - `splendor repo scan`
+- `splendor repo refresh`
 - `splendor lint` and `splendor health`
 
 Not implemented yet:
 
 - OCR and image extraction flows
 - local web UI
-- code-aware repo refresh commands
+- changed-files-driven refresh suggestions
 
 ## Documentation
 
@@ -136,22 +137,24 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Last completed PR sub-slice: `M6-P2.1`
-- Active planned slice: `M7-P1`
-- Active planned PR sub-slice: `M7-P1.1`
-- Next planned slice: `M7-P2`
+- Previous completed PR sub-slice: `M7-P1.1`
+- Current planned slice: `M7-P2`
+- Current PR sub-slice: `M7-P2.1`
+- Current PR lifecycle: `branch=in-progress; main=merged`
+- Next planned slice: `M8-P1`
+- Next planned PR sub-slice: `M8-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
 install validation.
 
-Planning notation now distinguishes parent slices such as `M6-P1` from concrete PR sub-slices such
-as `M6-P1.1`, `M6-P1.2`, and `M6-P2.1`.
+Planning notation now distinguishes parent slices such as `M7-P2` from concrete PR sub-slices such
+as `M7-P2.1`. `Current PR lifecycle: branch=in-progress; main=merged` means the current sub-slice
+is in progress on feature branches and is the latest merged work once observed on `main`.
 
-`M6-P2.1` is now implemented on top of the `M6-P1` provenance foundation: ingest can optionally
-run contradiction review for source-summary pages, contested pages persist contradiction
-annotations plus linked review tasks, query surfaces contradiction counts and task IDs, and
-lint/health validate the new page/task/run links.
+`M7-P1.1` is now implemented: repo scan discovers supported in-repo code, documentation, and
+configuration sources, backfills classification metadata, and lint enforces synchronized
+planning-state fields.
 
-The next planned PR sub-slice is `M7-P1.1`, under the parent slice `M7-P1`, which will focus on
-repo scan and code/doc source classification.
+The current PR sub-slice is `M7-P2.1`, under the parent slice `M7-P2`, which focuses on repo
+refresh and architecture/topic linkage.

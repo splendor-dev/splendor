@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,41 @@ from splendor.utils.wiki import parse_wiki_markdown
 def _run_lint(root: Path):
     layout = resolve_layout(root, load_config(root))
     return run_lint_checks(root, layout)
+
+
+def _planning_state_text(*, current: str = "M7-P2.1", lifecycle: str | None = None) -> str:
+    lifecycle_value = lifecycle or "branch=in-progress; main=merged"
+    return (
+        "- Previous completed PR sub-slice: `M7-P1.1`\n"
+        "- Current planned slice: `M7-P2`\n"
+        f"- Current PR sub-slice: `{current}`\n"
+        f"- Current PR lifecycle: `{lifecycle_value}`\n"
+        "- Next planned slice: `M8-P1`\n"
+        "- Next planned PR sub-slice: `M8-P1.1`\n"
+    )
+
+
+def _write_planning_state_files(
+    tmp_path: Path,
+    *,
+    current: str = "M7-P2.1",
+    lifecycle: str | None = None,
+) -> None:
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n## Current System State\n\n"
+        + _planning_state_text(current=current, lifecycle=lifecycle),
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "## What Comes Next\n\n" + _planning_state_text(current=current, lifecycle=lifecycle),
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir(exist_ok=True)
+    (docs_dir / "splendor_mvp_to_v1_roadmap.md").write_text(
+        _planning_state_text(current=current, lifecycle=lifecycle),
+        encoding="utf-8",
+    )
 
 
 def _write_wiki_page(
@@ -74,30 +110,12 @@ def test_run_lint_checks_skips_planning_state_guard_when_files_are_absent(tmp_pa
 
 def test_run_lint_checks_reports_planning_state_drift(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
-    (tmp_path / ".agent-plan.md").write_text(
-        "# Agent Plan\n\n"
-        "## Current System State\n\n"
-        "- Last completed PR sub-slice: `M6-P2.1`\n"
-        "- Active planned slice: `M7-P1`\n"
-        "- Active planned PR sub-slice: `M7-P1.1`\n"
-        "- Next planned slice: `M7-P2`\n",
-        encoding="utf-8",
-    )
+    _write_planning_state_files(tmp_path)
     (tmp_path / "README.md").write_text(
         "## What Comes Next\n\n"
-        "- Last completed PR sub-slice: `M6-P2.1`\n"
-        "- Active planned slice: `M7-P1`\n"
-        "- Active planned PR sub-slice: `M7-P1.1`\n"
-        "- Next planned slice: `M8-P1`\n",
-        encoding="utf-8",
-    )
-    docs_dir = tmp_path / "docs"
-    docs_dir.mkdir()
-    (docs_dir / "splendor_mvp_to_v1_roadmap.md").write_text(
-        "- Last completed PR sub-slice: `M6-P2.1`\n"
-        "- Active planned slice: `M7-P1`\n"
-        "- Active planned PR sub-slice: `M7-P1.1`\n"
-        "- Next planned slice: `M7-P2`\n",
+        + _planning_state_text().replace(
+            "Next planned slice: `M8-P1`", "Next planned slice: `M9-P1`"
+        ),
         encoding="utf-8",
     )
 
@@ -111,29 +129,11 @@ def test_run_lint_checks_reports_planning_state_drift(tmp_path: Path) -> None:
 
 def test_run_lint_checks_reports_missing_planning_state_line(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
-    (tmp_path / ".agent-plan.md").write_text(
-        "# Agent Plan\n\n"
-        "## Current System State\n\n"
-        "- Last completed PR sub-slice: `M6-P2.1`\n"
-        "- Active planned slice: `M7-P1`\n"
-        "- Active planned PR sub-slice: `M7-P1.1`\n"
-        "- Next planned slice: `M7-P2`\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "README.md").write_text(
-        "## What Comes Next\n\n"
-        "- Last completed PR sub-slice: `M6-P2.1`\n"
-        "- Active planned slice: `M7-P1`\n"
-        "- Active planned PR sub-slice: `M7-P1.1`\n"
-        "- Next planned slice: `M7-P2`\n",
-        encoding="utf-8",
-    )
-    docs_dir = tmp_path / "docs"
-    docs_dir.mkdir()
-    (docs_dir / "splendor_mvp_to_v1_roadmap.md").write_text(
-        "- Last completed PR sub-slice: `M6-P2.1`\n"
-        "- Active planned slice: `M7-P1`\n"
-        "- Next planned slice: `M7-P2`\n",
+    _write_planning_state_files(tmp_path)
+    (tmp_path / "docs" / "splendor_mvp_to_v1_roadmap.md").write_text(
+        _planning_state_text().replace(
+            "- Current PR lifecycle: `branch=in-progress; main=merged`\n", ""
+        ),
         encoding="utf-8",
     )
 
@@ -143,6 +143,50 @@ def test_run_lint_checks_reports_missing_planning_state_line(tmp_path: Path) -> 
     assert len(planning_issues) == 1
     assert planning_issues[0].code == "missing-planning-state"
     assert planning_issues[0].path == "docs/splendor_mvp_to_v1_roadmap.md"
+
+
+def test_run_lint_checks_reports_invalid_planning_lifecycle(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _write_planning_state_files(tmp_path, lifecycle="in-progress")
+
+    result = _run_lint(tmp_path)
+
+    planning_issues = [issue for issue in result.issues if issue.check_name == "planning-state"]
+    assert len(planning_issues) == 1
+    assert planning_issues[0].code == "invalid-planning-lifecycle"
+    assert planning_issues[0].record_id == "Current PR lifecycle"
+
+
+def test_run_lint_checks_reports_stale_planning_state_on_main(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _write_planning_state_files(tmp_path, current="M7-P1.1")
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "M7-P2.1: repo refresh"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    result = _run_lint(tmp_path)
+
+    planning_issues = [issue for issue in result.issues if issue.check_name == "planning-state"]
+    assert len(planning_issues) == 1
+    assert planning_issues[0].code == "stale-planning-state"
+    assert planning_issues[0].record_id == "Current PR sub-slice"
 
 
 def test_run_lint_checks_reports_invalid_wiki_frontmatter_without_fatal_error(

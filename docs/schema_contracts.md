@@ -259,6 +259,17 @@ Current runtime behavior:
 - backfill deterministic classification metadata on already-registered workspace-backed sources
 - ignore Splendor-managed directories and transient cache/build directories
 
+## Repo refresh
+
+The CLI now includes `splendor repo refresh` for deterministic repo-aware wiki maintenance.
+
+Current runtime behavior:
+
+- run repo discovery using the existing repo-scan registration path
+- write machine-generated architecture and topic pages for repository structure and source linkage
+- link generated pages to discovered source IDs through frontmatter and provenance links
+- update the wiki index and log idempotently
+
 ## Review config
 
 The workspace config now reserves an optional `reviews.contradictions` section:
