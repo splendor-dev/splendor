@@ -38,6 +38,33 @@ Secrets and external dependencies:
 - no secret is required for Codecov on a public repository
 - `pr-agent-context` reuses local artifacts and does not require an extra token
 
+## `Splendor maintenance`
+
+File: `.github/workflows/splendor-maintenance.yml`
+
+Runs on:
+
+- pull requests
+- pushes to `main`
+- nightly schedule
+
+What it does:
+
+- installs Python 3.12 and `uv`
+- syncs development dependencies
+- runs `uv run splendor lint` on pull requests and pushes to `main`
+- runs `uv run splendor health` on the nightly schedule
+- uploads generated lint and health reports as GitHub Actions artifacts
+
+Permissions:
+
+- `contents: read`
+
+Secrets and external dependencies:
+
+- no secret is required
+- the workflow uses the local Splendor CLI and does not make GitHub required for local runtime use
+
 ## `pr-agent-context-refresh`
 
 File: `.github/workflows/pr-agent-context-refresh.yml`
@@ -169,6 +196,8 @@ Required secrets:
 ## How the workflows fit together
 
 - `CI` is the primary quality gate.
+- `Splendor maintenance` runs repository/workspace integrity checks and publishes their reports as
+  artifacts.
 - `Claude Code Review` provides automated AI code review on every PR and interactive follow-up.
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
 - `pre-commit.ci autofix trigger` bridges bot PRs and `pre-commit.ci` label-based autofix behavior.

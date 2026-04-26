@@ -1,0 +1,55 @@
+name: Splendor maintenance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync dependencies
+        run: uv sync --dev
+      - name: Run Splendor lint
+        run: uv run splendor lint
+      - name: Upload Splendor lint reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: splendor-lint-reports
+          path: reports/lint/**
+          if-no-files-found: warn
+
+  health:
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync dependencies
+        run: uv sync --dev
+      - name: Run Splendor health
+        run: uv run splendor health
+      - name: Upload Splendor health reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: splendor-health-reports
+          path: reports/health/**
+          if-no-files-found: warn
