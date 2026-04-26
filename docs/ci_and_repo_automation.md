@@ -147,7 +147,7 @@ File: `.github/workflows/claude-code-review.yml`
 
 Runs on:
 
-- pull requests (automatic review)
+- after the CI workflow succeeds on a pull request (via `workflow_run`)
 - issue comments containing `@claude` on pull requests (interactive follow-up)
 
 What it does:

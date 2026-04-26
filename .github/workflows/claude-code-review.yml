@@ -4,16 +4,22 @@ on:
   pull_request:
   issue_comment:
     types: [created]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 
 permissions:
   contents: read
   pull-requests: write
   issues: write
+  id-token: write
 
 jobs:
   claude-code-review:
     if: >
-      (github.event_name == 'pull_request') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request') ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
        contains(github.event.comment.body, '@claude'))
@@ -25,5 +31,4 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.PR_REVIEWS_ANTHROPIC_API_KEY }}
-          model: "claude-sonnet-4-20250514"
           trigger_phrase: "@claude"
