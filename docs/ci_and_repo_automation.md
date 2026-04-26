@@ -181,7 +181,11 @@ What it does:
 
 - gates automatic PR review on the triggering CI run's `lint` and `test` jobs only
 - does not gate automatic PR review on `PR agent context`
+- checks out the triggering pull request head SHA for automatic reviews
+- passes the pull request number explicitly to Claude
 - runs an automated code review on every pull request using `anthropics/claude-code-action`
+- asks Claude to always post a top-level PR review summary comment, even when no concrete issues
+  are found
 - responds to `@claude` mentions in PR comments for interactive follow-up questions
 - uses `claude-sonnet-4-20250514` as the review model
 
