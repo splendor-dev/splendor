@@ -45,10 +45,15 @@
   `.agent-plan.md`, `README.md`, and any affected human-facing planning document in `docs/`.
 - Keep the structured planning-state lines synchronized across `.agent-plan.md`, the `README.md`
   "What Comes Next" block, and `docs/splendor_mvp_to_v1_roadmap.md`:
-  - `Last completed PR sub-slice`
-  - `Active planned slice`
-  - `Active planned PR sub-slice`
+  - `Previous completed PR sub-slice`
+  - `Current planned slice`
+  - `Current PR sub-slice`
+  - `Current PR lifecycle`
   - `Next planned slice`
+  - `Next planned PR sub-slice`
+- Use `Current PR lifecycle: branch=in-progress; main=merged` for planned PR work. On a feature
+  branch, the current PR sub-slice is in progress; on `main`, the same committed state means that
+  sub-slice has merged.
 - Before publishing a roadmap-advancing PR, run `uv run splendor lint` or otherwise verify the
   planning-state drift check passes so merged work cannot leave those files stale.
 - PR titles, descriptions, and planning updates should use the concrete PR sub-slice notation when

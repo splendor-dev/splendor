@@ -195,6 +195,19 @@ When one planned slice takes multiple PRs, each PR should use the next dotted su
 title, body, and plan updates instead of pretending the parent slice maps one-to-one with a single
 PR.
 
+Structured planning-state blocks must use these synchronized labels:
+
+- `Previous completed PR sub-slice`
+- `Current planned slice`
+- `Current PR sub-slice`
+- `Current PR lifecycle`
+- `Next planned slice`
+- `Next planned PR sub-slice`
+
+Use `Current PR lifecycle: branch=in-progress; main=merged`. This lets one committed planning
+state read correctly while a branch is open and after it lands on `main`: the current PR sub-slice
+is in progress on feature branches and merged on `main`.
+
 ## Agent completion rule for PR work
 
 For agent-driven feature or PR work in this repository, local implementation is not the terminal

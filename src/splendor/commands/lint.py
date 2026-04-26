@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -25,16 +26,21 @@ from splendor.utils.wiki import parse_wiki_markdown
 
 _MARKDOWN_LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]+]\(([^)]+)\)")
 _PLANNING_STATE_LABELS = (
-    "Last completed PR sub-slice",
-    "Active planned slice",
-    "Active planned PR sub-slice",
+    "Previous completed PR sub-slice",
+    "Current planned slice",
+    "Current PR sub-slice",
+    "Current PR lifecycle",
     "Next planned slice",
+    "Next planned PR sub-slice",
 )
 _PLANNING_STATE_PATTERN = re.compile(
-    r"^- (?P<label>Last completed PR sub-slice|Active planned slice|"
-    r"Active planned PR sub-slice|Next planned slice): (?P<value>`[^`]+`|.+)$",
+    r"^- (?P<label>Previous completed PR sub-slice|Current planned slice|"
+    r"Current PR sub-slice|Current PR lifecycle|Next planned slice|"
+    r"Next planned PR sub-slice): (?P<value>`[^`]+`|.+)$",
     re.MULTILINE,
 )
+_PLANNING_LIFECYCLE_VALUE = "branch=in-progress; main=merged"
+_PLANNING_SLICE_PATTERN = re.compile(r"^(?P<slice>M\d+-P\d+(?:\.\d+)?)\b")
 _PLANNING_MODELS = {
     "task": TaskRecord,
     "milestone": MilestoneRecord,
@@ -459,6 +465,32 @@ def _planning_state_issues(root: Path) -> tuple[int, list[MaintenanceIssue]]:
                     check_name="planning-state",
                 )
             )
+    lifecycle = canonical.get("Current PR lifecycle")
+    if lifecycle is not None and lifecycle != _PLANNING_LIFECYCLE_VALUE:
+        issues.append(
+            MaintenanceIssue(
+                code="invalid-planning-lifecycle",
+                message=(f"Current PR lifecycle must be exactly {_PLANNING_LIFECYCLE_VALUE!r}"),
+                path=workspace_relative_path(root, paths["agent-plan"]),
+                record_id="Current PR lifecycle",
+                check_name="planning-state",
+            )
+        )
+    head_slice = _current_main_head_slice(root)
+    current_slice = canonical.get("Current PR sub-slice")
+    if head_slice is not None and current_slice is not None and head_slice != current_slice:
+        issues.append(
+            MaintenanceIssue(
+                code="stale-planning-state",
+                message=(
+                    "Current PR sub-slice does not match latest main commit: "
+                    f"expected {head_slice}, found {current_slice}"
+                ),
+                path=workspace_relative_path(root, paths["agent-plan"]),
+                record_id="Current PR sub-slice",
+                check_name="planning-state",
+            )
+        )
     return checked_count, issues
 
 
@@ -470,6 +502,35 @@ def _parse_planning_state(text: str) -> dict[str, str]:
             value = value[1:-1]
         values[match.group("label")] = value
     return values
+
+
+def _current_main_head_slice(root: Path) -> str | None:
+    branch = _git_output(root, "rev-parse", "--abbrev-ref", "HEAD")
+    if branch != "main":
+        return None
+    subject = _git_output(root, "log", "-1", "--pretty=%s")
+    if subject is None:
+        return None
+    match = _PLANNING_SLICE_PATTERN.match(subject)
+    if match is None:
+        return None
+    return match.group("slice")
+
+
+def _git_output(root: Path, *args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
 
 
 def _duplicate_id_issues(

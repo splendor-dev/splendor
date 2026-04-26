@@ -28,6 +28,7 @@ from splendor.commands.planning import (
     update_question_answer,
 )
 from splendor.commands.query import run_query
+from splendor.commands.repo_refresh import refresh_repo, render_repo_refresh_json
 from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
 from splendor.config import load_config
 from splendor.layout import resolve_layout
@@ -310,6 +311,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     repo_scan_parser.set_defaults(handler=handle_repo_scan)
+    repo_refresh_parser = repo_subparsers.add_parser(
+        "refresh", help="Refresh deterministic repo-aware wiki pages"
+    )
+    repo_refresh_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    repo_refresh_parser.set_defaults(handler=handle_repo_refresh)
     return parser
 
 
@@ -581,6 +592,32 @@ def handle_repo_scan(args: argparse.Namespace) -> int:
                 f"- {item.path}: {item.status} "
                 f"(source_id={item.source_id} class={item.source_class} labels={labels})"
             )
+    return 0
+
+
+def handle_repo_refresh(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = refresh_repo(root)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_repo_refresh_json(result))
+        return 0
+
+    print(
+        "Repo refresh summary: "
+        f"scanned={result.scan.scanned} "
+        f"registered={result.scan.registered} "
+        f"already_registered={result.scan.already_registered} "
+        f"unsupported={result.scan.unsupported} "
+        f"ignored={result.scan.ignored}"
+    )
+    print("Generated pages:")
+    for page_ref in result.generated_page_refs:
+        print(f"- {page_ref}")
+    print(f"Linked sources: {len(result.linked_source_ids)}")
     return 0
 
 

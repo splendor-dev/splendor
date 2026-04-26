@@ -64,6 +64,48 @@ def test_cli_repo_scan_parser_accepts_json_flag() -> None:
     assert args.json_output is True
 
 
+def test_cli_repo_refresh_parser_accepts_json_flag() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["repo", "refresh", "--json"])
+
+    assert args.command == "repo"
+    assert args.repo_command == "refresh"
+    assert args.json_output is True
+
+
+def test_cli_repo_refresh_command_generates_pages(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    (tmp_path / "splendor.yaml").unlink()
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "repo", "refresh"])
+
+    assert exit_code == 0
+    assert (tmp_path / "wiki" / "architecture" / "repository-structure.md").exists()
+    assert (tmp_path / "wiki" / "topics" / "repository-sources.md").exists()
+    captured = capsys.readouterr()
+    assert "Repo refresh summary:" in captured.out
+    assert "wiki/architecture/repository-structure.md" in captured.out
+
+
+def test_cli_repo_refresh_json_command(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    (tmp_path / "splendor.yaml").unlink()
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "repo", "refresh", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["scanned"] == 1
+    assert payload["generated_page_refs"] == [
+        "wiki/architecture/repository-structure.md",
+        "wiki/topics/repository-sources.md",
+    ]
+
+
 def test_cli_add_source_command_reports_workspace_backed_registration(
     tmp_path: Path, capsys
 ) -> None:
