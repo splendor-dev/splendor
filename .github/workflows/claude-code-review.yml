@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pull-requests: write
   issues: write
   id-token: write
@@ -17,7 +18,6 @@ jobs:
   claude-code-review:
     if: >
       (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'pull_request' &&
        github.event.workflow_run.pull_requests[0].id) ||
       (github.event_name == 'issue_comment' &&
@@ -28,7 +28,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Check CI lint/test gate
+        id: ci-gate
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = context.payload.workflow_run.id;
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+
+            const requiredJobs = ["lint", "test"];
+            const conclusions = Object.fromEntries(jobs.map((job) => [job.name, job.conclusion]));
+            const failedJobs = requiredJobs.filter((name) => conclusions[name] !== "success");
+
+            if (failedJobs.length > 0) {
+              core.notice(
+                `Skipping Claude review because required CI job(s) did not pass: ${failedJobs.join(", ")}`
+              );
+              core.setOutput("passed", "false");
+              return;
+            }
+
+            core.setOutput("passed", "true");
       - uses: anthropics/claude-code-action@v1
+        if: ${{ github.event_name == 'issue_comment' || steps.ci-gate.outputs.passed == 'true' }}
         with:
           anthropic_api_key: ${{ secrets.PR_REVIEWS_ANTHROPIC_API_KEY }}
           trigger_phrase: "@claude"

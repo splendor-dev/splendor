@@ -174,11 +174,13 @@ File: `.github/workflows/claude-code-review.yml`
 
 Runs on:
 
-- after the CI workflow succeeds on a pull request (via `workflow_run`)
+- after the CI workflow completes on a pull request (via `workflow_run`)
 - issue comments containing `@claude` on pull requests (interactive follow-up)
 
 What it does:
 
+- gates automatic PR review on the triggering CI run's `lint` and `test` jobs only
+- does not gate automatic PR review on `PR agent context`
 - runs an automated code review on every pull request using `anthropics/claude-code-action`
 - responds to `@claude` mentions in PR comments for interactive follow-up questions
 - uses `claude-sonnet-4-20250514` as the review model
@@ -186,6 +188,7 @@ What it does:
 Permissions:
 
 - `contents: read`
+- `actions: read`
 - `pull-requests: write`
 - `issues: write`
 
@@ -198,7 +201,8 @@ Required secrets:
 - `CI` is the primary quality gate.
 - `Splendor maintenance` runs repository/workspace integrity checks and publishes their reports as
   artifacts.
-- `Claude Code Review` provides automated AI code review on every PR and interactive follow-up.
+- `Claude Code Review` provides automated AI code review after CI `lint` and `test` pass, plus
+  interactive follow-up.
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
 - `pre-commit.ci autofix trigger` bridges bot PRs and `pre-commit.ci` label-based autofix behavior.
 - `weekly-repo-review` is scheduled maintenance, not a merge gate.
