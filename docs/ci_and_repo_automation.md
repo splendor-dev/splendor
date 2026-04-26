@@ -187,7 +187,7 @@ What it does:
 - asks Claude to always post a top-level PR review summary comment, even when no concrete issues
   are found
 - responds to `@claude` mentions in PR comments for interactive follow-up questions
-- uses `claude-sonnet-4-20250514` as the review model
+- uses the Claude Code action's default model
 
 Permissions:
 
