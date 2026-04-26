@@ -1,0 +1,45 @@
+name: Claude Code Review
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude-code-review:
+    if: >
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.pull_requests[0].id) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.PR_REVIEWS_ANTHROPIC_API_KEY }}
+          trigger_phrase: "@claude"
+          prompt: |
+            Review this pull request. Focus on:
+            - correctness bugs and regressions
+            - security issues
+            - missing or weak tests
+            - stale planning docs or schema contract drift
+            - violations of repo conventions in AGENTS.md
+
+            Prefer concise inline comments for concrete issues.
+            Do not comment on style-only issues unless they affect correctness.
+            Use a top-level summary only for overall context.
