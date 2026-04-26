@@ -137,12 +137,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M7-P2.1`
-- Current planned slice: `M8-P1`
-- Current PR sub-slice: `M8-P1.1`
+- Previous completed PR sub-slice: `M8-P1.1`
+- Current planned slice: `M8-P2`
+- Current PR sub-slice: `M8-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M8-P2`
-- Next planned PR sub-slice: `M8-P2.1`
+- Next planned slice: `M9-P1`
+- Next planned PR sub-slice: `M9-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -152,8 +152,8 @@ Planning notation now distinguishes parent slices such as `M7-P2` from concrete 
 as `M7-P2.1`. `Current PR lifecycle: branch=in-progress; main=merged` means the current sub-slice
 is in progress on feature branches and is the latest merged work once observed on `main`.
 
-`M7-P2.1` is now implemented: repo refresh generates architecture and topic pages from repo-scan
-output and keeps branch-stable lifecycle planning state synchronized.
+`M8-P1.1` is now implemented: GitHub Actions run Splendor lint on pull requests and pushes to
+`main`, run Splendor health nightly, and publish generated maintenance reports as artifacts.
 
-The current PR sub-slice is `M8-P1.1`, under the parent slice `M8-P1`, which focuses on GitHub
-Actions lint/health integration.
+The current PR sub-slice is `M8-P2.1`, under the parent slice `M8-P2`, which adds an optional
+PR-centric generated-change workflow for deterministic repo-refresh output.
