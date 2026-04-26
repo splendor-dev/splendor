@@ -38,6 +38,33 @@ Secrets and external dependencies:
 - no secret is required for Codecov on a public repository
 - `pr-agent-context` reuses local artifacts and does not require an extra token
 
+## `Splendor maintenance`
+
+File: `.github/workflows/splendor-maintenance.yml`
+
+Runs on:
+
+- pull requests
+- pushes to `main`
+- nightly schedule
+
+What it does:
+
+- installs Python 3.12 and `uv`
+- syncs development dependencies
+- runs `uv run splendor lint` on pull requests and pushes to `main`
+- runs `uv run splendor health` on the nightly schedule
+- uploads generated lint and health reports as GitHub Actions artifacts
+
+Permissions:
+
+- `contents: read`
+
+Secrets and external dependencies:
+
+- no secret is required
+- the workflow uses the local Splendor CLI and does not make GitHub required for local runtime use
+
 ## `pr-agent-context-refresh`
 
 File: `.github/workflows/pr-agent-context-refresh.yml`
@@ -147,18 +174,25 @@ File: `.github/workflows/claude-code-review.yml`
 
 Runs on:
 
-- after the CI workflow succeeds on a pull request (via `workflow_run`)
+- after the CI workflow completes on a pull request (via `workflow_run`)
 - issue comments containing `@claude` on pull requests (interactive follow-up)
 
 What it does:
 
+- gates automatic PR review on the triggering CI run's `lint` and `test` jobs only
+- does not gate automatic PR review on `PR agent context`
+- checks out the triggering pull request head SHA for automatic reviews
+- passes the pull request number explicitly to Claude
 - runs an automated code review on every pull request using `anthropics/claude-code-action`
+- asks Claude to always post a top-level PR review summary comment, even when no concrete issues
+  are found
 - responds to `@claude` mentions in PR comments for interactive follow-up questions
-- uses `claude-sonnet-4-20250514` as the review model
+- uses the Claude Code action's default model
 
 Permissions:
 
 - `contents: read`
+- `actions: read`
 - `pull-requests: write`
 - `issues: write`
 
@@ -169,7 +203,10 @@ Required secrets:
 ## How the workflows fit together
 
 - `CI` is the primary quality gate.
-- `Claude Code Review` provides automated AI code review on every PR and interactive follow-up.
+- `Splendor maintenance` runs repository/workspace integrity checks and publishes their reports as
+  artifacts.
+- `Claude Code Review` provides automated AI code review after CI `lint` and `test` pass, plus
+  interactive follow-up.
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
 - `pre-commit.ci autofix trigger` bridges bot PRs and `pre-commit.ci` label-based autofix behavior.
 - `weekly-repo-review` is scheduled maintenance, not a merge gate.
