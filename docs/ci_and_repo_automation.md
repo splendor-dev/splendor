@@ -164,7 +164,7 @@ Permissions:
 
 Required secrets:
 
-- `ANTHROPIC_API_KEY`
+- `PR_REVIEWS_ANTHROPIC_API_KEY`
 
 ## How the workflows fit together
 
