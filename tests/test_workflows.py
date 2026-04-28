@@ -37,10 +37,9 @@ def test_generated_change_pr_workflow_contract() -> None:
         step for step in steps if step.get("uses") == "peter-evans/create-pull-request@v8"
     )
     assert create_pr_step["with"]["branch"] == "codex/splendor-generated-repo-refresh"
-    assert create_pr_step["with"]["commit-message"] == (
-        "M8-P2.1 refresh Splendor generated wiki state"
-    )
-    assert create_pr_step["with"]["title"] == "M8-P2.1 Refresh Splendor generated wiki state"
+    assert create_pr_step["with"]["base"] == "main"
+    assert create_pr_step["with"]["commit-message"] == "Refresh Splendor generated wiki state"
+    assert create_pr_step["with"]["title"] == "Refresh Splendor generated wiki state"
     assert create_pr_step["with"]["add-paths"].split() == [
         "wiki/**",
         "state/manifests/sources/**",
