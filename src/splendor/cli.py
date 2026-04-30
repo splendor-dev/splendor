@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 from pathlib import Path
 
 from splendor import __version__
@@ -417,6 +418,14 @@ def _print_error(exc: Exception) -> int:
     return 1
 
 
+def _suggested_answer_title(query: str) -> str:
+    words = query.split()
+    title = " ".join(words[:6]).strip() or "Filed answer"
+    if len(words) > 6:
+        title = f"{title} answer"
+    return title
+
+
 def _is_missing_workspace_wiki_error(exc: Exception) -> bool:
     return str(exc).startswith("Workspace is missing required wiki files:")
 
@@ -481,6 +490,13 @@ def handle_ingest(args: argparse.Namespace) -> int:
             f"failed={result.failed} "
             f"skipped={result.skipped}"
         )
+        succeeded_source_ids = [
+            item.source_id for item in result.items if item.outcome == "succeeded"
+        ]
+        if len(succeeded_source_ids) == 1:
+            print(f"Next: splendor wiki suggest {succeeded_source_ids[0]}")
+        elif len(succeeded_source_ids) > 1:
+            print("Next: splendor wiki status")
         return 1 if result.failed else 0
 
     try:
@@ -759,6 +775,11 @@ def handle_query(args: argparse.Namespace) -> int:
             print(f"   Contradictions: {match.contradiction_count}")
         if match.review_task_ids:
             print(f"   Review tasks: {', '.join(match.review_task_ids)}")
+    if result.matches and not args.no_save:
+        title = _suggested_answer_title(result.query)
+        print(f"Next: splendor file-answer --from-last-query --title {shlex.quote(title)}")
+    elif result.matches and args.no_save:
+        print("Next: rerun without --no-save to enable file-answer")
     return 0
 
 
@@ -926,6 +947,7 @@ def handle_file_answer(args: argparse.Namespace) -> int:
     print(f"Query: {result.query}")
     if result.linked_question_id is not None:
         print(f"Updated question: {result.linked_question_id}")
+    print(f"Next: review {result.page_path}")
     return 0
 
 

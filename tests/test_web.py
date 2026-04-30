@@ -3,9 +3,12 @@ from pathlib import Path
 import yaml
 from fastapi.testclient import TestClient
 
+from splendor.cli import main
+from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_task
 from splendor.schemas import KnowledgePageFrontmatter
+from splendor.state.source_registry import load_source_record
 from splendor.web import create_app
 
 
@@ -32,6 +35,7 @@ def test_home_page_loads_for_initialized_workspace(tmp_path: Path) -> None:
     assert "Splendor" in response.text
     assert "Wiki content pages" in response.text
     assert "/browse" in response.text
+    assert "/status" in response.text
 
 
 def test_home_page_shows_empty_state_for_initialized_workspace(tmp_path: Path) -> None:
@@ -165,6 +169,95 @@ def test_search_returns_query_matches_with_document_links(tmp_path: Path) -> Non
     assert response.status_code == 200
     assert 'href="/documents/wiki/concepts/web-shell.md"' in response.text
     assert "Deterministic browse search lives here." in response.text
+
+
+def test_status_page_shows_source_run_and_review_counts(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "status-source.md"
+    source.write_text("# Status source\n\nWeb status should show source state.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/status")
+
+    assert response.status_code == 200
+    assert "Synthesis follow-up" in response.text
+    assert added.source_id in response.text
+    assert f'href="/sources/{added.source_id}"' in response.text
+    assert "wiki/sources/" in response.text
+    assert "machine-generated" in response.text
+
+
+def test_status_page_reports_invalid_source_manifest_without_path_leak(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / "src-bad.json"
+    manifest_path.write_text("{not valid json", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get("/status")
+
+    assert response.status_code == 500
+    assert "invalid records" in response.text
+    assert str(tmp_path) not in response.text
+
+
+def test_source_detail_shows_summary_run_and_synthesis_suggestions(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "dogfood-workflow.md"
+    source.write_text(
+        "# Dogfood workflow\n\nDogfood workflow polish improves review handoff.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "dogfood-workflow.md",
+        title="Dogfood workflow",
+        page_id="topic-dogfood-workflow",
+        body="# Dogfood workflow\n\nReview handoff uses dogfood workflow polish.\n",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get(f"/sources/{added.source_id}")
+
+    assert response.status_code == 200
+    assert "Generated source-summary pages" in response.text
+    assert "Latest ingest run" in response.text
+    assert "Affected synthesis-page suggestions" in response.text
+    assert "wiki/sources/" in response.text
+    assert "Dogfood workflow" in response.text
+    assert "wiki/topics/dogfood-workflow.md" in response.text
+
+
+def test_source_detail_reports_invalid_linked_run_without_path_leak(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "invalid-run.md"
+    source.write_text("# Invalid run\n\nSource with a corrupt run record.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{added.source_id}.json"
+    run_id = load_source_record(manifest_path).last_run_id
+    assert run_id is not None
+    (tmp_path / "state" / "runs" / f"{run_id}.json").write_text("{not valid json", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get(f"/sources/{added.source_id}")
+
+    assert response.status_code == 200
+    assert "Linked run record" in response.text
+    assert "is invalid" in response.text
+    assert str(tmp_path) not in response.text
+
+
+def test_source_detail_returns_not_found_for_unknown_source_id(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/sources/src-missing")
+
+    assert response.status_code == 404
+    assert "Source not found" in response.text
 
 
 def test_document_detail_rejects_unsafe_or_unsupported_paths(tmp_path: Path) -> None:

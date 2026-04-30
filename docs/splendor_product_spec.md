@@ -667,6 +667,8 @@ Current implementation:
   source ID.
 - `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
   `splendor wiki suggest <source-id>` command.
+- `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
+  ingested, or points back to `wiki status` for batch follow-up.
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
   machine-generated, invalid-page, actionable synthesis-review, and missing
   synthesis-follow-up counts, with optional JSON output.
@@ -675,6 +677,10 @@ Current implementation:
   optional JSON output.
 - `splendor wiki compile <source-id>` exposes the review-gated compile-loop contract, validates the
   source, and reports that it does not mutate synthesis pages yet.
+- `splendor query` prefers claim-bearing source-summary sections over generated metadata
+  boilerplate when selecting snippets, and text output points to `file-answer` when a saved query
+  has matches.
+- `splendor file-answer` prints the created page and a restrained review hint after filing.
 - Mutating `splendor wiki compile <source-id>` remains deferred to a later reviewed compile-loop
   slice.
 
@@ -998,6 +1004,11 @@ Early web UI should be intentionally modest.
 The web UI should make generated versus maintained pages visible without requiring raw frontmatter
 inspection. Users should be able to distinguish generated source summaries, draft synthesis,
 reviewed synthesis, contested pages, and stale pages while browsing or searching.
+
+Current implementation includes read-only `/status` and `/sources/{source-id}` pages layered on
+the CLI wiki status/suggest contracts. They expose source/page/queue/run/review counts, source
+manifests, linked source-summary pages, latest ingest run state, and deterministic affected
+synthesis-page suggestions without adding mutating web actions.
 
 ### Avoid early
 - heavy collaborative editing
