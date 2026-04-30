@@ -334,15 +334,15 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M7-P2.1`
-- Current planned slice: `M8-P1`
-- Current PR sub-slice: `M8-P1.1`
+- Previous completed PR sub-slice: `M8-P1.1`
+- Current planned slice: `M8-P2`
+- Current PR sub-slice: `M8-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M8-P2`
-- Next planned PR sub-slice: `M8-P2.1`
+- Next planned slice: `M9-P1`
+- Next planned PR sub-slice: `M9-P1.1`
 
-The current PR sub-slice is `M8-P1.1`, under parent slice `M8-P1`, which moves the roadmap forward
-into GitHub Actions lint/health integration. The lifecycle marker means `M8-P1.1` is in
+The current PR sub-slice is `M8-P2.1`, under parent slice `M8-P2`, which moves the roadmap forward
+into optional PR-centric generated-change workflows. The lifecycle marker means `M8-P2.1` is in
 progress on feature branches and merged once the same committed state is observed on `main`.
 
 ---
@@ -505,8 +505,8 @@ Add strong optional GitHub-powered features without making GitHub mandatory.
 - `M8-P2` Optional PR-centric generated-change workflows
 
 `M8-P1.1` implements the GitHub Actions lint/health integration slice with a dedicated maintenance
-workflow. The next planned sub-slice is `M8-P2.1`, which covers optional PR-centric generated-change
-workflows.
+workflow. `M8-P2.1` implements the optional PR-centric generated-change workflow by running
+deterministic repo refresh automation and opening or updating a reviewable generated-change PR.
 
 ---
 

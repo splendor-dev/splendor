@@ -65,6 +65,51 @@ Secrets and external dependencies:
 - no secret is required
 - the workflow uses the local Splendor CLI and does not make GitHub required for local runtime use
 
+## `Splendor generated-change PR`
+
+File: `.github/workflows/splendor-generated-change-pr.yml`
+
+Runs on:
+
+- weekly schedule
+- manual dispatch
+
+What it does:
+
+- checks out `main`
+- installs Python 3.12 and `uv`
+- syncs development dependencies
+- runs `uv run splendor repo refresh`
+- runs `uv run splendor lint`
+- uploads generated lint reports as a GitHub Actions artifact
+- opens or updates a PR from `codex/splendor-generated-repo-refresh` when deterministic generated
+  state changes exist
+
+Reviewed output paths:
+
+- `wiki/**`
+- `state/manifests/sources/**`
+- `raw/sources/**`
+
+Permissions:
+
+- `contents: write`
+- `pull-requests: write`
+
+Secrets and external dependencies:
+
+- no secret is required
+- PR creation uses `peter-evans/create-pull-request@v8` with the repository `GITHUB_TOKEN`
+- GitHub documents that most events caused by `GITHUB_TOKEN`, except `workflow_dispatch` and
+  `repository_dispatch`, do not create follow-up workflow runs automatically:
+  <https://docs.github.com/actions/writing-workflows/choosing-when-your-workflow-runs/triggering-a-workflow#triggering-a-workflow-from-a-workflow>
+
+Review expectations:
+
+- confirm generated wiki/source-registry changes match the repository state
+- confirm the generating workflow's Splendor lint job passed
+- manually dispatch or rerun normal CI if repository policy requires checks on the generated PR
+
 ## `pr-agent-context-refresh`
 
 File: `.github/workflows/pr-agent-context-refresh.yml`
@@ -205,6 +250,8 @@ Required secrets:
 - `CI` is the primary quality gate.
 - `Splendor maintenance` runs repository/workspace integrity checks and publishes their reports as
   artifacts.
+- `Splendor generated-change PR` proposes deterministic repo-refresh output as a reviewable PR
+  without making GitHub part of the core runtime.
 - `Claude Code Review` provides automated AI code review after CI `lint` and `test` pass, plus
   interactive follow-up.
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
