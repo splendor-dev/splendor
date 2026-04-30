@@ -30,6 +30,16 @@ from splendor.commands.planning import (
     update_question_answer,
 )
 from splendor.commands.query import run_query
+from splendor.commands.queue import (
+    inspect_queue,
+    inspect_queue_job,
+    render_queue_inspect_json,
+    render_queue_item_json,
+    render_queue_retry_json,
+    render_repair_ingest_json,
+    repair_ingest_source,
+    retry_queue_job,
+)
 from splendor.commands.repo_refresh import refresh_repo, render_repo_refresh_json
 from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
 from splendor.commands.wiki import (
@@ -113,6 +123,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Drain pending ingestion jobs from the queue.",
     )
     ingest_parser.set_defaults(handler=handle_ingest)
+
+    queue_parser = subparsers.add_parser("queue", help="Inspect and retry queue jobs")
+    queue_subparsers = queue_parser.add_subparsers(dest="queue_command", required=True)
+    queue_inspect_parser = queue_subparsers.add_parser(
+        "inspect", help="Inspect durable queue records"
+    )
+    queue_inspect_parser.add_argument("job_id", nargs="?", help="Queue job identifier to inspect")
+    queue_inspect_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    queue_inspect_parser.set_defaults(handler=handle_queue_inspect)
+    queue_retry_parser = queue_subparsers.add_parser(
+        "retry", help="Reset a failed queue job for another ingest attempt"
+    )
+    queue_retry_parser.add_argument("job_id", help="Queue job identifier to retry")
+    queue_retry_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    queue_retry_parser.set_defaults(handler=handle_queue_retry)
+
+    repair_parser = subparsers.add_parser("repair", help="Repair failed Splendor state")
+    repair_subparsers = repair_parser.add_subparsers(dest="repair_command", required=True)
+    repair_ingest_parser = repair_subparsers.add_parser(
+        "ingest", help="Requeue and immediately run ingestion for a source"
+    )
+    repair_ingest_parser.add_argument("source_id", help="Registered source identifier to repair")
+    repair_ingest_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    repair_ingest_parser.set_defaults(handler=handle_repair_ingest)
 
     wiki_parser = subparsers.add_parser("wiki", help="Inspect and maintain wiki state")
     wiki_subparsers = wiki_parser.add_subparsers(dest="wiki_command", required=True)
@@ -518,6 +567,108 @@ def handle_ingest(args: argparse.Namespace) -> int:
     print(f"Run record: {result.run_path}")
     print(f"Next: splendor wiki suggest {result.source_id}")
     return 0
+
+
+def handle_queue_inspect(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        if args.job_id:
+            item = inspect_queue_job(root, args.job_id)
+            if args.json_output:
+                print(render_queue_item_json(item))
+                return 0
+            _print_queue_item_detail(item)
+            return 0
+
+        result = inspect_queue(root)
+    except (FileNotFoundError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_queue_inspect_json(result))
+        return 0
+
+    print("Queue inspect")
+    print(f"Total: {result.total}")
+    counts = " ".join(f"{status}={count}" for status, count in result.status_counts.items())
+    print(f"Status counts: {counts or '-'}")
+    if not result.items:
+        print("No queue records yet.")
+        return 0
+    print("Jobs:")
+    for item in result.items:
+        print(
+            f"- {item.job_id} [{item.status}] type={item.job_type} "
+            f"attempts={item.attempt_count}/{item.max_attempts} payload={item.payload_ref}"
+        )
+    if result.status_counts.get("failed", 0):
+        print("Next: splendor queue retry <job-id>")
+    elif result.status_counts.get("pending", 0):
+        print("Next: splendor ingest --pending")
+    return 0
+
+
+def handle_queue_retry(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = retry_queue_job(root, args.job_id)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_queue_retry_json(result))
+        return 0
+
+    print(f"Retried queue job {result.item.job_id}")
+    print(f"Queue record: {result.item.record_path}")
+    print("Next: splendor ingest --pending")
+    return 0
+
+
+def handle_repair_ingest(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = repair_ingest_source(root, args.source_id)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_repair_ingest_json(result))
+        return 0
+
+    if result.no_op:
+        print(f"Source {result.source_id} is already ingested for the current pipeline version")
+    else:
+        print(f"Repaired ingest for source {result.source_id}")
+        print(f"Run: {result.run_id}")
+    print(f"Queue record: {result.queue_path}")
+    if result.run_path is not None:
+        print(f"Run record: {result.run_path}")
+    if result.page_path is not None:
+        print(f"Page: {result.page_path}")
+    print(f"Outcome: {result.outcome} ({result.message})")
+    if not result.no_op:
+        print(f"Next: splendor wiki suggest {result.source_id}")
+    return 0
+
+
+def _print_queue_item_detail(item) -> None:
+    print(f"Queue job: {item.job_id}")
+    print(f"Status: {item.status}")
+    print(f"Job type: {item.job_type}")
+    print(f"Attempts: {item.attempt_count}/{item.max_attempts}")
+    print(f"Created: {item.created_at}")
+    print(f"Updated: {item.updated_at}")
+    print(f"Payload: {item.payload_ref}")
+    print(f"Source ID: {item.source_id or '-'}")
+    print(f"Lease owner: {item.lease_owner or '-'}")
+    print(f"Lease expires: {item.lease_expires_at or '-'}")
+    print(f"Last error: {item.last_error or '-'}")
+    print(f"Record: {item.record_path}")
+    if item.status == "failed":
+        print(f"Next: splendor queue retry {item.job_id}")
+    elif item.status == "pending":
+        print("Next: splendor ingest --pending")
 
 
 def handle_wiki_status(args: argparse.Namespace) -> int:
