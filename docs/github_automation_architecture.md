@@ -61,9 +61,11 @@ Caveats:
 
 ## `pr-agent-context`
 
-Pinned reusable workflow:
+Reusable workflow:
 
-- `shaypal5/pr-agent-context@v4.0.19`
+- `shaypal5/pr-agent-context@v4`
+  - Uses the floating stable v4 major tag. The upstream `pr-agent-context` release flow moves
+    `v4` when a new `v4.x.y` tag is published.
   - Refresh flow uses `include_outdated_review_threads: true` to keep managed PR context aligned
     with both active and outdated review discussions.
 

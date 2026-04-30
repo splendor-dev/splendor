@@ -24,7 +24,8 @@ What it does:
 - uploads a `coverage-xml` artifact
 - uploads coverage to Codecov
 - publishes a `pr-agent-context` comment on pull requests
-  - pinned to `shaypal5/pr-agent-context/.github/workflows/pr-agent-context.yml@v4.0.19`
+  - uses the floating stable major workflow ref
+    `shaypal5/pr-agent-context/.github/workflows/pr-agent-context.yml@v4`
   - uses the `coverage-xml` artifact directly for patch coverage context
 
 Permissions:
