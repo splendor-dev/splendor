@@ -13,7 +13,7 @@ from splendor.commands.file_answer import (
     file_answer_from_last_query,
 )
 from splendor.commands.health import run_health_checks
-from splendor.commands.ingest import drain_pending_ingest_jobs, ingest_source
+from splendor.commands.ingest import drain_pending_ingest_jobs, enqueue_ingest_job, ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.lint import run_lint_checks
 from splendor.commands.maintenance import execute_maintenance_command, render_report_json
@@ -30,6 +30,12 @@ from splendor.commands.planning import (
 from splendor.commands.query import run_query
 from splendor.commands.repo_refresh import refresh_repo, render_repo_refresh_json
 from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
+from splendor.commands.wiki import (
+    build_wiki_status,
+    render_wiki_status_json,
+    render_wiki_suggest_json,
+    suggest_source_pages,
+)
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import (
@@ -103,6 +109,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Drain pending ingestion jobs from the queue.",
     )
     ingest_parser.set_defaults(handler=handle_ingest)
+
+    wiki_parser = subparsers.add_parser("wiki", help="Inspect and maintain wiki state")
+    wiki_subparsers = wiki_parser.add_subparsers(dest="wiki_command", required=True)
+    wiki_status_parser = wiki_subparsers.add_parser(
+        "status", help="Summarize source, page, queue, run, and review state"
+    )
+    wiki_status_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    wiki_status_parser.set_defaults(handler=handle_wiki_status)
+    wiki_suggest_parser = wiki_subparsers.add_parser(
+        "suggest", help="Suggest synthesis pages affected by a source"
+    )
+    wiki_suggest_parser.add_argument("source_id", help="Registered source identifier to inspect")
+    wiki_suggest_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    wiki_suggest_parser.set_defaults(handler=handle_wiki_suggest)
 
     materialize_parser = subparsers.add_parser(
         "materialize-source", help="Create or refresh a source storage artifact"
@@ -361,6 +391,10 @@ def _print_error(exc: Exception) -> int:
     return 1
 
 
+def _is_missing_workspace_wiki_error(exc: Exception) -> bool:
+    return str(exc).startswith("Workspace is missing required wiki files:")
+
+
 def handle_add_source(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     candidate_path = args.path.expanduser()
@@ -381,6 +415,22 @@ def handle_add_source(args: argparse.Namespace) -> int:
     print(f"Storage mode: {result.storage_mode}")
     if result.stored_path is not None:
         print(f"Storage artifact: {result.stored_path}")
+    if not result.already_registered:
+        try:
+            queue_path = enqueue_ingest_job(root, result.source_id)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            warning = _error_message(exc)
+            print(f"Warning: source registered but ingest was not queued: {warning}")
+            if _is_missing_workspace_wiki_error(exc):
+                print("Next: splendor init")
+                print(f"Then: splendor ingest {result.source_id}")
+            else:
+                print(f"Next: splendor ingest {result.source_id}")
+            return 0
+        print(f"Queued ingest: {queue_path}")
+        print("Next: splendor ingest --pending")
+    else:
+        print(f"Next: splendor ingest {result.source_id}")
     return 0
 
 
@@ -424,6 +474,86 @@ def handle_ingest(args: argparse.Namespace) -> int:
     print(f"Page: {result.page_path}")
     print(f"Queue record: {result.queue_path}")
     print(f"Run record: {result.run_path}")
+    print(f"Next: splendor wiki suggest {result.source_id}")
+    return 0
+
+
+def handle_wiki_status(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = build_wiki_status(root)
+    except ValueError as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_wiki_status_json(result))
+        return 0
+
+    print("Wiki status")
+    print(
+        "Sources: "
+        f"total={result.source_total} "
+        f"registered={result.source_counts.get('registered', 0)} "
+        f"ingested={result.source_counts.get('ingested', 0)} "
+        f"failed={result.source_counts.get('failed', 0)}"
+    )
+    print(
+        "Pages: "
+        f"total={result.page_total} "
+        + " ".join(f"{kind}={count}" for kind, count in result.page_kind_counts.items())
+    )
+    print(
+        "Queue: "
+        f"total={result.queue_total} "
+        + " ".join(f"{status}={count}" for status, count in result.queue_status_counts.items())
+    )
+    print(
+        "Runs: "
+        f"total={result.run_total} "
+        + " ".join(f"{status}={count}" for status, count in result.run_status_counts.items())
+    )
+    print(
+        "Review: "
+        + " ".join(f"{state}={count}" for state, count in result.review_state_counts.items())
+    )
+    print(f"Machine-generated pages: {result.machine_generated_pages}")
+    print(f"Contested pages: {result.contested_pages}")
+    print(f"Stale pages: {result.stale_pages}")
+    print(f"Review-needed synthesis pages: {result.review_needed_synthesis_pages}")
+    print(f"Sources missing synthesis follow-up: {result.sources_missing_synthesis}")
+    print(f"Invalid wiki pages: {result.invalid_pages}")
+    for invalid_page in result.invalid_page_examples:
+        print(f"- {invalid_page.path}: {invalid_page.error}")
+    if result.recent_runs:
+        print("Recent runs:")
+        for run in result.recent_runs:
+            finished = run.finished_at or "-"
+            print(f"- {run.run_id} {run.status} finished={finished}")
+    return 0
+
+
+def handle_wiki_suggest(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = suggest_source_pages(root, args.source_id)
+    except (FileNotFoundError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_wiki_suggest_json(result))
+        return 0
+
+    print(f"Source: {result.source_id}")
+    print(f"Title: {result.source_title}")
+    print(f"Source ref: {result.source_ref}")
+    print(f"Status: {result.source_status}")
+    if not result.suggestions:
+        print("No likely synthesis-page matches found")
+        return 0
+    print("Suggested pages:")
+    for suggestion in result.suggestions:
+        reasons = ", ".join(suggestion.reasons)
+        print(f"- {suggestion.path} [{suggestion.kind}] score={suggestion.score} reasons={reasons}")
     return 0
 
 

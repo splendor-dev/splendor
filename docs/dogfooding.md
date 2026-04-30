@@ -31,11 +31,10 @@ Local notes should include a clear first heading and a substantive opening parag
 as `Core Claims`, `Design Implications`, and `Implementation Pattern` are rendered into deterministic
 source-summary key facts during ingest.
 
-Ingest currently creates deterministic source summaries and run/provenance state. Until the
-`M10-P0` wiki-maintenance bridge exists, users and agents should manually update affected concept,
-topic, architecture, comparison, or overview pages after ingesting a meaningful source. The planned
-bridge should add `splendor wiki status`, `splendor wiki suggest <source-id>`, project briefing, and
-a future review-gated compile/update workflow.
+Ingest currently creates deterministic source summaries and run/provenance state. The first
+`M10-P0` bridge adds `splendor wiki status` and `splendor wiki suggest <source-id>` so users and
+agents can identify affected concept, entity, topic, architecture, or glossary pages before
+manual review. Project briefing and a future review-gated compile/update workflow remain planned.
 
 Dogfood runs should record usability friction separately from knowledge gaps. Pay special attention
 to whether each command prints the next useful command, whether long source IDs need to be copied

@@ -334,16 +334,16 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M9-P1.2`
-- Current planned slice: `M9-P1`
-- Current PR sub-slice: `M9-P1.3`
+- Previous completed PR sub-slice: `M9-P1.3`
+- Current planned slice: `M10-P0`
+- Current PR sub-slice: `M10-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M10-P0`
-- Next planned PR sub-slice: `M10-P0.1`
+- Next planned PR sub-slice: `M10-P0.2`
 
-The current PR sub-slice is `M9-P1.3`, under parent slice `M9-P1`, which performs a knowledge-work
-dogfood pass after `M9-P1.2`. The lifecycle marker means `M9-P1.3` is in progress on feature
-branches and merged once the same committed state is observed on `main`.
+The current PR sub-slice is `M10-P0.1`, under parent slice `M10-P0`, which adds the CLI-first
+wiki status and source-impact suggestion bridge. The lifecycle marker means `M10-P0.1` is in
+progress on feature branches and merged once the same committed state is observed on `main`.
 
 Dogfooding also changed the recommended next slice: before deeper planning/runs UI work, Splendor
 should add a small CLI-first bridge for wiki status, source-impact suggestions, and project
@@ -566,11 +566,12 @@ empty states, explicit special-file browse treatment, non-mutating query validat
 markdown source summaries, and contradiction-review filtering for source-summary metadata
 boilerplate. `M9-P1.3` adds three researched dogfood rounds, extends the wiki with tool-landscape
 and agent-context synthesis, and files follow-up product tasks from the observed workflow friction.
-The next recommended slice is `M10-P0.1`, which should add CLI-first wiki status and source-impact
-suggestions before deeper planning/runs UI work. `M10-P0.3` should follow the status and briefing
-work with dogfood workflow polish: add-source/ingest handoff fixes, next-action hints, query
-snippet improvements, and read-only web status/source-detail surfaces. Mutating web actions,
-add-source forms, and planning/runs views remain deferred to later `M9` slices.
+The current recommended slice is `M10-P0.1`, which adds CLI-first wiki status and source-impact
+suggestions before deeper planning/runs UI work. `M10-P0.2` should follow with project briefing
+and a documented review-gated compile-loop contract. `M10-P0.3` should then polish the visible
+dogfood workflow with query snippet improvements and read-only web status/source-detail surfaces.
+Mutating web actions, add-source forms, and planning/runs views remain deferred to later `M9`
+slices.
 
 ---
 
