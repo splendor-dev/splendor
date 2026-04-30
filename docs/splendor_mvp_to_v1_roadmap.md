@@ -338,12 +338,16 @@ deterministic lint/health validation for those cross-links.
 - Current planned slice: `M9-P1`
 - Current PR sub-slice: `M9-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M9-P2`
-- Next planned PR sub-slice: `M9-P2.1`
+- Next planned slice: `M10-P0`
+- Next planned PR sub-slice: `M10-P0.1`
 
 The current PR sub-slice is `M9-P1.3`, under parent slice `M9-P1`, which performs a knowledge-work
 dogfood pass after `M9-P1.2`. The lifecycle marker means `M9-P1.3` is in progress on feature
 branches and merged once the same committed state is observed on `main`.
+
+Dogfooding also changed the recommended next slice: before deeper planning/runs UI work, Splendor
+should add a small CLI-first bridge for wiki status, source-impact suggestions, and project
+briefing. That slice is tracked as `M10-P0`.
 
 ---
 
@@ -543,6 +547,7 @@ Provide a modest but useful human UI without changing the system’s center of g
 ### Planned PR slices
 - `M9-P1` Local web UI browse/search shell
 - `M9-P2` Planning/runs UI views
+- `M10-P0` Wiki status, source-impact suggestions, and project briefing bridge
 
 ### Current PR sub-slices
 - `M9-P1.1` Read-only `splendor serve` browse/search shell
@@ -558,8 +563,39 @@ empty states, explicit special-file browse treatment, non-mutating query validat
 markdown source summaries, and contradiction-review filtering for source-summary metadata
 boilerplate. `M9-P1.3` adds three researched dogfood rounds, extends the wiki with tool-landscape
 and agent-context synthesis, and files follow-up product tasks from the observed workflow friction.
-Mutating web actions, add-source forms, and planning/runs views remain deferred to later `M9`
-slices.
+The next recommended slice is `M10-P0.1`, which should add CLI-first wiki status and source-impact
+suggestions before deeper planning/runs UI work. Mutating web actions, add-source forms, and
+planning/runs views remain deferred to later `M9` slices.
+
+---
+
+## Milestone 10-P0 — Post-MVP: text-native wiki maintenance bridge
+
+### Goal
+Close the gap between ingesting a source and maintaining higher-level wiki synthesis before adding
+heavier queue repair or rich-source capabilities.
+
+### Scope
+- status reporting over wiki/source/run/review state
+- source-impact suggestions for concept, topic, architecture, comparison, and overview pages
+- project briefing over wiki, planning, source, and recent run state
+- explicit separation between source-summary generation and synthesis-page compile/update work
+
+### Deliverables
+- `splendor wiki status`
+- `splendor wiki suggest <source-id>`
+- initial project briefing command or UI view
+- documented contract for a future review-gated `splendor wiki compile <source-id>`
+
+### Exit criteria
+- users can see whether the wiki is healthy, stale, contested, or missing follow-up synthesis
+- users can ask which pages a newly ingested source should affect
+- agents can assemble a compact, source-backed project orientation before continuing work
+- richer source handling remains downstream of the text-native maintenance loop
+
+### Planned PR slices
+- `M10-P0.1` Wiki status and source-impact suggestions
+- `M10-P0.2` Project briefing and compile-loop contract
 
 ---
 
@@ -618,9 +654,10 @@ Harder source formats should remain optional. The text-native path must stay str
 
 ### Dependency note
 
-This milestone should build on the source-resolution refactor rather than bypass it. PDF, OCR, and
-other richer source types should enter the system through the same `source_ref` plus `storage_mode`
-model as text-native sources.
+This milestone should build on the source-resolution refactor and the text-native wiki-maintenance
+bridge rather than bypass either one. PDF, OCR, and other richer source types should enter the
+system through the same `source_ref` plus `storage_mode` model as text-native sources, and should
+feed the same source-impact and compile/update workflow used for markdown and text.
 
 ### Exit criteria
 - PDF/image workflows exist and are clearly separated from the core text flow
@@ -738,7 +775,8 @@ Splendor should be called MVP-ready when it can do all of the following on a rea
 - initialize the wiki structure
 - add and track sources
 - ingest text-native sources one at a time
-- update wiki pages incrementally
+- create deterministic source-summary pages
+- suggest or update affected synthesis pages through a reviewable maintenance path
 - keep an index and log
 - store queue and run state durably
 - avoid accidental duplicate re-ingestion
@@ -754,6 +792,7 @@ Splendor should be called v1-ready when, in addition to the MVP, it has:
 - stronger provenance and review-state support
 - useful code awareness
 - robust queue and repair workflows
+- wiki status, source-impact suggestions, and project briefing
 - optional GitHub-native workflows
 - a coherent local UI
 - stable schemas, docs, and examples

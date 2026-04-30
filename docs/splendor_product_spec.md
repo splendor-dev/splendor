@@ -117,6 +117,12 @@ Examples:
 
 These pages are incrementally updated as new sources arrive.
 
+Source-summary pages are ingestion artifacts, not the full compounding synthesis layer. They make a
+registered source searchable, reviewable, and traceable to an ingest run. Concept, topic,
+comparison, architecture, and overview pages are the maintained synthesis layer where Splendor
+turns source evidence into project knowledge. Product workflows should keep that distinction
+explicit instead of implying that source-summary generation alone completes wiki maintenance.
+
 ### 4.4 Operational Ledger
 
 Durable operational records that track what happened.
@@ -571,10 +577,14 @@ Not the preferred primary runtime for:
 5. A worker claims the job
 6. Source content is resolved through a common source-resolution layer
 7. Optional extraction happens
-8. Relevant wiki pages are created/updated
+8. Source-summary pages are created/updated
 9. Index/log are updated
 10. Run record is written
 11. Job is marked complete or failed
+
+Ingestion is the source-to-summary half of the knowledge loop. It registers evidence, creates
+deterministic summaries, records provenance, and leaves the workspace in a safe state. Updating
+higher-level synthesis pages is a related but distinct compile/update workflow.
 
 ## 14.2 Ingestion granularity
 
@@ -622,13 +632,29 @@ Current implementation:
   `sources.summarize_in_repo_extracts_as` and `sources.summarize_external_extracts_as`
 - when the mode is `none`, the `## Extract` section is omitted entirely
 
+## 14.6 Wiki compile/update workflow
+
+Splendor should provide an explicit source-to-synthesis workflow after ingestion. The first version
+can be conservative and review-oriented:
+
+- `splendor wiki status` reports source counts, page counts, queue state, recent runs,
+  machine-generated pages, stale pages, contested pages, orphan pages, and pages needing review
+- `splendor wiki suggest <source-id>` identifies concept, topic, architecture, comparison, or
+  overview pages likely affected by a source
+- `splendor wiki compile <source-id>` or an equivalent reviewed operation updates synthesis pages
+  with auditable provenance and run state
+
+This workflow should start with text-native sources and deterministic page-impact suggestions. The
+compile step may remain human-reviewed or LLM-assisted behind explicit confirmation until the
+contract is trustworthy.
+
 Later optional support:
 - PDF
 - image-based sources
 - OCR-derived flows
 - audio/transcript flows
 
-### 14.6 OCR/LLM-assisted extraction
+## 14.7 OCR/LLM-assisted extraction
 
 For harder formats, ingestion may optionally invoke:
 - OCR
@@ -713,6 +739,10 @@ Initial query path:
 4. cite page/source provenance
 5. optionally file answer back into the wiki
 
+Query is the context-selection path, not the only knowledge-maintenance path. Useful answers should
+be fileable, and newly ingested sources should have a separate source-impact path that helps update
+the durable synthesis pages.
+
 ### 17.2 Query outputs
 
 Initial output forms:
@@ -725,6 +755,21 @@ Later optional forms:
 - slide decks
 - charts
 - reports
+
+### 17.3 Project briefing
+
+Splendor should support a briefing workflow for humans and agents entering an existing repository.
+A briefing command or UI view should assemble:
+
+- relevant wiki pages for a stated goal
+- active planning tasks, questions, decisions, and milestones
+- recent ingest, query, lint, and health state
+- source-backed claims and provenance pointers
+- stale, contested, machine-generated, or unreviewed pages
+- likely next actions
+
+This is the natural bridge between repository-local memory and limited model context. Search finds
+records; a briefing prepares compact working context for a session.
 
 ## 18. Search Model
 
@@ -872,7 +917,11 @@ splendor init
 splendor add-source path/to/file.md
 splendor ingest source-id
 splendor ingest --pending
+splendor wiki status
+splendor wiki suggest source-id
+splendor wiki compile source-id
 splendor query "What changed in the scraping policy?"
+splendor brief "continue scraping-policy work"
 splendor file-answer --from-last-query
 splendor lint
 splendor health
@@ -931,10 +980,13 @@ The smallest opinionated core should be:
 5. `index.md` and `log.md`
 6. CLI
 7. one-source-at-a-time ingestion
-8. deterministic lint
-9. planning objects
-10. local query path
-11. optional file serving/browsing later
+8. deterministic source-summary generation
+9. deterministic lint
+10. planning objects
+11. local query path
+12. source-impact suggestions and a reviewable compile/update loop
+13. project briefing
+14. optional file serving/browsing later
 
 ## 29. Acceptance Criteria for the Core Product
 
@@ -942,14 +994,16 @@ Splendor should be considered successful at the product-spec level if it can do 
 
 1. initialize a repo or subdirectory as a Splendor wiki
 2. add a source and create stable source metadata
-3. ingest a source and update the wiki incrementally
-4. avoid duplicate accidental re-ingestion
-5. record queue/job/run state durably
-6. query the wiki via CLI
-7. create and query tasks/milestones/decisions/questions
-8. lint the repo deterministically
-9. operate locally without GitHub
-10. optionally integrate with GitHub Actions for maintenance
+3. ingest a source and create a stable source-summary page
+4. identify or update affected synthesis pages through a reviewable compile/update path
+5. avoid duplicate accidental re-ingestion
+6. record queue/job/run state durably
+7. query the wiki via CLI
+8. assemble a compact project briefing for a goal
+9. create and query tasks/milestones/decisions/questions
+10. lint the repo deterministically
+11. operate locally without GitHub
+12. optionally integrate with GitHub Actions for maintenance
 
 ## 30. Open Design Questions
 

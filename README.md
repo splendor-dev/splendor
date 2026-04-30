@@ -123,6 +123,8 @@ Implemented today:
 
 Not implemented yet:
 
+- `splendor wiki status`, `splendor wiki suggest`, and review-gated `splendor wiki compile`
+- project briefing over wiki, planning, source, and run state
 - OCR and image extraction flows
 - mutating web UI actions such as add-source forms
 - planning/runs UI views
@@ -144,8 +146,8 @@ Not implemented yet:
 - Current planned slice: `M9-P1`
 - Current PR sub-slice: `M9-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M9-P2`
-- Next planned PR sub-slice: `M9-P2.1`
+- Next planned slice: `M10-P0`
+- Next planned PR sub-slice: `M10-P0.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -164,4 +166,9 @@ reviewable PR workflow.
 wiki/planning markdown. `M9-P1.2` is implemented: first-run dogfood hardening added clearer
 sparse-workspace UI, non-mutating query validation, more useful source summaries, and
 contradiction-review noise reduction. The current PR sub-slice is `M9-P1.3`, a knowledge-work
-dogfood pass that expands the wiki and files follow-up product tasks before `M9-P2.1`.
+dogfood pass that expands the wiki and files follow-up product tasks.
+
+Dogfooding changed the recommended next step: `M10-P0.1` should add a CLI-first wiki status and
+source-impact suggestion bridge before deeper planning/runs UI or rich-source work. The goal is to
+make the text-native loop explicit: ingest creates source summaries; source-impact and compile
+workflows maintain concept, topic, architecture, comparison, and overview pages.

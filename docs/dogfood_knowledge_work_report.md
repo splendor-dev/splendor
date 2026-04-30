@@ -87,3 +87,16 @@ loop before expanding aggressively into rich document parsing.
   planning records, recent run state, and known gaps for a user goal.
 - Keep rich-source handling behind the stronger text-native loop; PDF/OCR/document parsing should
   enter through the same source-resolution and provenance contracts.
+
+### Design and roadmap updates recommended
+
+- Treat source-summary pages as ingestion artifacts and concept/topic/architecture/comparison pages
+  as the maintained synthesis layer.
+- Add `M10-P0` before deeper planning/runs UI and rich-source work, focused on wiki status,
+  source-impact suggestions, and project briefing.
+- Add `splendor wiki status` and `splendor wiki suggest <source-id>` before a mutating compile
+  command.
+- Define a future review-gated `splendor wiki compile <source-id>` workflow for maintaining
+  synthesis pages.
+- Add a project briefing command or UI view that assembles repository-local context for a stated
+  goal.
