@@ -140,9 +140,9 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M9-P1.1`
+- Previous completed PR sub-slice: `M9-P1.2`
 - Current planned slice: `M9-P1`
-- Current PR sub-slice: `M9-P1.2`
+- Current PR sub-slice: `M9-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M9-P2`
 - Next planned PR sub-slice: `M9-P2.1`
@@ -161,6 +161,7 @@ implemented: generated-change automation can propose deterministic repo-refresh 
 reviewable PR workflow.
 
 `M9-P1.1` is implemented: the first read-only local web UI shell can browse and search
-wiki/planning markdown. The current PR sub-slice is `M9-P1.2`, under the parent slice `M9-P1`, which
-hardens the first-run dogfood experience with clearer sparse-workspace UI, non-mutating query
-validation, more useful source summaries, and contradiction-review noise reduction.
+wiki/planning markdown. `M9-P1.2` is implemented: first-run dogfood hardening added clearer
+sparse-workspace UI, non-mutating query validation, more useful source summaries, and
+contradiction-review noise reduction. The current PR sub-slice is `M9-P1.3`, a knowledge-work
+dogfood pass that expands the wiki and files follow-up product tasks before `M9-P2.1`.

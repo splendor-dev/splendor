@@ -1,0 +1,67 @@
+{
+  "contradiction_ids": [],
+  "errors": [],
+  "finished_at": "2026-04-30T09:22:01+00:00",
+  "input_refs": [
+    "state/manifests/sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.json",
+    "raw/imports/dogfood-knowledge-work/round-3-competitive-feature-map.md"
+  ],
+  "job_id": "ingest-src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b",
+  "job_type": "ingest_source",
+  "kind": "run",
+  "output_refs": [
+    "wiki/sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.md",
+    "wiki/index.md",
+    "wiki/log.md"
+  ],
+  "page_ids": [
+    "src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b"
+  ],
+  "page_refs": [
+    "wiki/sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.md"
+  ],
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "state/manifests/sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.json",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b"
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "raw/imports/dogfood-knowledge-work/round-3-competitive-feature-map.md",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b"
+    },
+    {
+      "note": null,
+      "page_id": "src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b",
+      "path_ref": "wiki/sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": "src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b",
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b-20260430T092201788872Z",
+      "source_id": null
+    }
+  ],
+  "run_id": "run-src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b-20260430T092201788872Z",
+  "schema_version": "1",
+  "source_ids": [
+    "src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b"
+  ],
+  "started_at": "2026-04-30T09:22:01+00:00",
+  "status": "succeeded",
+  "task_ids": [],
+  "warnings": []
+}

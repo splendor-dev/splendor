@@ -9,6 +9,7 @@ source_refs:
 - src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac
 - src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41
 - src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd
+- src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4
 generated_by_run_ids: []
 last_generated_at: '2026-04-30T05:18:00+00:00'
 last_reviewed_at: null
@@ -16,6 +17,7 @@ confidence: 0.76
 related_pages:
 - concept-llm-wiki-pattern
 - architecture-splendor-as-llm-wiki-compiler
+- topic-agent-context-infrastructure
 tags:
 - research
 - knowledge-work
@@ -65,3 +67,14 @@ learn the project context without relying on prior chat history?
 After the LLM Wiki source seeding, the answer is closer to yes. The browse/search UI now has source
 summaries, concept pages, and planning tasks to inspect, but the false-positive contradiction tasks
 also show that review automation needs tighter semantics.
+
+## Repository Memory
+
+The second dogfood round connected Splendor to context-engineering practice. A maintained wiki,
+planning records, and run/source state act as durable memory outside the model context window. That
+matters because real research and software work exceeds a single conversation: the system needs
+compact entry points, source-backed synthesis, and explicit planning state so later agents can
+resume without replaying raw history.
+
+The missing product layer is a briefing surface that assembles the relevant wiki pages, active
+planning records, recent runs, stale generated pages, and contested areas for a specific goal.

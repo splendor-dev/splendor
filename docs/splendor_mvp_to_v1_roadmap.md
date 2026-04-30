@@ -334,16 +334,16 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M9-P1.1`
+- Previous completed PR sub-slice: `M9-P1.2`
 - Current planned slice: `M9-P1`
-- Current PR sub-slice: `M9-P1.2`
+- Current PR sub-slice: `M9-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M9-P2`
 - Next planned PR sub-slice: `M9-P2.1`
 
-The current PR sub-slice is `M9-P1.2`, under parent slice `M9-P1`, which hardens the first local web
-UI dogfood experience after `M9-P1.1`. The lifecycle marker means `M9-P1.2` is in progress on
-feature branches and merged once the same committed state is observed on `main`.
+The current PR sub-slice is `M9-P1.3`, under parent slice `M9-P1`, which performs a knowledge-work
+dogfood pass after `M9-P1.2`. The lifecycle marker means `M9-P1.3` is in progress on feature
+branches and merged once the same committed state is observed on `main`.
 
 ---
 
@@ -547,6 +547,7 @@ Provide a modest but useful human UI without changing the system’s center of g
 ### Current PR sub-slices
 - `M9-P1.1` Read-only `splendor serve` browse/search shell
 - `M9-P1.2` Dogfood hardening after first local web UI trial
+- `M9-P1.3` Knowledge-work dogfood and wiki extension
 
 ### Milestone 9 status
 
@@ -555,8 +556,10 @@ command with read-only browsing, markdown detail rendering, and deterministic se
 wiki and planning records. `M9-P1.2` follows up on the first dogfood pass with sparse-workspace
 empty states, explicit special-file browse treatment, non-mutating query validation, more useful
 markdown source summaries, and contradiction-review filtering for source-summary metadata
-boilerplate. Mutating web actions, add-source forms, and planning/runs views remain deferred to
-later `M9` slices.
+boilerplate. `M9-P1.3` adds three researched dogfood rounds, extends the wiki with tool-landscape
+and agent-context synthesis, and files follow-up product tasks from the observed workflow friction.
+Mutating web actions, add-source forms, and planning/runs views remain deferred to later `M9`
+slices.
 
 ---
 
