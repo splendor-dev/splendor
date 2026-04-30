@@ -4,20 +4,52 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
+import bleach
 import markdown as markdown_lib
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from splendor.commands.planning import _model_for
-from splendor.commands.query import QueryMatch, run_query
+from splendor.commands.query import QueryMatch, QueryValidationError, run_query
 from splendor.config import load_config
 from splendor.layout import ResolvedLayout, resolve_layout
+from splendor.state.paths import resolve_workspace_path
 from splendor.utils.planning import parse_planning_document
 from splendor.utils.wiki import parse_wiki_markdown
+
+_LOGGER = logging.getLogger(__name__)
+_ALLOWED_MARKDOWN_TAGS = set(bleach.sanitizer.ALLOWED_TAGS) | {
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "pre",
+    "span",
+    "img",
+    "hr",
+    "br",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+}
+_ALLOWED_MARKDOWN_ATTRIBUTES = {
+    **bleach.sanitizer.ALLOWED_ATTRIBUTES,
+    "a": [*bleach.sanitizer.ALLOWED_ATTRIBUTES.get("a", []), "href", "title"],
+    "img": ["src", "alt", "title"],
+    "code": ["class"],
+    "span": ["class"],
+}
 
 
 @dataclass(frozen=True)
@@ -44,6 +76,15 @@ def create_app(root: Path) -> FastAPI:
     """Create the read-only Splendor web application for a workspace root."""
     workspace_root = root.resolve()
     app = FastAPI(title="Splendor", docs_url=None, redoc_url=None)
+
+    @app.exception_handler(ValueError)
+    def workspace_value_error(_, __: ValueError) -> HTMLResponse:
+        _LOGGER.exception("Workspace configuration error.")
+        return _page(
+            "Workspace Error",
+            '<p class="empty">Workspace configuration is invalid.</p>',
+            status_code=500,
+        )
 
     @app.get("/", response_class=HTMLResponse)
     def home() -> HTMLResponse:
@@ -120,8 +161,18 @@ def create_app(root: Path) -> FastAPI:
             return _page("Search", form)
         try:
             result = run_query(workspace_root, query)
-        except ValueError as exc:
+        except QueryValidationError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError:
+            _LOGGER.exception("Search failed while parsing workspace records.")
+            return _page(
+                "Search Error",
+                f"{form}"
+                '<p class="empty">'
+                "Search failed because the workspace contains invalid records."
+                "</p>",
+                status_code=500,
+            )
 
         rows = "\n".join(_search_row(match) for match in result.matches)
         if not rows:
@@ -133,7 +184,26 @@ def create_app(root: Path) -> FastAPI:
 
 
 def _layout_for(root: Path) -> ResolvedLayout:
-    return resolve_layout(root, load_config(root))
+    config = load_config(root)
+    _validate_layout_root(root, config.layout.wiki_dir, label="wiki_dir")
+    _validate_layout_root(root, config.layout.planning_dir, label="planning_dir")
+    return resolve_layout(root, config)
+
+
+def _validate_layout_root(root: Path, value: str, *, label: str) -> None:
+    path = Path(value)
+    if "\\" in value or path.is_absolute() or not path.parts or ".." in path.parts:
+        raise ValueError(f"Configured {label} must be a workspace-relative directory: {value}")
+    resolved = (root / path).resolve()
+    workspace_root = root.resolve()
+    if resolved == workspace_root:
+        raise ValueError(f"Configured {label} must not be the workspace root: {value}")
+    try:
+        resolved.relative_to(workspace_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"Configured {label} must resolve inside the workspace root: {value}"
+        ) from exc
 
 
 def _iter_documents(root: Path, layout: ResolvedLayout) -> list[_DocumentSummary]:
@@ -199,7 +269,19 @@ def _document_detail(root: Path, layout: ResolvedLayout, path: Path) -> _Documen
             metadata={},
             body=body,
         )
-    parsed = parse_planning_document(path, _model_for(planning_kind))
+    try:
+        parsed = parse_planning_document(path, _model_for(planning_kind))
+    except ValueError:
+        body = path.read_text(encoding="utf-8")
+        return _DocumentDetail(
+            path=relative_path,
+            title=_title_from_markdown(body, relative_path),
+            document_class="planning",
+            kind=planning_kind,
+            status=None,
+            metadata={},
+            body=body,
+        )
     record = parsed.record
     metadata = record.model_dump(mode="json")
     status = metadata.get("status")
@@ -228,12 +310,17 @@ def _planning_kind(layout: ResolvedLayout, path: Path) -> str | None:
 
 def _safe_document_path(root: Path, layout: ResolvedLayout, document_path: str) -> Path:
     pure_path = PurePosixPath(document_path)
+    if "\\" in document_path:
+        raise HTTPException(status_code=404, detail="Document not found")
     if pure_path.is_absolute() or ".." in pure_path.parts or pure_path.suffix != ".md":
         raise HTTPException(status_code=404, detail="Document not found")
     if not pure_path.parts:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    path = (root / Path(*pure_path.parts)).resolve()
+    try:
+        path = resolve_workspace_path(root, document_path, context="Document")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
     allowed_roots = (layout.wiki_dir.resolve(), layout.planning_dir.resolve())
     if not any(path.is_relative_to(allowed_root) for allowed_root in allowed_roots):
         raise HTTPException(status_code=404, detail="Document not found")
@@ -243,11 +330,15 @@ def _safe_document_path(root: Path, layout: ResolvedLayout, document_path: str) 
 
 
 def _render_markdown(markdown_text: str) -> str:
-    escaped_markdown = html.escape(markdown_text, quote=False)
-    return markdown_lib.markdown(
-        escaped_markdown,
+    rendered = markdown_lib.markdown(
+        markdown_text,
         extensions=["extra", "sane_lists"],
         output_format="html5",
+    )
+    return bleach.clean(
+        rendered,
+        tags=_ALLOWED_MARKDOWN_TAGS,
+        attributes=_ALLOWED_MARKDOWN_ATTRIBUTES,
     )
 
 
@@ -283,7 +374,7 @@ def _search_row(match: QueryMatch) -> str:
     )
 
 
-def _page(title: str, body: str) -> HTMLResponse:
+def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
     escaped_title = html.escape(title)
     return HTMLResponse(
         "<!doctype html>"
@@ -325,5 +416,6 @@ def _page(title: str, body: str) -> HTMLResponse:
         "<body>"
         f"<header><h1>{escaped_title}</h1></header>"
         f"<main>{body}</main>"
-        "</body></html>"
+        "</body></html>",
+        status_code=status_code,
     )

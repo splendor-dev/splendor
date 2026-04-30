@@ -22,6 +22,10 @@ _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
+class QueryValidationError(ValueError):
+    """Raised when the query text itself is invalid."""
+
+
 @dataclass(frozen=True)
 class QueryMatch:
     rank: int
@@ -88,7 +92,7 @@ def run_query(root: Path, question: str) -> QueryResult:
     normalized_query = question.strip()
     query_tokens = _query_tokens(normalized_query)
     if not query_tokens:
-        raise ValueError("Query must contain at least one ASCII letter or number")
+        raise QueryValidationError("Query must contain at least one ASCII letter or number")
 
     layout = resolve_layout(root, load_config(root))
     documents = [*_iter_wiki_documents(root, layout), *_iter_planning_documents(root, layout)]

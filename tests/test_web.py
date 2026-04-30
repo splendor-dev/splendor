@@ -85,6 +85,43 @@ def test_document_detail_renders_markdown_and_metadata(tmp_path: Path) -> None:
     assert "active" in response.text
 
 
+def test_document_detail_renders_planning_task(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    create_task(
+        tmp_path,
+        "Ship web shell",
+        record_id="task-ship-web-shell",
+        status="todo",
+        priority="medium",
+        owner=None,
+        milestone_refs=[],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/documents/planning/tasks/task-ship-web-shell.md")
+
+    assert response.status_code == 200
+    assert "Ship web shell" in response.text
+    assert "todo" in response.text
+
+
+def test_document_detail_falls_back_for_invalid_planning_frontmatter(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    task_path = tmp_path / "planning" / "tasks" / "task-bad.md"
+    task_path.write_text("# Broken Task\n\nThis task has no frontmatter.\n", encoding="utf-8")
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/documents/planning/tasks/task-bad.md")
+
+    assert response.status_code == 200
+    assert "Broken Task" in response.text
+    assert "This task has no frontmatter." in response.text
+
+
 def test_search_returns_query_matches_with_document_links(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(
@@ -107,10 +144,37 @@ def test_document_detail_rejects_unsafe_or_unsupported_paths(tmp_path: Path) -> 
     client = TestClient(create_app(tmp_path))
 
     traversal = client.get("/documents/%2E%2E/pyproject.toml")
+    backslash_traversal = client.get("/documents/wiki%5C..%5Csplendor.yaml")
+    non_markdown = client.get("/documents/wiki/secrets.yaml")
     unsupported_root = client.get("/documents/raw/source.md")
 
     assert traversal.status_code == 404
+    assert backslash_traversal.status_code == 404
+    assert non_markdown.status_code == 404
     assert unsupported_root.status_code == 404
+
+
+def test_search_returns_generic_error_for_invalid_workspace_record(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    bad_page = tmp_path / "wiki" / "concepts" / "bad.md"
+    bad_page.write_text("---\nkind: concept\nbogus: true\n---\n\nbad body\n", encoding="utf-8")
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/search", params={"q": "bad"})
+
+    assert response.status_code == 500
+    assert "invalid records" in response.text
+    assert str(bad_page) not in response.text
+
+
+def test_search_returns_bad_request_for_invalid_query_text(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/search", params={"q": "!!!"})
+
+    assert response.status_code == 400
+    assert "Query must contain at least one ASCII letter or number" in response.text
 
 
 def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> None:
@@ -138,6 +202,42 @@ def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> Non
     assert 'href="/documents/knowledge/concepts/web-shell.md"' in browse.text
     assert detail.status_code == 200
     assert "<h1>Custom web shell</h1>" in detail.text
+
+
+def test_web_routes_reject_layout_roots_that_escape_workspace(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        "schema_version: '1'\n"
+        "project_name: custom\n"
+        "layout:\n"
+        "  wiki_dir: ..\n"
+        "  planning_dir: planning\n",
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get("/")
+
+    assert response.status_code == 500
+    assert "Workspace configuration is invalid." in response.text
+
+
+def test_document_detail_preserves_code_text_while_sanitizing_html(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "code.md",
+        title="Code",
+        page_id="concept-code",
+        body="# Code\n\n```python\nx < y && y > z\n```\n\n<script>alert('x')</script>\n",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/documents/wiki/concepts/code.md")
+
+    assert response.status_code == 200
+    assert "x &lt; y &amp;&amp; y &gt; z" in response.text
+    assert "x &amp;lt; y" not in response.text
+    assert "<script>alert" not in response.text
+    assert "&lt;script&gt;alert" in response.text
 
 
 def test_document_detail_escapes_raw_html_in_markdown(tmp_path: Path) -> None:
