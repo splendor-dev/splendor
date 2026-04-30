@@ -61,6 +61,22 @@ def test_add_source_queues_pending_ingest_for_cli_handoff(tmp_path: Path, capsys
     assert source_record.status == "ingested"
 
 
+def test_add_source_reports_warning_when_queue_handoff_fails(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nThis source is registered before init.\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "add-source", str(source)])
+
+    assert exit_code == 0
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    assert not (tmp_path / "state" / "queue" / f"ingest-{source_id}.json").exists()
+    out = capsys.readouterr().out
+    assert f"Registered source {source_id}" in out
+    assert "Warning: source registered but ingest was not queued:" in out
+    assert "Next: splendor init" in out
+    assert f"Then: splendor ingest {source_id}" in out
+
+
 def test_wiki_status_reports_state_counts(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "status-note.md"
@@ -80,9 +96,26 @@ def test_wiki_status_reports_state_counts(tmp_path: Path, capsys) -> None:
     assert payload["queue_status_counts"]["done"] == 1
     assert payload["run_status_counts"]["succeeded"] == 1
     assert payload["machine_generated_pages"] == 1
-    assert payload["review_needed_pages"] == 1
+    assert payload["review_needed_pages"] == 0
+    assert payload["review_needed_synthesis_pages"] == 0
     assert payload["sources_missing_synthesis"] == 1
+    assert payload["invalid_pages"] == 0
     assert payload["recent_runs"][0]["source_ids"] == [added.source_id]
+
+
+def test_wiki_status_reports_invalid_pages_without_failing(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    bad_page = tmp_path / "wiki" / "topics" / "bad.md"
+    bad_page.write_text("---\nkind: topic\nbogus: true\n---\n\n# Bad\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "status", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["page_total"] == 0
+    assert payload["invalid_pages"] == 1
+    assert payload["invalid_page_examples"][0]["path"] == "wiki/topics/bad.md"
+    assert "failed schema validation" in payload["invalid_page_examples"][0]["error"]
 
 
 def test_wiki_suggest_ranks_source_impact_pages(tmp_path: Path, capsys) -> None:
@@ -123,3 +156,37 @@ def test_wiki_suggest_ranks_source_impact_pages(tmp_path: Path, capsys) -> None:
         suggestion["path"] != "wiki/architecture/unrelated.md"
         for suggestion in payload["suggestions"]
     )
+
+
+def test_wiki_suggest_ignores_source_summary_boilerplate_terms(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "semantic-impact.md"
+    source.write_text(
+        "# Semantic impact\n\nThis source explains substantivealpha maintenance behavior.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "substantive-alpha.md",
+        kind="topic",
+        title="Substantive alpha",
+        page_id="topic-substantive-alpha",
+        body="This page discusses substantivealpha behavior.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "generated-boilerplate.md",
+        kind="topic",
+        title="Generated boilerplate",
+        page_id="topic-generated-boilerplate",
+        body="This page only mentions checksum provenance pipeline version and run id.",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "suggest", added.source_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    suggestion_paths = [suggestion["path"] for suggestion in payload["suggestions"]]
+    assert "wiki/topics/substantive-alpha.md" in suggestion_paths
+    assert "wiki/topics/generated-boilerplate.md" not in suggestion_paths

@@ -415,7 +415,14 @@ def handle_add_source(args: argparse.Namespace) -> int:
         try:
             queue_path = enqueue_ingest_job(root, result.source_id)
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
-            return _print_error(exc)
+            warning = _error_message(exc)
+            print(f"Warning: source registered but ingest was not queued: {warning}")
+            if "Run `splendor init`" in warning:
+                print("Next: splendor init")
+                print(f"Then: splendor ingest {result.source_id}")
+            else:
+                print(f"Next: splendor ingest {result.source_id}")
+            return 0
         print(f"Queued ingest: {queue_path}")
         print("Next: splendor ingest --pending")
     else:
@@ -507,8 +514,12 @@ def handle_wiki_status(args: argparse.Namespace) -> int:
     )
     print(f"Machine-generated pages: {result.machine_generated_pages}")
     print(f"Contested pages: {result.contested_pages}")
-    print(f"Review-needed pages: {result.review_needed_pages}")
+    print(f"Stale pages: {result.stale_pages}")
+    print(f"Review-needed synthesis pages: {result.review_needed_synthesis_pages}")
     print(f"Sources missing synthesis follow-up: {result.sources_missing_synthesis}")
+    print(f"Invalid wiki pages: {result.invalid_pages}")
+    for invalid_page in result.invalid_page_examples:
+        print(f"- {invalid_page.path}: {invalid_page.error}")
     if result.recent_runs:
         print("Recent runs:")
         for run in result.recent_runs:

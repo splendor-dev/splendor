@@ -19,6 +19,15 @@ from splendor.utils.wiki import parse_wiki_markdown
 _SYNTHESIS_KINDS = {"architecture", "concept", "entity", "glossary", "topic"}
 _REVIEW_NEEDED_STATES = {"draft", "machine-generated", "contested", "stale"}
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{2,}")
+_SOURCE_TERM_SECTIONS = {"summary", "key facts", "extract"}
+_GENERATED_KEY_FACT_PREFIXES = (
+    "- Source ID:",
+    "- Source type:",
+    "- Checksum:",
+    "- Source ref:",
+    "- Added at:",
+    "- Ingested at:",
+)
 _STOPWORDS = {
     "and",
     "are",
@@ -44,6 +53,12 @@ class WikiPageSnapshot:
 
 
 @dataclass(frozen=True)
+class InvalidWikiPageSnapshot:
+    path: str
+    error: str
+
+
+@dataclass(frozen=True)
 class RecentRunSnapshot:
     run_id: str
     status: str
@@ -65,8 +80,12 @@ class WikiStatus:
     review_state_counts: dict[str, int]
     machine_generated_pages: int
     contested_pages: int
+    stale_pages: int
     review_needed_pages: int
+    review_needed_synthesis_pages: int
     sources_missing_synthesis: int
+    invalid_pages: int
+    invalid_page_examples: list[InvalidWikiPageSnapshot]
     recent_runs: list[RecentRunSnapshot]
 
 
@@ -114,20 +133,28 @@ def _load_runs(layout) -> list[RunRecord]:
     return records
 
 
-def _load_wiki_pages(root: Path, layout) -> list[WikiPageSnapshot]:
+def _load_wiki_pages(
+    root: Path, layout
+) -> tuple[list[WikiPageSnapshot], list[InvalidWikiPageSnapshot]]:
     pages: list[WikiPageSnapshot] = []
+    invalid_pages: list[InvalidWikiPageSnapshot] = []
     for page_path in sorted(layout.wiki_dir.rglob("*.md")):
         if page_path in {layout.index_file, layout.log_file}:
             continue
-        parsed = parse_wiki_markdown(page_path)
+        page_ref = _relative(root, page_path)
+        try:
+            parsed = parse_wiki_markdown(page_path)
+        except ValueError as exc:
+            invalid_pages.append(InvalidWikiPageSnapshot(path=page_ref, error=str(exc)))
+            continue
         pages.append(
             WikiPageSnapshot(
-                path=_relative(root, page_path),
+                path=page_ref,
                 frontmatter=parsed.frontmatter,
                 body=parsed.body,
             )
         )
-    return pages
+    return pages, invalid_pages
 
 
 def _sorted_counts(counter: Counter[str]) -> dict[str, int]:
@@ -156,7 +183,7 @@ def build_wiki_status(root: Path) -> WikiStatus:
     config = load_config(root)
     layout = resolve_layout(root, config)
     sources = _load_sources(layout)
-    pages = _load_wiki_pages(root, layout)
+    pages, invalid_pages = _load_wiki_pages(root, layout)
     queue_records = _load_queue(layout)
     runs = _load_runs(layout)
 
@@ -165,6 +192,12 @@ def build_wiki_status(root: Path) -> WikiStatus:
     queue_status_counts = Counter(record.status for record in queue_records)
     run_status_counts = Counter(run.status for run in runs)
     review_state_counts = Counter(page.frontmatter.review_state for page in pages)
+    review_needed_synthesis_pages = sum(
+        1
+        for page in pages
+        if page.frontmatter.kind in _SYNTHESIS_KINDS
+        and page.frontmatter.review_state in _REVIEW_NEEDED_STATES
+    )
 
     synthesis_source_refs = {
         source_ref
@@ -186,8 +219,12 @@ def build_wiki_status(root: Path) -> WikiStatus:
         review_state_counts=_sorted_counts(review_state_counts),
         machine_generated_pages=review_state_counts["machine-generated"],
         contested_pages=review_state_counts["contested"],
-        review_needed_pages=sum(review_state_counts[state] for state in _REVIEW_NEEDED_STATES),
+        stale_pages=review_state_counts["stale"],
+        review_needed_pages=review_needed_synthesis_pages,
+        review_needed_synthesis_pages=review_needed_synthesis_pages,
         sources_missing_synthesis=len(ingested_source_ids - synthesis_source_refs),
+        invalid_pages=len(invalid_pages),
+        invalid_page_examples=invalid_pages[:5],
         recent_runs=_recent_runs(runs),
     )
 
@@ -210,10 +247,33 @@ def _source_summary_pages(pages: list[WikiPageSnapshot], source_id: str) -> list
     ]
 
 
+def _section_text(body: str, included_headings: set[str]) -> str:
+    sections: list[str] = []
+    active_heading: str | None = None
+    active = False
+    in_fence = False
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if line.startswith("```") or line.startswith("~~~"):
+            if active:
+                sections.append(raw_line)
+            in_fence = not in_fence
+            continue
+        if not in_fence and line.startswith("#"):
+            heading = line.lstrip("#").strip().strip("#").strip().lower()
+            active_heading = heading
+            active = heading in included_headings
+            continue
+        if active:
+            if active_heading == "key facts" and raw_line.startswith(_GENERATED_KEY_FACT_PREFIXES):
+                continue
+            sections.append(raw_line)
+    return "\n".join(sections)
+
+
 def _source_terms(source: SourceRecord, summary_pages: list[WikiPageSnapshot]) -> set[str]:
     summary_text = " ".join(
-        " ".join([page.frontmatter.title, " ".join(page.frontmatter.tags), page.body])
-        for page in summary_pages
+        _section_text(page.body, _SOURCE_TERM_SECTIONS) for page in summary_pages
     )
     label_text = " ".join(source.source_labels)
     return _tokens(
@@ -287,7 +347,7 @@ def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
         raise FileNotFoundError(msg)
 
     source = load_source_record(manifest_path)
-    pages = _load_wiki_pages(root, layout)
+    pages, _invalid_pages = _load_wiki_pages(root, layout)
     summaries = _source_summary_pages(pages, source_id)
     source_terms = _source_terms(source, summaries)
     suggestions = [
@@ -321,8 +381,12 @@ def render_wiki_status_json(status: WikiStatus) -> str:
             "review_state_counts": status.review_state_counts,
             "machine_generated_pages": status.machine_generated_pages,
             "contested_pages": status.contested_pages,
+            "stale_pages": status.stale_pages,
             "review_needed_pages": status.review_needed_pages,
+            "review_needed_synthesis_pages": status.review_needed_synthesis_pages,
             "sources_missing_synthesis": status.sources_missing_synthesis,
+            "invalid_pages": status.invalid_pages,
+            "invalid_page_examples": [page.__dict__ for page in status.invalid_page_examples],
             "recent_runs": [run.__dict__ for run in status.recent_runs],
         },
         indent=2,

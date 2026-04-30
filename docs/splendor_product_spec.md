@@ -661,8 +661,9 @@ Current implementation:
   source ID.
 - `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
   `splendor wiki suggest <source-id>` command.
-- `splendor wiki status` reports source, page, queue, run, review, contested, machine-generated,
-  and missing synthesis-follow-up counts, with optional JSON output.
+- `splendor wiki status` reports source, page, queue, run, review, contested, stale,
+  machine-generated, invalid-page, actionable synthesis-review, and missing
+  synthesis-follow-up counts, with optional JSON output.
 - `splendor wiki suggest <source-id>` deterministically ranks existing synthesis pages using source
   metadata, source-summary text, frontmatter source refs, tags, source refs, and page content, with
   optional JSON output.
