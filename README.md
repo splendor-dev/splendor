@@ -101,7 +101,7 @@ The companion-repo guidance and sample agent instructions live in
 ## What Splendor Is Not
 
 - A hosted service
-- A full web UI product beyond the local read-only browse/search shell
+- A full web UI product beyond the local read-only inspection shell
 - An OCR or rich-media ingestion pipeline in the current MVP
 - A mandatory GitHub-only workflow
 
@@ -122,8 +122,8 @@ Implemented today:
 - `splendor wiki suggest <source-id>`
 - `splendor wiki compile <source-id>` as a non-mutating review-gated contract description
 - `splendor brief [goal]`
-- `splendor serve` for a read-only local browse/search UI
-- read-only web `/status` and `/sources/<source-id>` views
+- `splendor serve` for a read-only local browse/search/status/planning/runtime UI
+- read-only web `/status`, `/sources/<source-id>`, `/planning`, `/runs`, and `/queue` views
 - `splendor lint` and `splendor health`
 
 Not implemented yet:
@@ -131,7 +131,6 @@ Not implemented yet:
 - mutating review-gated `splendor wiki compile`
 - OCR and image extraction flows
 - mutating web UI actions such as add-source forms
-- planning/runs UI views
 - changed-files-driven refresh suggestions
 
 ## Documentation
@@ -146,12 +145,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M10-P0.2`
-- Current planned slice: `M10-P0`
-- Current PR sub-slice: `M10-P0.3`
+- Previous completed PR sub-slice: `M10-P0.3`
+- Current planned slice: `M9-P2`
+- Current PR sub-slice: `M9-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M9-P2`
-- Next planned PR sub-slice: `M9-P2.1`
+- Next planned slice: `M10-P1`
+- Next planned PR sub-slice: `M10-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -175,8 +174,10 @@ the wiki and filed follow-up product tasks.
 `M10-P0.1` is implemented: Splendor now has CLI-first wiki status and source-impact suggestions
 for the text-native maintenance loop. `M10-P0.2` is implemented: the first project briefing command
 and non-mutating review-gated compile-loop contract are in place without mutating synthesis pages.
-The current PR sub-slice is `M10-P0.3`, which smooths the visible workflow around
+`M10-P0.3` is implemented: it smooths the visible workflow around
 `add-source -> ingest -> wiki suggest -> review`, adds restrained next-action hints after query and
 file-answer, improves claim-bearing query snippets, and exposes read-only web status/source-detail
 views. The goal remains explicit separation: ingest creates source summaries; reviewed
 compile/update workflows maintain concept, entity, topic, architecture, and glossary pages.
+The current PR sub-slice is `M9-P2.1`, which adds read-only planning and runtime inspection pages
+to the local web UI without adding mutating web actions.

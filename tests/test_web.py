@@ -6,8 +6,16 @@ from fastapi.testclient import TestClient
 from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
-from splendor.commands.planning import create_task
-from splendor.schemas import KnowledgePageFrontmatter
+from splendor.commands.planning import (
+    create_decision,
+    create_milestone,
+    create_question,
+    create_task,
+)
+from splendor.config import load_config
+from splendor.layout import resolve_layout
+from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
+from splendor.state.runtime import write_queue_item, write_run_record
 from splendor.state.source_registry import load_source_record
 from splendor.web import create_app
 
@@ -35,6 +43,9 @@ def test_home_page_loads_for_initialized_workspace(tmp_path: Path) -> None:
     assert "Splendor" in response.text
     assert "Wiki content pages" in response.text
     assert "/browse" in response.text
+    assert "/planning" in response.text
+    assert "/runs" in response.text
+    assert "/queue" in response.text
     assert "/status" in response.text
 
 
@@ -139,6 +150,193 @@ def test_document_detail_renders_planning_task(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert "Ship web shell" in response.text
     assert "todo" in response.text
+
+
+def test_planning_page_lists_and_links_all_planning_kinds(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    create_milestone(
+        tmp_path,
+        "Milestone UI",
+        record_id="milestone-ui",
+        status="active",
+        target_date="2026-05-01",
+        task_refs=["task-ship-planning-ui"],
+        decision_refs=["decision-read-only-web"],
+        question_refs=["question-runtime-state"],
+    )
+    create_task(
+        tmp_path,
+        "Ship planning UI",
+        record_id="task-ship-planning-ui",
+        status="in_progress",
+        priority="high",
+        owner="codex",
+        milestone_refs=["milestone-ui"],
+        decision_refs=["decision-read-only-web"],
+        question_refs=["question-runtime-state"],
+        depends_on=[],
+        source_refs=[],
+    )
+    create_decision(
+        tmp_path,
+        "Keep web read only",
+        record_id="decision-read-only-web",
+        status="accepted",
+        decided_at="2026-04-30",
+        supersedes=[],
+        source_refs=[],
+        related_tasks=["task-ship-planning-ui"],
+        related_questions=["question-runtime-state"],
+    )
+    create_question(
+        tmp_path,
+        "How visible should runtime state be",
+        record_id="question-runtime-state",
+        status="open",
+        source_refs=[],
+        related_tasks=["task-ship-planning-ui"],
+        related_decisions=["decision-read-only-web"],
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/planning")
+
+    assert response.status_code == 200
+    assert "Tasks" in response.text
+    assert "Milestones" in response.text
+    assert "Decisions" in response.text
+    assert "Questions" in response.text
+    assert 'href="/documents/planning/tasks/task-ship-planning-ui.md"' in response.text
+    assert 'href="/documents/planning/milestones/milestone-ui.md"' in response.text
+    assert 'href="/documents/planning/decisions/decision-read-only-web.md"' in response.text
+    assert 'href="/documents/planning/questions/question-runtime-state.md"' in response.text
+    assert "priority=high" in response.text
+    assert "owner=codex" in response.text
+
+
+def test_planning_kind_page_lists_one_kind_and_rejects_unknown_kind(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    create_task(
+        tmp_path,
+        "Ship planning UI",
+        record_id="task-ship-planning-ui",
+        status="todo",
+        priority="medium",
+        owner=None,
+        milestone_refs=[],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+    )
+    client = TestClient(create_app(tmp_path))
+
+    tasks = client.get("/planning/tasks")
+    missing = client.get("/planning/sources")
+
+    assert tasks.status_code == 200
+    assert "Ship planning UI" in tasks.text
+    assert "planning/tasks/task-ship-planning-ui.md" in tasks.text
+    assert missing.status_code == 404
+    assert "Planning kind not found" in missing.text
+
+
+def test_planning_page_reports_invalid_records_without_path_leak(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    bad_task = tmp_path / "planning" / "tasks" / "task-bad.md"
+    bad_task.write_text("---\nkind: task\ntask_id: task-bad\nbogus: true\n---\n", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get("/planning")
+
+    assert response.status_code == 500
+    assert "invalid planning records" in response.text
+    assert str(bad_task) not in response.text
+
+
+def test_runs_and_queue_pages_show_empty_states(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    runs = client.get("/runs")
+    queue = client.get("/queue")
+
+    assert runs.status_code == 200
+    assert "No run records yet." in runs.text
+    assert "does not start, retry, or mutate jobs" in runs.text
+    assert queue.status_code == 200
+    assert "No queue records yet." in queue.text
+    assert "Queue state is read-only here" in queue.text
+
+
+def test_runs_and_queue_pages_show_runtime_state(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_queue_item(
+        layout.queue_dir / "ingest-src-web.json",
+        QueueItemRecord(
+            job_id="ingest-src-web",
+            job_type="ingest_source",
+            status="failed",
+            created_at="2026-04-30T10:00:00+00:00",
+            updated_at="2026-04-30T10:05:00+00:00",
+            attempt_count=2,
+            max_attempts=3,
+            payload_ref="state/manifests/sources/src-web.json",
+            last_error="source missing",
+        ),
+    )
+    write_run_record(
+        layout.runs_dir / "run-src-web.json",
+        RunRecord(
+            run_id="run-src-web",
+            job_id="ingest-src-web",
+            job_type="ingest_source",
+            started_at="2026-04-30T10:01:00+00:00",
+            finished_at="2026-04-30T10:02:00+00:00",
+            status="failed",
+            input_refs=["state/manifests/sources/src-web.json"],
+            output_refs=[],
+            errors=["source missing"],
+            pipeline_version="test",
+            source_ids=["src-web"],
+            page_refs=["wiki/sources/src-web.md"],
+        ),
+    )
+    client = TestClient(create_app(tmp_path))
+
+    runs = client.get("/runs")
+    queue = client.get("/queue")
+
+    assert runs.status_code == 200
+    assert "run-src-web" in runs.text
+    assert "ingest-src-web" in runs.text
+    assert "wiki/sources/src-web.md" in runs.text
+    assert "state/runs/run-src-web.json" in runs.text
+    assert queue.status_code == 200
+    assert "failed=1" in queue.text
+    assert "2/3" in queue.text
+    assert "source missing" in queue.text
+    assert "state/queue/ingest-src-web.json" in queue.text
+
+
+def test_runs_and_queue_pages_report_invalid_records_without_path_leak(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    bad_run = tmp_path / "state" / "runs" / "run-bad.json"
+    bad_queue = tmp_path / "state" / "queue" / "queue-bad.json"
+    bad_run.write_text("{not valid json", encoding="utf-8")
+    bad_queue.write_text("{not valid json", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    runs = client.get("/runs")
+    queue = client.get("/queue")
+
+    assert runs.status_code == 500
+    assert "invalid run records" in runs.text
+    assert str(bad_run) not in runs.text
+    assert queue.status_code == 500
+    assert "invalid queue records" in queue.text
+    assert str(bad_queue) not in queue.text
 
 
 def test_document_detail_falls_back_for_invalid_planning_frontmatter(tmp_path: Path) -> None:

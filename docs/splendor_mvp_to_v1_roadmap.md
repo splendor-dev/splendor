@@ -334,23 +334,21 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M10-P0.2`
-- Current planned slice: `M10-P0`
-- Current PR sub-slice: `M10-P0.3`
+- Previous completed PR sub-slice: `M10-P0.3`
+- Current planned slice: `M9-P2`
+- Current PR sub-slice: `M9-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M9-P2`
-- Next planned PR sub-slice: `M9-P2.1`
+- Next planned slice: `M10-P1`
+- Next planned PR sub-slice: `M10-P1.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
-contract are available. The current PR sub-slice is `M10-P0.3`, under parent slice `M10-P0`, which
-polishes the visible dogfood workflow with restrained next-action hints, claim-bearing snippets,
-and read-only web status/source-detail surfaces. The lifecycle marker means `M10-P0.3` is in
-progress on feature branches and merged once the same committed state is observed on `main`.
-
-Dogfooding also changed the recommended next slice: before deeper planning/runs UI work, Splendor
-should add a small CLI-first bridge for wiki status, source-impact suggestions, and project
-briefing. That slice is tracked as `M10-P0`.
+contract are available. `M10-P0.3` is implemented: it polishes the visible dogfood workflow with
+restrained next-action hints, claim-bearing snippets, and read-only web status/source-detail
+surfaces. The current PR sub-slice is `M9-P2.1`, under parent slice `M9-P2`, which returns to
+read-only planning and runtime inspection pages for the local web UI. The lifecycle marker means
+`M9-P2.1` is in progress on feature branches and merged once the same committed state is observed
+on `main`.
 
 ---
 
@@ -559,6 +557,7 @@ Provide a modest but useful human UI without changing the system’s center of g
 - `M10-P0.1` Wiki status and source-impact suggestions
 - `M10-P0.2` Project briefing and compile-loop contract
 - `M10-P0.3` Dogfood workflow polish and web status surfaces
+- `M9-P2.1` Planning/runs UI views
 
 ### Milestone 9 status
 
@@ -571,11 +570,10 @@ boilerplate. `M9-P1.3` adds three researched dogfood rounds, extends the wiki wi
 and agent-context synthesis, and files follow-up product tasks from the observed workflow friction.
 `M10-P0.1` adds CLI-first wiki status and source-impact suggestions before deeper planning/runs UI
 work. `M10-P0.2` adds project briefing and a documented, non-mutating review-gated compile-loop
-contract. The current recommended slice is `M10-P0.3`, which polishes the visible dogfood workflow
-with query snippet improvements, restrained next-action hints, and read-only web
-status/source-detail surfaces.
-Mutating web actions, add-source forms, and planning/runs views remain deferred to later `M9`
-slices.
+contract. `M10-P0.3` polishes the visible dogfood workflow with query snippet improvements,
+restrained next-action hints, and read-only web status/source-detail surfaces. `M9-P2.1` adds
+read-only planning record lists plus queue and run inspection views to the same local web shell.
+Mutating web actions and add-source forms remain deferred to later `M9` slices.
 
 ---
 

@@ -19,11 +19,17 @@ from splendor.commands.query import QueryMatch, QueryValidationError, run_query
 from splendor.commands.wiki import build_wiki_status, load_sources, suggest_source_pages
 from splendor.config import load_config
 from splendor.layout import ResolvedLayout, resolve_layout
+from splendor.schemas import QueueItemRecord, RunRecord
 from splendor.state.paths import resolve_workspace_path
-from splendor.state.runtime import load_run_record
+from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_compat import canonical_source_ref
 from splendor.state.source_registry import load_source_record
-from splendor.utils.planning import parse_planning_document
+from splendor.utils.planning import (
+    iter_planning_paths,
+    parse_planning_document,
+    planning_directory,
+    record_id_field,
+)
 from splendor.utils.wiki import parse_wiki_markdown
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,6 +99,28 @@ class _DocumentDetail:
     body: str
 
 
+@dataclass(frozen=True)
+class _PlanningSummary:
+    path: str
+    kind: str
+    record_id: str
+    title: str
+    status: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class _QueueSummary:
+    path: str
+    record: QueueItemRecord
+
+
+@dataclass(frozen=True)
+class _RunSummary:
+    path: str
+    record: RunRecord
+
+
 class WebLayoutError(ValueError):
     """Raised when configured web document roots are unsafe to serve."""
 
@@ -132,6 +160,9 @@ def create_app(root: Path) -> FastAPI:
             '<button type="submit">Search</button>'
             "</form>"
             '<a class="button" href="/browse">Browse documents</a>'
+            '<a class="button secondary" href="/planning">Planning</a>'
+            '<a class="button secondary" href="/runs">Runs</a>'
+            '<a class="button secondary" href="/queue">Queue</a>'
             '<a class="button secondary" href="/status">Status</a>'
             "</section>"
             f"{empty_state}"
@@ -203,6 +234,120 @@ def create_app(root: Path) -> FastAPI:
             f"<tbody>{source_rows}</tbody></table>"
         )
         return _page("Status", body)
+
+    @app.get("/planning", response_class=HTMLResponse)
+    def planning() -> HTMLResponse:
+        layout = _layout_for(workspace_root)
+        try:
+            grouped = {
+                kind: _planning_records(workspace_root, layout, kind)
+                for kind in ("task", "milestone", "decision", "question")
+            }
+        except ValueError:
+            _LOGGER.exception("Planning view failed while parsing planning records.")
+            return _page(
+                "Planning Error",
+                '<p class="empty">'
+                "Planning view failed because the workspace contains invalid planning records."
+                "</p>",
+                status_code=500,
+            )
+        stats = "".join(
+            f"<div><strong>{len(grouped[kind])}</strong>"
+            f"<span>{html.escape(_planning_label(kind))}</span></div>"
+            for kind in ("task", "milestone", "decision", "question")
+        )
+        sections = "".join(_planning_section(kind, records) for kind, records in grouped.items())
+        body = (
+            '<p class="breadcrumbs"><a href="/">Home</a> / Planning</p>'
+            f'<section class="stats">{stats}</section>'
+            f"{sections}"
+        )
+        return _page("Planning", body)
+
+    @app.get("/planning/{kind}", response_class=HTMLResponse)
+    def planning_kind(kind: str) -> HTMLResponse:
+        layout = _layout_for(workspace_root)
+        normalized_kind = _normalize_planning_kind(kind)
+        try:
+            records = _planning_records(workspace_root, layout, normalized_kind)
+        except ValueError:
+            _LOGGER.exception("Planning view failed while parsing planning records.")
+            return _page(
+                "Planning Error",
+                '<p class="empty">'
+                "Planning view failed because the workspace contains invalid planning records."
+                "</p>",
+                status_code=500,
+            )
+        body = (
+            '<p class="breadcrumbs"><a href="/planning">Planning</a> / '
+            f"{html.escape(_planning_label(normalized_kind))}</p>"
+            f"{_planning_table(normalized_kind, records)}"
+        )
+        return _page(_planning_label(normalized_kind), body)
+
+    @app.get("/runs", response_class=HTMLResponse)
+    def runs() -> HTMLResponse:
+        layout = _layout_for(workspace_root)
+        try:
+            run_records = _run_records(workspace_root, layout)
+        except ValueError:
+            _LOGGER.exception("Runs view failed while parsing run records.")
+            return _page(
+                "Runs Error",
+                '<p class="empty">'
+                "Runs view failed because the workspace contains invalid run records."
+                "</p>",
+                status_code=500,
+            )
+        rows = "\n".join(_run_row(run) for run in run_records[:25])
+        if not rows:
+            rows = '<tr><td colspan="8" class="empty">No run records yet.</td></tr>'
+        body = (
+            '<p class="breadcrumbs"><a href="/">Home</a> / Runs</p>'
+            '<p class="empty">Recent run records are shown from durable filesystem state. '
+            "This page does not start, retry, or mutate jobs.</p>"
+            "<table><thead><tr><th>Run</th><th>Status</th><th>Job</th><th>Started</th>"
+            "<th>Finished</th><th>Sources</th><th>Pages</th><th>Record</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table>"
+        )
+        return _page("Runs", body)
+
+    @app.get("/queue", response_class=HTMLResponse)
+    def queue() -> HTMLResponse:
+        layout = _layout_for(workspace_root)
+        try:
+            queue_records = _queue_records(workspace_root, layout)
+        except ValueError:
+            _LOGGER.exception("Queue view failed while parsing queue records.")
+            return _page(
+                "Queue Error",
+                '<p class="empty">'
+                "Queue view failed because the workspace contains invalid queue records."
+                "</p>",
+                status_code=500,
+            )
+        status_counts: dict[str, int] = {}
+        for item in queue_records:
+            status_counts[item.record.status] = status_counts.get(item.record.status, 0) + 1
+        rows = "\n".join(_queue_row(item) for item in queue_records[:50])
+        if not rows:
+            rows = '<tr><td colspan="8" class="empty">No queue records yet.</td></tr>'
+        body = (
+            '<p class="breadcrumbs"><a href="/">Home</a> / Queue</p>'
+            '<section class="stats">'
+            f"<div><strong>{len(queue_records)}</strong><span>Queue records</span></div>"
+            f"<div><strong>{html.escape(_format_counts(status_counts)) or '-'}</strong>"
+            "<span>Status counts</span></div>"
+            "</section>"
+            '<p class="empty">Queue state is read-only here. Use CLI commands for ingestion, '
+            "repair, retry, or other mutations.</p>"
+            "<table><thead><tr><th>Job</th><th>Status</th><th>Type</th><th>Attempts</th>"
+            "<th>Payload</th><th>Lease</th><th>Error</th><th>Record</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table>"
+        )
+        return _page("Queue", body)
 
     @app.get("/sources/{source_id}", response_class=HTMLResponse)
     def source_detail(source_id: str) -> HTMLResponse:
@@ -413,6 +558,142 @@ def _workspace_counts(
         ),
         runs=sum(1 for path in layout.runs_dir.glob("*.json") if path.is_file()),
     )
+
+
+def _normalize_planning_kind(kind: str) -> str:
+    normalized = kind.removesuffix("s")
+    if normalized not in {"task", "milestone", "decision", "question"}:
+        raise HTTPException(status_code=404, detail="Planning kind not found")
+    return normalized
+
+
+def _planning_label(kind: str) -> str:
+    return {
+        "task": "Tasks",
+        "milestone": "Milestones",
+        "decision": "Decisions",
+        "question": "Questions",
+    }[kind]
+
+
+def _planning_records(root: Path, layout: ResolvedLayout, kind: str) -> list[_PlanningSummary]:
+    model = model_for_planning_kind(kind)
+    id_field = record_id_field(kind)
+    records: list[_PlanningSummary] = []
+    for path in iter_planning_paths(planning_directory(layout, kind)):
+        parsed = parse_planning_document(path, model)
+        record = parsed.record
+        metadata = record.model_dump(mode="json")
+        record_id = getattr(record, id_field)
+        status = metadata.get("status")
+        records.append(
+            _PlanningSummary(
+                path=path.relative_to(root).as_posix(),
+                kind=kind,
+                record_id=record_id,
+                title=record.title,
+                status=status if isinstance(status, str) else "-",
+                detail=_planning_detail(kind, metadata),
+            )
+        )
+    return sorted(records, key=lambda item: (item.status, item.record_id))
+
+
+def _planning_detail(kind: str, metadata: dict[str, object]) -> str:
+    if kind == "task":
+        parts = [f"priority={metadata.get('priority', '-')}"]
+        owner = metadata.get("owner")
+        if owner:
+            parts.append(f"owner={owner}")
+        milestone_refs = metadata.get("milestone_refs")
+        if isinstance(milestone_refs, list) and milestone_refs:
+            parts.append(f"milestones={len(milestone_refs)}")
+        return " ".join(parts)
+    if kind == "milestone":
+        parts = []
+        target_date = metadata.get("target_date")
+        if target_date:
+            parts.append(f"target={target_date}")
+        task_refs = metadata.get("task_refs")
+        if isinstance(task_refs, list):
+            parts.append(f"tasks={len(task_refs)}")
+        return " ".join(parts) or "-"
+    if kind == "decision":
+        decided_at = metadata.get("decided_at")
+        related_tasks = metadata.get("related_tasks")
+        parts = [f"decided={decided_at or '-'}"]
+        if isinstance(related_tasks, list) and related_tasks:
+            parts.append(f"tasks={len(related_tasks)}")
+        return " ".join(parts)
+    answer_page = metadata.get("answer_page_ref")
+    related_tasks = metadata.get("related_tasks")
+    parts = []
+    if answer_page:
+        parts.append(f"answer={answer_page}")
+    if isinstance(related_tasks, list) and related_tasks:
+        parts.append(f"tasks={len(related_tasks)}")
+    return " ".join(parts) or "-"
+
+
+def _planning_section(kind: str, records: list[_PlanningSummary]) -> str:
+    return (
+        f'<h2><a href="/planning/{kind}s">{html.escape(_planning_label(kind))}</a></h2>'
+        f"{_planning_table(kind, records)}"
+    )
+
+
+def _planning_table(kind: str, records: list[_PlanningSummary]) -> str:
+    rows = "\n".join(_planning_row(item) for item in records)
+    if not rows:
+        rows = (
+            f'<tr><td colspan="5" class="empty">No '
+            f"{html.escape(_planning_label(kind).lower())} yet.</td></tr>"
+        )
+    return (
+        "<table><thead><tr><th>Title</th><th>ID</th><th>Status</th><th>Detail</th>"
+        f"<th>Path</th></tr></thead><tbody>{rows}</tbody></table>"
+    )
+
+
+def _planning_row(item: _PlanningSummary) -> str:
+    href = f"/documents/{quote(item.path, safe='/')}"
+    return (
+        "<tr>"
+        f'<td><a href="{href}">{html.escape(item.title)}</a></td>'
+        f"<td><code>{html.escape(item.record_id)}</code></td>"
+        f"<td>{html.escape(item.status)}</td>"
+        f"<td>{html.escape(item.detail)}</td>"
+        f"<td><code>{html.escape(item.path)}</code></td>"
+        "</tr>"
+    )
+
+
+def _run_records(root: Path, layout: ResolvedLayout) -> list[_RunSummary]:
+    records: list[_RunSummary] = []
+    for run_path in sorted(layout.runs_dir.glob("*.json")):
+        records.append(
+            _RunSummary(
+                path=run_path.relative_to(root).as_posix(),
+                record=load_run_record(run_path),
+            )
+        )
+    return sorted(
+        records,
+        key=lambda item: (item.record.finished_at or item.record.started_at, item.record.run_id),
+        reverse=True,
+    )
+
+
+def _queue_records(root: Path, layout: ResolvedLayout) -> list[_QueueSummary]:
+    records: list[_QueueSummary] = []
+    for queue_path in sorted(layout.queue_dir.glob("*.json")):
+        records.append(
+            _QueueSummary(
+                path=queue_path.relative_to(root).as_posix(),
+                record=load_queue_item(queue_path),
+            )
+        )
+    return sorted(records, key=lambda item: (item.record.status, item.record.job_id))
 
 
 def _format_counts(counts: dict[str, int]) -> str:
@@ -635,6 +916,47 @@ def _source_run_section(root: Path, layout: ResolvedLayout, run_id: str | None) 
         f"<div><strong>Record</strong><span><code>{html.escape(run_ref)}</code></span></div>"
         f"<div><strong>Pages</strong><span>{html.escape(pages)}</span></div>"
         "</section>"
+    )
+
+
+def _run_row(item: _RunSummary) -> str:
+    run = item.record
+    page_refs = ", ".join(run.page_refs[:3])
+    if len(run.page_refs) > 3:
+        page_refs += f" (+{len(run.page_refs) - 3})"
+    source_ids = ", ".join(run.source_ids[:3])
+    if len(run.source_ids) > 3:
+        source_ids += f" (+{len(run.source_ids) - 3})"
+    return (
+        "<tr>"
+        f"<td><code>{html.escape(run.run_id)}</code></td>"
+        f"<td>{html.escape(run.status)}</td>"
+        f"<td><code>{html.escape(run.job_id)}</code><br />{html.escape(run.job_type)}</td>"
+        f"<td>{html.escape(run.started_at)}</td>"
+        f"<td>{html.escape(run.finished_at or '-')}</td>"
+        f"<td>{html.escape(source_ids or '-')}</td>"
+        f"<td>{html.escape(page_refs or '-')}</td>"
+        f"<td><code>{html.escape(item.path)}</code></td>"
+        "</tr>"
+    )
+
+
+def _queue_row(item: _QueueSummary) -> str:
+    queue = item.record
+    lease = "-"
+    if queue.lease_owner or queue.lease_expires_at:
+        lease = f"{queue.lease_owner or '-'} until {queue.lease_expires_at or '-'}"
+    return (
+        "<tr>"
+        f"<td><code>{html.escape(queue.job_id)}</code></td>"
+        f"<td>{html.escape(queue.status)}</td>"
+        f"<td>{html.escape(queue.job_type)}</td>"
+        f"<td>{queue.attempt_count}/{queue.max_attempts}</td>"
+        f"<td><code>{html.escape(queue.payload_ref)}</code></td>"
+        f"<td>{html.escape(lease)}</td>"
+        f"<td>{html.escape(queue.last_error or '-')}</td>"
+        f"<td><code>{html.escape(item.path)}</code></td>"
+        "</tr>"
     )
 
 
