@@ -10,6 +10,16 @@ from splendor.schemas import QueueItemRecord, RunRecord
 from splendor.utils.fs import ensure_directory, write_text_atomic
 
 
+def ingest_job_id(source_id: str) -> str:
+    return f"ingest-{source_id}"
+
+
+def source_id_from_ingest_job_id(job_id: str) -> str | None:
+    if job_id.startswith("ingest-"):
+        return job_id.removeprefix("ingest-")
+    return None
+
+
 def queue_item_path_for(layout: ResolvedLayout, job_id: str) -> Path:
     return layout.queue_dir / f"{job_id}.json"
 

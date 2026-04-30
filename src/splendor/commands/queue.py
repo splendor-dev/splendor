@@ -12,8 +12,10 @@ from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import QueueItemRecord
 from splendor.state.runtime import (
+    ingest_job_id,
     load_queue_item,
     queue_item_path_for,
+    source_id_from_ingest_job_id,
     write_queue_item,
 )
 from splendor.state.source_registry import load_source_record, manifest_path_for
@@ -119,7 +121,7 @@ def repair_ingest_source(root: Path, source_id: str) -> RepairIngestResult:
             message="already ingested for the current pipeline version",
         )
 
-    job_id = _ingest_job_id(source_id)
+    job_id = ingest_job_id(source_id)
     queue_path = queue_item_path_for(layout, job_id)
     if not queue_path.exists():
         queue_path = enqueue_ingest_job(root, source_id)
@@ -132,6 +134,8 @@ def repair_ingest_source(root: Path, source_id: str) -> RepairIngestResult:
             write_queue_item(queue_path, _reset_failed_ingest_queue_item(queue_item))
         elif queue_item.status == "done":
             queue_path = enqueue_ingest_job(root, source_id)
+            queue_item = load_queue_item(queue_path)
+            write_queue_item(queue_path, _ensure_next_attempt_allowed(queue_item))
 
     result = run_ingest_job(root, queue_path)
     if result.no_op:
@@ -208,12 +212,20 @@ def _reset_failed_ingest_queue_item(queue_item: QueueItemRecord) -> QueueItemRec
         update={
             "status": "pending",
             "updated_at": utc_now_iso(),
-            "max_attempts": max(queue_item.max_attempts, queue_item.attempt_count + 1),
+            "max_attempts": _next_attempt_budget(queue_item),
             "lease_owner": None,
             "lease_expires_at": None,
             "last_error": None,
         }
     )
+
+
+def _ensure_next_attempt_allowed(queue_item: QueueItemRecord) -> QueueItemRecord:
+    return queue_item.model_copy(update={"max_attempts": _next_attempt_budget(queue_item)})
+
+
+def _next_attempt_budget(queue_item: QueueItemRecord) -> int:
+    return max(queue_item.max_attempts, queue_item.attempt_count + 1)
 
 
 def _snapshot_queue_item(
@@ -231,7 +243,7 @@ def _snapshot_queue_item(
         lease_owner=queue_item.lease_owner,
         lease_expires_at=queue_item.lease_expires_at,
         last_error=queue_item.last_error,
-        source_id=_source_id_from_job_id(queue_item.job_id),
+        source_id=source_id_from_ingest_job_id(queue_item.job_id),
         record_path=queue_path.relative_to(root),
     )
 
@@ -256,13 +268,3 @@ def _snapshot_payload(item: QueueItemSnapshot) -> dict[str, object]:
 
 def _path_payload(path: Path | None) -> str | None:
     return None if path is None else str(path)
-
-
-def _ingest_job_id(source_id: str) -> str:
-    return f"ingest-{source_id}"
-
-
-def _source_id_from_job_id(job_id: str) -> str | None:
-    if job_id.startswith("ingest-"):
-        return job_id.removeprefix("ingest-")
-    return None

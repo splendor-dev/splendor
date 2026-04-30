@@ -202,6 +202,30 @@ def test_cli_queue_retry_resets_failed_job(tmp_path: Path, capsys) -> None:
     assert load_queue_item(queue_path).status == "pending"
 
 
+def test_cli_queue_retry_json_reports_reset_job(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    job_id = f"ingest-{source_id}"
+    queue_path = tmp_path / "state" / "queue" / f"{job_id}.json"
+    failed = load_queue_item(queue_path).model_copy(
+        update={"status": "failed", "attempt_count": 3, "max_attempts": 3, "last_error": "broken"}
+    )
+    write_queue_item(queue_path, failed)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "retry", job_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["item"]["job_id"] == job_id
+    assert payload["item"]["status"] == "pending"
+    assert payload["item"]["max_attempts"] == 4
+    assert payload["item"]["last_error"] is None
+
+
 def test_cli_repair_ingest_requeues_and_runs_fixed_failed_source(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.txt"
@@ -225,6 +249,28 @@ def test_cli_repair_ingest_requeues_and_runs_fixed_failed_source(tmp_path: Path,
     )
     assert queue_record.status == "done"
     assert source_record.status == "ingested"
+
+
+def test_repair_ingest_done_requeue_keeps_attempt_budget_valid(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    exhausted_done = load_queue_item(queue_path).model_copy(
+        update={"status": "done", "attempt_count": 3, "max_attempts": 3}
+    )
+    write_queue_item(queue_path, exhausted_done)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "repair", "ingest", source_id])
+
+    assert exit_code == 0
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "done"
+    assert queue_record.attempt_count == 4
+    assert queue_record.max_attempts == 4
 
 
 def test_cli_repair_ingest_json_reports_no_op(tmp_path: Path, capsys) -> None:
