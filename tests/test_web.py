@@ -30,8 +30,22 @@ def test_home_page_loads_for_initialized_workspace(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert "Splendor" in response.text
-    assert "Documents" in response.text
+    assert "Wiki content pages" in response.text
     assert "/browse" in response.text
+
+
+def test_home_page_shows_empty_state_for_initialized_workspace(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "No workspace knowledge yet" in response.text
+    assert "uv run splendor repo refresh" in response.text
+    assert "uv run splendor add-source" in response.text
+    assert "Wiki content pages" in response.text
+    assert "Source manifests" in response.text
 
 
 def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
@@ -64,6 +78,20 @@ def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
     assert "Ship web shell" in response.text
     assert "wiki/concepts/web-shell.md" in response.text
     assert "planning/tasks/task-ship-web-shell.md" in response.text
+
+
+def test_browse_page_separates_index_and_log_as_special_files(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/browse")
+
+    assert response.status_code == 200
+    assert "No searchable content records yet." in response.text
+    assert "Special files" in response.text
+    assert "excluded from search results" in response.text
+    assert "wiki/index.md" in response.text
+    assert "wiki/log.md" in response.text
 
 
 def test_document_detail_renders_markdown_and_metadata(tmp_path: Path) -> None:
@@ -175,6 +203,20 @@ def test_search_returns_bad_request_for_invalid_query_text(tmp_path: Path) -> No
 
     assert response.status_code == 400
     assert "Query must contain at least one ASCII letter or number" in response.text
+
+
+def test_search_empty_state_mentions_special_files_for_sparse_workspace(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/search", params={"q": "splendor"})
+
+    assert response.status_code == 200
+    assert "special navigation files" in response.text
+    assert "excluded from search" in response.text
+    assert "uv run splendor repo refresh" in response.text
 
 
 def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> None:

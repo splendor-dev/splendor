@@ -800,6 +800,34 @@ def test_cli_query_command_persists_snapshot_for_json_output(tmp_path: Path, cap
     assert snapshot.query == "query"
 
 
+def test_cli_query_command_no_save_skips_last_query_snapshot(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "--no-save", "query"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Summary: Found 1 matching records." in captured.out
+    assert not (tmp_path / "state" / "queries" / "last-query.json").exists()
+
+
+def test_cli_query_command_no_save_json_preserves_output_shape(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "--no-save", "query", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["query"] == "query"
+    assert payload["match_count"] == 1
+    assert payload["matches"][0]["path"] == "planning/tasks/task-ship-query.md"
+    assert not (tmp_path / "state" / "queries" / "last-query.json").exists()
+
+
 def test_cli_query_command_reports_snapshot_write_failure(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:

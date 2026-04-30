@@ -132,6 +132,7 @@ Not implemented yet:
 
 - [docs/quickstart.md](docs/quickstart.md)
 - [docs/companion_repo_setup.md](docs/companion_repo_setup.md)
+- [docs/dogfooding.md](docs/dogfooding.md)
 - [docs/splendor_product_spec.md](docs/splendor_product_spec.md)
 - [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md)
 - [docs/schema_contracts.md](docs/schema_contracts.md)
@@ -139,9 +140,9 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M8-P2.1`
+- Previous completed PR sub-slice: `M9-P1.1`
 - Current planned slice: `M9-P1`
-- Current PR sub-slice: `M9-P1.1`
+- Current PR sub-slice: `M9-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M9-P2`
 - Next planned PR sub-slice: `M9-P2.1`
@@ -159,5 +160,7 @@ run Splendor health nightly, and publish generated maintenance reports as artifa
 implemented: generated-change automation can propose deterministic repo-refresh output through a
 reviewable PR workflow.
 
-The current PR sub-slice is `M9-P1.1`, under the parent slice `M9-P1`, which adds the first
-read-only local web UI shell for browsing and searching wiki/planning markdown.
+`M9-P1.1` is implemented: the first read-only local web UI shell can browse and search
+wiki/planning markdown. The current PR sub-slice is `M9-P1.2`, under the parent slice `M9-P1`, which
+hardens the first-run dogfood experience with clearer sparse-workspace UI, non-mutating query
+validation, more useful source summaries, and contradiction-review noise reduction.

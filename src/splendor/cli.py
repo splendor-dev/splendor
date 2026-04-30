@@ -144,6 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="json_output",
         help="Emit machine-readable JSON output.",
     )
+    query_parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Do not update state/queries/last-query.json.",
+    )
     query_parser.set_defaults(handler=handle_query)
 
     serve_parser = subparsers.add_parser("serve", help="Run the read-only local web UI")
@@ -485,39 +490,40 @@ def handle_query(args: argparse.Namespace) -> int:
     except ValueError as exc:
         return _print_error(exc)
 
-    try:
-        layout = resolve_layout(root, load_config(root))
-        snapshot = QuerySnapshot(
-            query=result.query,
-            summary=result.summary,
-            match_count=result.match_count,
-            created_at=utc_now_iso(),
-            matches=[
-                QueryMatchSnapshot(
-                    rank=match.rank,
-                    score=match.score,
-                    document_class=match.document_class,
-                    kind=match.kind,
-                    record_id=match.record_id,
-                    title=match.title,
-                    path=match.path,
-                    status=match.status,
-                    review_state=match.review_state,
-                    last_generated_at=match.last_generated_at,
-                    snippet=match.snippet,
-                    source_refs=match.source_refs,
-                    generated_by_run_ids=match.generated_by_run_ids,
-                    provenance_links=match.provenance_links,
-                    contradiction_count=match.contradiction_count,
-                    review_task_ids=match.review_task_ids,
-                    tags=match.tags,
-                )
-                for match in result.matches
-            ],
-        )
-        write_query_snapshot(last_query_path_for(layout), snapshot)
-    except OSError as exc:
-        return _print_error(exc)
+    if not args.no_save:
+        try:
+            layout = resolve_layout(root, load_config(root))
+            snapshot = QuerySnapshot(
+                query=result.query,
+                summary=result.summary,
+                match_count=result.match_count,
+                created_at=utc_now_iso(),
+                matches=[
+                    QueryMatchSnapshot(
+                        rank=match.rank,
+                        score=match.score,
+                        document_class=match.document_class,
+                        kind=match.kind,
+                        record_id=match.record_id,
+                        title=match.title,
+                        path=match.path,
+                        status=match.status,
+                        review_state=match.review_state,
+                        last_generated_at=match.last_generated_at,
+                        snippet=match.snippet,
+                        source_refs=match.source_refs,
+                        generated_by_run_ids=match.generated_by_run_ids,
+                        provenance_links=match.provenance_links,
+                        contradiction_count=match.contradiction_count,
+                        review_task_ids=match.review_task_ids,
+                        tags=match.tags,
+                    )
+                    for match in result.matches
+                ],
+            )
+            write_query_snapshot(last_query_path_for(layout), snapshot)
+        except OSError as exc:
+            return _print_error(exc)
 
     if args.json_output:
         payload = {
