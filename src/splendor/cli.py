@@ -634,7 +634,7 @@ def handle_repair_ingest(args: argparse.Namespace) -> int:
         return _print_error(exc)
 
     if args.json_output:
-        print(render_repair_ingest_json(result))
+        print(render_repair_ingest_json(root, result))
         return 0
 
     if result.no_op:
@@ -642,7 +642,8 @@ def handle_repair_ingest(args: argparse.Namespace) -> int:
     else:
         print(f"Repaired ingest for source {result.source_id}")
         print(f"Run: {result.run_id}")
-    print(f"Queue record: {result.queue_path}")
+    if result.queue_path is not None:
+        print(f"Queue record: {result.queue_path}")
     if result.run_path is not None:
         print(f"Run record: {result.run_path}")
     if result.page_path is not None:

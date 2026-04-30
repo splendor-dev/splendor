@@ -175,15 +175,15 @@ def render_queue_retry_json(result: QueueRetryResult) -> str:
     return json.dumps({"item": _snapshot_payload(result.item)}, indent=2)
 
 
-def render_repair_ingest_json(result: RepairIngestResult) -> str:
+def render_repair_ingest_json(root: Path, result: RepairIngestResult) -> str:
     return json.dumps(
         {
             "source_id": result.source_id,
             "outcome": result.outcome,
-            "queue_path": _path_payload(result.queue_path),
+            "queue_path": _path_payload(root, result.queue_path),
             "run_id": result.run_id,
-            "run_path": _path_payload(result.run_path),
-            "page_path": _path_payload(result.page_path),
+            "run_path": _path_payload(root, result.run_path),
+            "page_path": _path_payload(root, result.page_path),
             "no_op": result.no_op,
             "message": result.message,
         },
@@ -266,5 +266,5 @@ def _snapshot_payload(item: QueueItemSnapshot) -> dict[str, object]:
     }
 
 
-def _path_payload(path: Path | None) -> str | None:
-    return None if path is None else str(path)
+def _path_payload(root: Path, path: Path | None) -> str | None:
+    return None if path is None else path.relative_to(root).as_posix()
