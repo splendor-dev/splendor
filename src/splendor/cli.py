@@ -391,6 +391,10 @@ def _print_error(exc: Exception) -> int:
     return 1
 
 
+def _is_missing_workspace_wiki_error(exc: Exception) -> bool:
+    return str(exc).startswith("Workspace is missing required wiki files:")
+
+
 def handle_add_source(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     candidate_path = args.path.expanduser()
@@ -417,7 +421,7 @@ def handle_add_source(args: argparse.Namespace) -> int:
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             warning = _error_message(exc)
             print(f"Warning: source registered but ingest was not queued: {warning}")
-            if "Run `splendor init`" in warning:
+            if _is_missing_workspace_wiki_error(exc):
                 print("Next: splendor init")
                 print(f"Then: splendor ingest {result.source_id}")
             else:

@@ -13,7 +13,7 @@ from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord, SourceRecord
 from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_compat import canonical_source_ref
-from splendor.state.source_registry import load_source_record, manifest_path_for
+from splendor.state.source_registry import load_source_record
 from splendor.utils.wiki import parse_wiki_markdown
 
 _SYNTHESIS_KINDS = {"architecture", "concept", "entity", "glossary", "topic"}
@@ -268,8 +268,6 @@ def _section_text(body: str, included_headings: set[str]) -> str:
     for raw_line in body.splitlines():
         line = raw_line.strip()
         if line.startswith("```") or line.startswith("~~~"):
-            if active:
-                sections.append(raw_line)
             in_fence = not in_fence
             continue
         if not in_fence and line.startswith("#"):
@@ -309,7 +307,6 @@ def _score_page(
         [
             page.frontmatter.title,
             page.frontmatter.page_id,
-            " ".join(page.frontmatter.tags),
             page.path,
             page.body,
         ]
@@ -352,7 +349,7 @@ def _score_page(
 def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
     config = load_config(root)
     layout = resolve_layout(root, config)
-    manifest_path = manifest_path_for(root, source_id)
+    manifest_path = layout.source_records_dir / f"{source_id}.json"
     if not manifest_path.exists():
         msg = f"Unknown source ID: {source_id}"
         raise FileNotFoundError(msg)
