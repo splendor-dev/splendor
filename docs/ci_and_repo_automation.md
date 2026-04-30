@@ -114,6 +114,43 @@ Review expectations:
 - confirm the generating workflow's Splendor lint job passed
 - manually dispatch or rerun normal CI if repository policy requires checks on the generated PR
 
+## `planning-validator`
+
+File: `.github/workflows/planning-validator.yml`
+
+Runs on:
+
+- manual dispatch only during the first client-repo pilot
+
+What it does:
+
+- invokes `shaypal5/planning-validator/.github/workflows/reusable-planning-validator.yml@main`
+- validates configured planning and tracking markdown against recent merged PR evidence
+- opens or updates one draft PR from `automation/planning-validator` when evidence-backed planning
+  updates are proposed
+
+Reviewed output paths:
+
+- `README.md`
+- `.agent-plan.md`
+- `docs/splendor_mvp_to_v1_roadmap.md`
+- `docs/splendor_product_spec.md`
+- `planning/tasks/*.md`
+
+Explicitly forbidden paths include source, tests, workflows, generated state, raw imports, reports,
+derived files, examples, and wiki pages. The pilot is intentionally manual-only until at least one
+generated PR has been reviewed after the active planning/runs UI work lands on `main`.
+
+Permissions:
+
+- `contents: write`
+- `issues: write`
+- `pull-requests: write`
+
+Required secrets:
+
+- `OPENAI_API_KEY`
+
 ## `pr-agent-context-refresh`
 
 File: `.github/workflows/pr-agent-context-refresh.yml`

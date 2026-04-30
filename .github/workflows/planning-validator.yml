@@ -1,0 +1,21 @@
+name: planning-validator
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: planning-validator
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  run:
+    uses: shaypal5/planning-validator/.github/workflows/reusable-planning-validator.yml@main
+    with:
+      config_path: .github/planning-validator.yml
+    secrets:
+      openai_api_key: ${{ secrets.OPENAI_API_KEY }}
