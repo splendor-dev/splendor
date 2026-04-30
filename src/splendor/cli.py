@@ -31,6 +31,7 @@ from splendor.commands.planning import (
 )
 from splendor.commands.query import run_query
 from splendor.commands.queue import (
+    QueueItemSnapshot,
     inspect_queue,
     inspect_queue_job,
     render_queue_inspect_json,
@@ -652,7 +653,7 @@ def handle_repair_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
-def _print_queue_item_detail(item) -> None:
+def _print_queue_item_detail(item: QueueItemSnapshot) -> None:
     print(f"Queue job: {item.job_id}")
     print(f"Status: {item.status}")
     print(f"Job type: {item.job_type}")
