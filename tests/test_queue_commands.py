@@ -234,14 +234,18 @@ def test_cli_repair_ingest_json_reports_no_op(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "add-source", str(source)])
     source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     main(["--root", str(tmp_path), "ingest", source_id])
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue_before = queue_path.read_text(encoding="utf-8")
     capsys.readouterr()
 
     exit_code = main(["--root", str(tmp_path), "repair", "ingest", source_id, "--json"])
 
     assert exit_code == 0
+    assert queue_path.read_text(encoding="utf-8") == queue_before
     payload = json.loads(capsys.readouterr().out)
     assert payload["source_id"] == source_id
     assert payload["outcome"] == "skipped"
     assert payload["no_op"] is True
+    assert payload["queue_path"] is None
     assert payload["run_id"] is None
     assert payload["page_path"].endswith(f"wiki/sources/{source_id}.md")

@@ -427,6 +427,10 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     return run.status == "succeeded" and run.pipeline_version == __version__
 
 
+def is_ingest_current(root: Path, layout, source: SourceRecord) -> bool:
+    return _is_no_op(root, layout, source)
+
+
 def _validate_workspace_files(layout) -> None:
     required_files = [layout.index_file, layout.log_file]
     missing = [path for path in required_files if not path.exists()]

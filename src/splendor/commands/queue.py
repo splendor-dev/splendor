@@ -7,7 +7,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from splendor.commands.ingest import enqueue_ingest_job, run_ingest_job
+from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import QueueItemRecord
@@ -16,7 +16,7 @@ from splendor.state.runtime import (
     queue_item_path_for,
     write_queue_item,
 )
-from splendor.state.source_registry import manifest_path_for
+from splendor.state.source_registry import load_source_record, manifest_path_for
 from splendor.utils.time import utc_now_iso
 
 
@@ -103,6 +103,22 @@ def repair_ingest_source(root: Path, source_id: str) -> RepairIngestResult:
         raise FileNotFoundError(msg)
 
     layout = resolve_layout(root, load_config(root))
+    source = load_source_record(manifest_path)
+    if source.source_id != source_id:
+        msg = f"Source manifest ID does not match requested source: {source_id}"
+        raise ValueError(msg)
+    if is_ingest_current(root, layout, source):
+        return RepairIngestResult(
+            source_id=source_id,
+            outcome="skipped",
+            queue_path=None,
+            run_id=None,
+            run_path=None,
+            page_path=layout.wiki_sources_dir / f"{source_id}.md",
+            no_op=True,
+            message="already ingested for the current pipeline version",
+        )
+
     job_id = _ingest_job_id(source_id)
     queue_path = queue_item_path_for(layout, job_id)
     if not queue_path.exists():
