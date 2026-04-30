@@ -1,0 +1,67 @@
+{
+  "contradiction_ids": [],
+  "errors": [],
+  "finished_at": "2026-04-30T09:21:29+00:00",
+  "input_refs": [
+    "state/manifests/sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.json",
+    "raw/imports/dogfood-knowledge-work/round-2-context-engineering-and-repo-memory.md"
+  ],
+  "job_id": "ingest-src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4",
+  "job_type": "ingest_source",
+  "kind": "run",
+  "output_refs": [
+    "wiki/sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.md",
+    "wiki/index.md",
+    "wiki/log.md"
+  ],
+  "page_ids": [
+    "src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4"
+  ],
+  "page_refs": [
+    "wiki/sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.md"
+  ],
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "state/manifests/sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.json",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4"
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "raw/imports/dogfood-knowledge-work/round-2-context-engineering-and-repo-memory.md",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4"
+    },
+    {
+      "note": null,
+      "page_id": "src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4",
+      "path_ref": "wiki/sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": "src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4",
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4-20260430T092129520858Z",
+      "source_id": null
+    }
+  ],
+  "run_id": "run-src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4-20260430T092129520858Z",
+  "schema_version": "1",
+  "source_ids": [
+    "src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4"
+  ],
+  "started_at": "2026-04-30T09:21:29+00:00",
+  "status": "succeeded",
+  "task_ids": [],
+  "warnings": []
+}

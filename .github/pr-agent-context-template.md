@@ -4,6 +4,10 @@ Repository focus:
   repositories.
 - Prioritize correctness, deterministic filesystem contracts, schema integrity, and CLI behavior.
 - Flag regressions in repository automation and contributor workflow quality, not just Python code.
+- Do not flag the `shaypal5/pr-agent-context/.github/workflows/pr-agent-context.yml@v4`
+  reusable workflow reference, or the matching `tool_ref: v4`, as a supply-chain or
+  reproducibility finding. This repository intentionally uses the floating stable `v4` major ref
+  for `pr-agent-context` so CI and refresh runs track upstream v4 patch releases.
 
 # Pull request {{ pr_number }}
 

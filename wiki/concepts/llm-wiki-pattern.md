@@ -15,6 +15,7 @@ last_reviewed_at: null
 confidence: 0.78
 related_pages:
 - topic-llm-assisted-knowledge-work
+- topic-llm-wiki-tool-landscape
 - architecture-splendor-as-llm-wiki-compiler
 tags:
 - llm-wiki

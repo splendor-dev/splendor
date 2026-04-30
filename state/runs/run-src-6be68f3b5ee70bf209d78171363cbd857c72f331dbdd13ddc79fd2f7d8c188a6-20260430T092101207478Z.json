@@ -1,0 +1,67 @@
+{
+  "contradiction_ids": [],
+  "errors": [],
+  "finished_at": "2026-04-30T09:21:01+00:00",
+  "input_refs": [
+    "state/manifests/sources/src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6.json",
+    "raw/imports/dogfood-knowledge-work/round-1-llm-wiki-implementation-landscape.md"
+  ],
+  "job_id": "ingest-src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6",
+  "job_type": "ingest_source",
+  "kind": "run",
+  "output_refs": [
+    "wiki/sources/src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6.md",
+    "wiki/index.md",
+    "wiki/log.md"
+  ],
+  "page_ids": [
+    "src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6"
+  ],
+  "page_refs": [
+    "wiki/sources/src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6.md"
+  ],
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "state/manifests/sources/src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6.json",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6"
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "raw/imports/dogfood-knowledge-work/round-1-llm-wiki-implementation-landscape.md",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6"
+    },
+    {
+      "note": null,
+      "page_id": "src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6",
+      "path_ref": "wiki/sources/src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": "src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6",
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6-20260430T092101207478Z",
+      "source_id": null
+    }
+  ],
+  "run_id": "run-src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6-20260430T092101207478Z",
+  "schema_version": "1",
+  "source_ids": [
+    "src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6"
+  ],
+  "started_at": "2026-04-30T09:21:01+00:00",
+  "status": "succeeded",
+  "task_ids": [],
+  "warnings": []
+}
