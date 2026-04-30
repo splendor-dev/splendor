@@ -368,3 +368,94 @@ def test_wiki_suggest_ignores_extract_fence_info_string(tmp_path: Path, capsys) 
     suggestion_paths = [suggestion["path"] for suggestion in payload["suggestions"]]
     assert "wiki/topics/substantive-alpha.md" in suggestion_paths
     assert "wiki/topics/fence-info.md" not in suggestion_paths
+
+
+def test_wiki_compile_reports_review_gated_contract_without_mutating(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-contract.md"
+    source.write_text("# Compile contract\n\nSynthesis remains review-gated.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    page_path = tmp_path / "wiki" / "sources" / f"{added.source_id}.md"
+    before = page_path.read_text(encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "compile", added.source_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source_id"] == added.source_id
+    assert payload["mutates"] is False
+    assert payload["status"] == "contract-only"
+    assert "Run `splendor wiki suggest" in payload["next_steps"][0]
+    assert page_path.read_text(encoding="utf-8") == before
+
+
+def test_wiki_compile_reports_unknown_source(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "compile", "src-missing"])
+
+    assert exit_code == 1
+    assert "Unknown source ID: src-missing" in capsys.readouterr().out
+
+
+def test_brief_json_includes_goal_state_matches_planning_and_next_actions(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "briefing.md"
+    source.write_text(
+        "# Briefing\n\nProject briefing should surface wiki context.\n", encoding="utf-8"
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "project-briefing.md",
+        kind="topic",
+        title="Project briefing",
+        page_id="topic-project-briefing",
+        source_refs=[added.source_id],
+        body="Project briefing assembles source-backed working context.",
+    )
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Continue project briefing",
+            "--id",
+            "task-briefing",
+            "--status",
+            "in_progress",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "project", "briefing", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["goal"] == "project briefing"
+    assert payload["status"]["source_total"] == 1
+    assert payload["matches"][0]["path"] == "wiki/topics/project-briefing.md"
+    assert payload["planning_items"][0]["record_id"] == "task-briefing"
+    assert payload["recent_sources"][0]["source_id"] == added.source_id
+    assert payload["recent_runs"][0]["source_ids"] == [added.source_id]
+    assert any("Open the top matching" in action for action in payload["next_actions"])
+
+
+def test_brief_text_output_is_available_without_goal(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Project brief" in out
+    assert "Goal: -" in out
+    assert "Next actions:" in out
