@@ -344,8 +344,8 @@ def test_run_query_ranks_dogfood_concept_above_review_task_noise(tmp_path: Path)
     )
     create_task(
         tmp_path,
-        "Review contradiction: source summary path mismatch",
-        record_id="task-review-source-summary-path-mismatch",
+        "Review contradiction: LLM Wiki persistent knowledge source summary path mismatch",
+        record_id="task-review-llm-wiki-persistent-knowledge-source-summary-path-mismatch",
         status="todo",
         priority="high",
         owner=None,
@@ -360,8 +360,11 @@ def test_run_query_ranks_dogfood_concept_above_review_task_noise(tmp_path: Path)
 
     result = run_query(tmp_path, "LLM Wiki persistent knowledge")
 
-    assert result.match_count >= 1
+    assert result.match_count >= 2
     assert result.matches[0].path == "wiki/concepts/llm-wiki-pattern.md"
+    assert result.matches[1].path == (
+        "planning/tasks/task-review-llm-wiki-persistent-knowledge-source-summary-path-mismatch.md"
+    )
 
 
 def test_query_snapshot_schema_round_trip(tmp_path: Path) -> None:

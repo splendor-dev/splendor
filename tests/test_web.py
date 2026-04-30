@@ -263,6 +263,23 @@ def test_web_routes_reject_layout_roots_that_escape_workspace(tmp_path: Path) ->
     assert "Workspace configuration is invalid." in response.text
 
 
+def test_search_rejects_layout_roots_that_escape_workspace(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        "schema_version: '1'\n"
+        "project_name: custom\n"
+        "layout:\n"
+        "  wiki_dir: ..\n"
+        "  planning_dir: planning\n",
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get("/search", params={"q": "secret"})
+
+    assert response.status_code == 500
+    assert "Workspace configuration is invalid." in response.text
+
+
 def test_document_detail_preserves_code_text_while_sanitizing_html(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(

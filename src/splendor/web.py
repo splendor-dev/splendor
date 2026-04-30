@@ -119,7 +119,7 @@ def create_app(root: Path) -> FastAPI:
     def home() -> HTMLResponse:
         layout = _layout_for(workspace_root)
         content_documents = _iter_content_documents(workspace_root, layout)
-        counts = _workspace_counts(workspace_root, layout, content_documents=content_documents)
+        counts = _workspace_counts(layout, content_documents=content_documents)
         empty_state = _empty_workspace_panel() if counts.is_sparse else ""
         body = (
             '<section class="toolbar">'
@@ -145,7 +145,7 @@ def create_app(root: Path) -> FastAPI:
         layout = _layout_for(workspace_root)
         content_documents = _iter_content_documents(workspace_root, layout)
         special_documents = _iter_special_documents(workspace_root, layout)
-        counts = _workspace_counts(workspace_root, layout, content_documents=content_documents)
+        counts = _workspace_counts(layout, content_documents=content_documents)
         content_rows = "\n".join(_document_row(item) for item in content_documents)
         special_rows = "\n".join(_document_row(item) for item in special_documents)
         if not content_rows:
@@ -211,6 +211,7 @@ def create_app(root: Path) -> FastAPI:
         )
         if not query:
             return _page("Search", form)
+        layout = _layout_for(workspace_root)
         try:
             result = run_query(workspace_root, query)
         except QueryValidationError as exc:
@@ -228,9 +229,8 @@ def create_app(root: Path) -> FastAPI:
 
         rows = "\n".join(_search_row(match) for match in result.matches)
         if not rows:
-            layout = _layout_for(workspace_root)
             content_documents = _iter_content_documents(workspace_root, layout)
-            counts = _workspace_counts(workspace_root, layout, content_documents=content_documents)
+            counts = _workspace_counts(layout, content_documents=content_documents)
             if counts.is_sparse:
                 rows = (
                     '<p class="empty">No matches found. This workspace only has special '
@@ -294,7 +294,7 @@ def _iter_special_documents(root: Path, layout: ResolvedLayout) -> list[_Documen
 
 
 def _workspace_counts(
-    root: Path, layout: ResolvedLayout, *, content_documents: list[_DocumentSummary]
+    layout: ResolvedLayout, *, content_documents: list[_DocumentSummary]
 ) -> _WorkspaceCounts:
     return _WorkspaceCounts(
         wiki_content_pages=sum(1 for item in content_documents if item.document_class == "wiki"),

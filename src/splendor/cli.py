@@ -147,7 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--no-save",
         action="store_true",
-        help="Do not update state/queries/last-query.json.",
+        help="Do not update the last-query snapshot.",
     )
     query_parser.set_defaults(handler=handle_query)
 

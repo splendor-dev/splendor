@@ -285,17 +285,24 @@ def review_source_summary_contradictions(
     task_updates: list[ReviewTaskUpdate] = []
     contradiction_ids: list[str] = []
     task_ids: list[str] = []
+    current_review_snapshot = _claim_review_snapshot(current_snapshot)
+    if not _has_review_claim_text(current_review_snapshot):
+        return ContradictionReviewResult(
+            frontmatter=_normalize_review_state(current_frontmatter),
+            task_updates=[],
+            page_updates=[],
+            contradiction_ids=[],
+            task_ids=[],
+            warnings=[],
+        )
     for candidate in _load_candidate_snapshots(
         root=root,
         layout=layout,
         current_page=current_snapshot.page_path,
         max_candidates=contradiction_config.max_candidate_pages,
     ):
-        current_review_snapshot = _claim_review_snapshot(current_snapshot)
         candidate_review_snapshot = _claim_review_snapshot(candidate)
-        if not _has_review_claim_text(current_review_snapshot) or not _has_review_claim_text(
-            candidate_review_snapshot
-        ):
+        if not _has_review_claim_text(candidate_review_snapshot):
             continue
         for contradiction in analyzer.detect(
             current=current_review_snapshot, candidate=candidate_review_snapshot
@@ -664,7 +671,10 @@ def _unfenced_extract_text(text: str) -> str:
             body_lines = body_lines[1:]
         return "\n".join(body_lines)
     if len(lines) >= 2 and lines[0].startswith("~~~") and lines[-1].startswith("~~~"):
-        return "\n".join(lines[1:-1])
+        body_lines = lines[1:-1]
+        if body_lines and not body_lines[0].strip():
+            body_lines = body_lines[1:]
+        return "\n".join(body_lines)
     return text
 
 
@@ -676,12 +686,9 @@ def _is_metadata_line(value: str) -> bool:
 
 
 def _is_metadata_only_contradiction(contradiction: DetectedContradiction) -> bool:
-    if _is_metadata_line(contradiction.current_excerpt) and _is_metadata_line(
+    return _is_metadata_line(contradiction.current_excerpt) and _is_metadata_line(
         contradiction.candidate_excerpt
-    ):
-        return True
-    values = [contradiction.summary, contradiction.current_excerpt, contradiction.candidate_excerpt]
-    return all(_is_metadata_line(value) for value in values)
+    )
 
 
 def _normalized_summary(value: str) -> str:
