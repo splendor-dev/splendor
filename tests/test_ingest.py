@@ -662,6 +662,33 @@ def test_ingest_source_workspace_backed_default_uses_excerpt(tmp_path: Path) -> 
     assert "line 119" not in body
 
 
+def test_ingest_source_markdown_summary_uses_heading_and_paragraph(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text(
+        "# LLM Wiki Pattern\n\n"
+        "Persistent knowledge should live in durable markdown pages that agents can inspect.\n\n"
+        "## Core Claims\n\n"
+        "- Agents need a repo-local memory substrate.\n"
+        "- Deterministic search should find curated concepts before review noise.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    assert (
+        "LLM Wiki Pattern. Persistent knowledge should live in durable markdown pages "
+        "that agents can inspect."
+    ) in body
+    assert "Agents need a repo-local memory substrate." in body
+    assert "Deterministic search should find curated concepts before review noise." in body
+    assert "Manifest:" in body
+    assert "## Extract" in body
+
+
 def test_ingest_source_workspace_backed_none_omits_extract_section(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     update_summary_modes(tmp_path, in_repo="none")
@@ -1243,6 +1270,39 @@ def test_ingest_source_marks_contradictions_and_creates_review_task(
     run_record = load_run_record(second_result.run_path)
     assert run_record.task_ids == [task_id]
     assert run_record.contradiction_ids == [second_page.contradictions[0].contradiction_id]
+
+
+def test_ingest_source_skips_boilerplate_only_contradiction_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initialize_workspace(tmp_path)
+    update_summary_modes(tmp_path, external="none")
+
+    class FakeAnalyzer:
+        def detect(self, *, current, candidate):
+            pytest.fail("boilerplate-only source summaries should not be reviewed")
+
+    monkeypatch.setattr(
+        contradictions_module,
+        "build_contradiction_analyzer",
+        lambda config: FakeAnalyzer(),
+    )
+
+    first_source = tmp_path / "first.json"
+    first_source.write_text('{"path": "first"}\n', encoding="utf-8")
+    first_added = add_source(tmp_path, first_source, storage_mode="copy")
+    ingest_source(tmp_path, first_added.source_id)
+
+    second_source = tmp_path / "second.json"
+    second_source.write_text('{"path": "second"}\n', encoding="utf-8")
+    second_added = add_source(tmp_path, second_source, storage_mode="copy")
+    second_result = ingest_source(tmp_path, second_added.source_id)
+
+    first_page = parse_frontmatter(tmp_path / "wiki" / "sources" / f"{first_added.source_id}.md")[0]
+    second_page = parse_frontmatter(second_result.page_path)[0]
+    assert first_page.contradictions == []
+    assert second_page.contradictions == []
+    assert list((tmp_path / "planning" / "tasks").glob("task-review-*.md")) == []
 
 
 def test_ingest_source_dedupes_existing_contradictions_and_review_tasks(

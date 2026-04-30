@@ -62,6 +62,23 @@ class _DocumentSummary:
 
 
 @dataclass(frozen=True)
+class _WorkspaceCounts:
+    wiki_content_pages: int
+    planning_records: int
+    source_manifests: int
+    runs: int
+
+    @property
+    def is_sparse(self) -> bool:
+        return (
+            self.wiki_content_pages == 0
+            and self.planning_records == 0
+            and self.source_manifests == 0
+            and self.runs == 0
+        )
+
+
+@dataclass(frozen=True)
 class _DocumentDetail:
     path: str
     title: str
@@ -101,9 +118,9 @@ def create_app(root: Path) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def home() -> HTMLResponse:
         layout = _layout_for(workspace_root)
-        documents = _iter_documents(workspace_root, layout)
-        wiki_count = sum(1 for item in documents if item.document_class == "wiki")
-        planning_count = sum(1 for item in documents if item.document_class == "planning")
+        content_documents = _iter_content_documents(workspace_root, layout)
+        counts = _workspace_counts(layout, content_documents=content_documents)
+        empty_state = _empty_workspace_panel() if counts.is_sparse else ""
         body = (
             '<section class="toolbar">'
             '<form action="/search" method="get">'
@@ -112,10 +129,13 @@ def create_app(root: Path) -> FastAPI:
             "</form>"
             '<a class="button" href="/browse">Browse documents</a>'
             "</section>"
+            f"{empty_state}"
             '<section class="stats">'
-            f"<div><strong>{len(documents)}</strong><span>Documents</span></div>"
-            f"<div><strong>{wiki_count}</strong><span>Wiki pages</span></div>"
-            f"<div><strong>{planning_count}</strong><span>Planning records</span></div>"
+            f"<div><strong>{counts.wiki_content_pages}</strong>"
+            "<span>Wiki content pages</span></div>"
+            f"<div><strong>{counts.planning_records}</strong><span>Planning records</span></div>"
+            f"<div><strong>{counts.source_manifests}</strong><span>Source manifests</span></div>"
+            f"<div><strong>{counts.runs}</strong><span>Runs</span></div>"
             "</section>"
         )
         return _page("Splendor", body)
@@ -123,8 +143,25 @@ def create_app(root: Path) -> FastAPI:
     @app.get("/browse", response_class=HTMLResponse)
     def browse() -> HTMLResponse:
         layout = _layout_for(workspace_root)
-        documents = _iter_documents(workspace_root, layout)
-        rows = "\n".join(_document_row(item) for item in documents)
+        content_documents = _iter_content_documents(workspace_root, layout)
+        special_documents = _iter_special_documents(workspace_root, layout)
+        counts = _workspace_counts(layout, content_documents=content_documents)
+        content_rows = "\n".join(_document_row(item) for item in content_documents)
+        special_rows = "\n".join(_document_row(item) for item in special_documents)
+        if not content_rows:
+            content_rows = (
+                '<tr><td colspan="4" class="empty">No searchable content records yet.</td></tr>'
+            )
+        special_section = ""
+        if special_rows:
+            special_section = (
+                "<h2>Special files</h2>"
+                '<p class="empty">Index and log files are navigation records shown here, '
+                "but excluded from search results.</p>"
+                "<table><thead><tr><th>Title</th><th>Kind</th><th>Status</th><th>Path</th></tr></thead>"
+                f"<tbody>{special_rows}</tbody></table>"
+            )
+        empty_state = _empty_workspace_panel() if counts.is_sparse else ""
         body = (
             '<section class="toolbar">'
             '<form action="/search" method="get">'
@@ -132,8 +169,11 @@ def create_app(root: Path) -> FastAPI:
             '<button type="submit">Search</button>'
             "</form>"
             "</section>"
-            f"<table><thead><tr><th>Title</th><th>Kind</th><th>Status</th><th>Path</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table>"
+            f"{empty_state}"
+            "<h2>Content records</h2>"
+            "<table><thead><tr><th>Title</th><th>Kind</th><th>Status</th><th>Path</th></tr></thead>"
+            f"<tbody>{content_rows}</tbody></table>"
+            f"{special_section}"
         )
         return _page("Browse", body)
 
@@ -171,6 +211,7 @@ def create_app(root: Path) -> FastAPI:
         )
         if not query:
             return _page("Search", form)
+        layout = _layout_for(workspace_root)
         try:
             result = run_query(workspace_root, query)
         except QueryValidationError as exc:
@@ -188,7 +229,18 @@ def create_app(root: Path) -> FastAPI:
 
         rows = "\n".join(_search_row(match) for match in result.matches)
         if not rows:
-            rows = '<p class="empty">No matches found.</p>'
+            content_documents = _iter_content_documents(workspace_root, layout)
+            counts = _workspace_counts(layout, content_documents=content_documents)
+            if counts.is_sparse:
+                rows = (
+                    '<p class="empty">No matches found. This workspace only has special '
+                    "navigation files like index/log, which are excluded from search. "
+                    "Use <code>uv run splendor repo refresh</code> or "
+                    "<code>uv run splendor add-source &lt;path&gt;</code> to add searchable "
+                    "knowledge records.</p>"
+                )
+            else:
+                rows = '<p class="empty">No matches found.</p>'
         body = f"{form}<p>{html.escape(result.summary)}</p><section>{rows}</section>"
         return _page("Search", body)
 
@@ -218,10 +270,12 @@ def _validate_layout_root(root: Path, value: str, *, label: str) -> None:
         ) from exc
 
 
-def _iter_documents(root: Path, layout: ResolvedLayout) -> list[_DocumentSummary]:
+def _iter_content_documents(root: Path, layout: ResolvedLayout) -> list[_DocumentSummary]:
     documents: list[_DocumentSummary] = []
     for path in sorted(layout.wiki_dir.rglob("*.md")):
         if path.name == ".gitkeep" or not path.is_file():
+            continue
+        if path in {layout.index_file, layout.log_file}:
             continue
         documents.append(_document_summary(root, layout, path))
     for path in sorted(layout.planning_dir.rglob("*.md")):
@@ -229,6 +283,39 @@ def _iter_documents(root: Path, layout: ResolvedLayout) -> list[_DocumentSummary
             continue
         documents.append(_document_summary(root, layout, path))
     return sorted(documents, key=lambda item: (item.document_class, item.kind or "", item.title))
+
+
+def _iter_special_documents(root: Path, layout: ResolvedLayout) -> list[_DocumentSummary]:
+    documents: list[_DocumentSummary] = []
+    for path in (layout.index_file, layout.log_file):
+        if path.is_file():
+            documents.append(_document_summary(root, layout, path))
+    return documents
+
+
+def _workspace_counts(
+    layout: ResolvedLayout, *, content_documents: list[_DocumentSummary]
+) -> _WorkspaceCounts:
+    return _WorkspaceCounts(
+        wiki_content_pages=sum(1 for item in content_documents if item.document_class == "wiki"),
+        planning_records=sum(1 for item in content_documents if item.document_class == "planning"),
+        source_manifests=sum(
+            1 for path in layout.source_records_dir.glob("*.json") if path.is_file()
+        ),
+        runs=sum(1 for path in layout.runs_dir.glob("*.json") if path.is_file()),
+    )
+
+
+def _empty_workspace_panel() -> str:
+    return (
+        '<section class="empty-state">'
+        "<h2>No workspace knowledge yet</h2>"
+        "<p>This workspace has only navigation files. Seed it with deterministic repo pages or "
+        "register a source before browsing/searching knowledge records.</p>"
+        "<p><code>uv run splendor repo refresh</code></p>"
+        "<p><code>uv run splendor add-source &lt;path&gt;</code></p>"
+        "</section>"
+    )
 
 
 def _document_summary(root: Path, layout: ResolvedLayout, path: Path) -> _DocumentSummary:
@@ -412,9 +499,13 @@ def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
         "button,.button{border:1px solid var(--accent);border-radius:6px;background:var(--accent);"
         "color:white;padding:9px 12px;font:inherit;cursor:pointer}"
         ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
-        ".stats div,.metadata,.result{border:1px solid var(--border);border-radius:8px;"
+        ".stats div,.metadata,.result,.empty-state{border:1px solid var(--border);"
+        "border-radius:8px;"
         "padding:14px}"
         ".stats strong{display:block;font-size:26px}.stats span,.breadcrumbs{color:var(--muted)}"
+        ".empty-state{background:var(--surface);margin-bottom:22px}"
+        ".empty-state h2{margin-bottom:8px}"
+        ".empty-state p{margin:8px 0}"
         "table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid var(--border);"
         "padding:10px;text-align:left;vertical-align:top}th{background:var(--surface)}"
         "code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}"

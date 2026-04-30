@@ -7,7 +7,7 @@ import json
 import os
 import posixpath
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib import error, request
 
@@ -27,6 +27,25 @@ from splendor.utils.wiki import parse_wiki_markdown
 DEFAULT_OPENAI_CONTRADICTION_MODEL = "gpt-4.1-mini"
 _SECTION_PATTERN = re.compile(r"^## (?P<name>[^\n]+)\n\n", re.MULTILINE)
 _WHITESPACE_PATTERN = re.compile(r"\s+")
+_GENERIC_SUMMARY_PATTERN = re.compile(
+    r"^This page records deterministic ingestion output for source `[^`]+`, "
+    r"a `[^`]+` file registered from `[^`]+`\.$"
+)
+_METADATA_PREFIXES = (
+    "source id:",
+    "source type:",
+    "checksum:",
+    "source ref:",
+    "added at:",
+    "ingested at:",
+    "registered path:",
+    "source file:",
+    "manifest:",
+    "workspace source:",
+    "stored artifact:",
+    "run id:",
+    "pipeline version:",
+)
 
 
 @dataclass(frozen=True)
@@ -266,13 +285,30 @@ def review_source_summary_contradictions(
     task_updates: list[ReviewTaskUpdate] = []
     contradiction_ids: list[str] = []
     task_ids: list[str] = []
+    current_review_snapshot = _claim_review_snapshot(current_snapshot)
+    if not _has_review_claim_text(current_review_snapshot):
+        return ContradictionReviewResult(
+            frontmatter=_normalize_review_state(current_frontmatter),
+            task_updates=[],
+            page_updates=[],
+            contradiction_ids=[],
+            task_ids=[],
+            warnings=[],
+        )
     for candidate in _load_candidate_snapshots(
         root=root,
         layout=layout,
         current_page=current_snapshot.page_path,
         max_candidates=contradiction_config.max_candidate_pages,
     ):
-        for contradiction in analyzer.detect(current=current_snapshot, candidate=candidate):
+        candidate_review_snapshot = _claim_review_snapshot(candidate)
+        if not _has_review_claim_text(candidate_review_snapshot):
+            continue
+        for contradiction in analyzer.detect(
+            current=current_review_snapshot, candidate=candidate_review_snapshot
+        ):
+            if _is_metadata_only_contradiction(contradiction):
+                continue
             annotation = _build_annotation(
                 current=current_snapshot,
                 candidate=candidate,
@@ -587,6 +623,72 @@ def _normalize_optional_text(value: str | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _claim_review_snapshot(snapshot: SourceSummarySnapshot) -> SourceSummarySnapshot:
+    summary = snapshot.summary.strip()
+    if _GENERIC_SUMMARY_PATTERN.match(summary):
+        summary = ""
+    key_facts = [fact for fact in snapshot.key_facts if not _is_metadata_line(fact)]
+    extract = _normalize_optional_text(
+        _filter_review_text(_unfenced_extract_text(snapshot.extract or ""))
+    )
+    return replace(
+        snapshot,
+        source_section="",
+        summary=summary,
+        key_facts=key_facts,
+        extract=extract,
+        provenance_lines=[],
+    )
+
+
+def _has_review_claim_text(snapshot: SourceSummarySnapshot) -> bool:
+    return bool(snapshot.summary or snapshot.key_facts or snapshot.extract)
+
+
+def _filter_review_text(text: str) -> str:
+    filtered_lines: list[str] = []
+    in_fence = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("```") or line.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if not line or _is_metadata_line(line):
+            continue
+        filtered_lines.append(raw_line)
+    return "\n".join(filtered_lines).strip()
+
+
+def _unfenced_extract_text(text: str) -> str:
+    lines = text.strip().splitlines()
+    if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
+        body_lines = lines[1:-1]
+        if body_lines and not body_lines[0].strip():
+            body_lines = body_lines[1:]
+        return "\n".join(body_lines)
+    if len(lines) >= 2 and lines[0].startswith("~~~") and lines[-1].startswith("~~~"):
+        body_lines = lines[1:-1]
+        if body_lines and not body_lines[0].strip():
+            body_lines = body_lines[1:]
+        return "\n".join(body_lines)
+    return text
+
+
+def _is_metadata_line(value: str) -> bool:
+    normalized = _normalized_summary(value).lower()
+    if normalized.startswith("- "):
+        normalized = normalized[2:].strip()
+    return normalized.startswith(_METADATA_PREFIXES)
+
+
+def _is_metadata_only_contradiction(contradiction: DetectedContradiction) -> bool:
+    return _is_metadata_line(contradiction.current_excerpt) and _is_metadata_line(
+        contradiction.candidate_excerpt
+    )
 
 
 def _normalized_summary(value: str) -> str:

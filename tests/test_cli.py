@@ -11,8 +11,10 @@ import splendor.cli as cli_module
 from splendor import __version__
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
+from splendor.config import load_config
+from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
-from splendor.state.query_snapshot import load_query_snapshot
+from splendor.state.query_snapshot import last_query_path_for, load_query_snapshot
 from splendor.state.runtime import load_queue_item
 
 
@@ -798,6 +800,40 @@ def test_cli_query_command_persists_snapshot_for_json_output(tmp_path: Path, cap
     assert exit_code == 0
     snapshot = load_query_snapshot(tmp_path / "state" / "queries" / "last-query.json")
     assert snapshot.query == "query"
+
+
+def test_cli_query_command_no_save_skips_last_query_snapshot(tmp_path: Path, capsys) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        "schema_version: '1'\nproject_name: custom\nlayout:\n  state_dir: custom-state\n",
+        encoding="utf-8",
+    )
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "--no-save", "query"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Summary: Found 1 matching records." in captured.out
+    assert not last_query_path_for(layout).exists()
+
+
+def test_cli_query_command_no_save_json_preserves_output_shape(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Ship", "query"])
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "--no-save", "query", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["query"] == "query"
+    assert payload["match_count"] == 1
+    assert payload["matches"][0]["path"] == "planning/tasks/task-ship-query.md"
+    assert not last_query_path_for(layout).exists()
 
 
 def test_cli_query_command_reports_snapshot_write_failure(

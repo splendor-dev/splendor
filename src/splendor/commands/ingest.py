@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -75,6 +76,16 @@ SUPPORTED_SOURCE_TYPES = {
     "sh",
 }
 LEASE_TTL_SECONDS = 300
+_MARKDOWN_HEADING_PATTERN = re.compile(r"^(?P<level>#{1,6})\s+(?P<title>.+?)\s*#*\s*$")
+_CLAIM_SECTION_HEADINGS = {
+    "core claims",
+    "design implications",
+    "implementation pattern",
+    "implementation patterns",
+    "key facts",
+    "claims",
+    "findings",
+}
 
 
 @dataclass(frozen=True)
@@ -175,12 +186,98 @@ def _rendered_extract(text: str, mode: SummaryMode) -> str | None:
     return text
 
 
-def _build_summary(source: SourceRecord) -> str:
+def _build_summary(source: SourceRecord, source_text: str) -> str:
     path_fragment = canonical_source_ref(source)
+    content_summary = _build_content_summary(source_text)
+    if source.source_type in {"md", "txt"} and content_summary is not None:
+        return f"{content_summary} registered from `{path_fragment}`."
     return (
         f"This page records deterministic ingestion output for source `{source.source_id}`, "
         f"a `{source.source_type}` file registered from `{path_fragment}`."
     )
+
+
+def _build_content_summary(text: str) -> str | None:
+    heading: str | None = None
+    paragraph_lines: list[str] = []
+    in_fence = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("```") or line.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if not line:
+            if paragraph_lines:
+                break
+            continue
+        heading_match = _MARKDOWN_HEADING_PATTERN.match(line)
+        if heading_match:
+            if heading is None:
+                heading = _strip_markdown_inline(heading_match.group("title"))
+            if paragraph_lines:
+                break
+            continue
+        if line.startswith(("- ", "* ", "+ ", ">")):
+            continue
+        paragraph_lines.append(_strip_markdown_inline(line))
+        if len(paragraph_lines) >= 3:
+            break
+
+    paragraph = _bounded_summary_text(" ".join(paragraph_lines).strip())
+    if heading and paragraph:
+        return f"{heading}. {paragraph}"
+    if paragraph:
+        return paragraph
+    if heading:
+        return heading
+    return None
+
+
+def _bounded_summary_text(text: str) -> str:
+    if len(text) <= 360:
+        return text
+    return text[:357].rstrip() + "..."
+
+
+def _build_content_key_facts(text: str) -> list[str]:
+    facts: list[str] = []
+    active = False
+    in_fence = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("```") or line.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        heading_match = _MARKDOWN_HEADING_PATTERN.match(line)
+        if heading_match:
+            heading = _strip_markdown_inline(heading_match.group("title")).lower()
+            active = heading in _CLAIM_SECTION_HEADINGS
+            continue
+        if not active:
+            continue
+        if line.startswith(("- ", "* ", "+ ")):
+            fact = _strip_markdown_inline(line[2:].strip())
+            if fact:
+                facts.append(fact)
+        elif line and not line.startswith(">"):
+            fact = _strip_markdown_inline(line)
+            if fact:
+                facts.append(fact)
+        if len(facts) >= 6:
+            break
+    return facts
+
+
+def _strip_markdown_inline(text: str) -> str:
+    stripped = text.strip().strip("#").strip()
+    stripped = re.sub(r"`([^`]+)`", r"\1", stripped)
+    stripped = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", stripped)
+    stripped = stripped.replace("**", "").replace("__", "").replace("*", "")
+    return " ".join(stripped.split())
 
 
 def _content_origin_kind(storage_mode: str) -> str:
@@ -646,6 +743,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             f"Source ref: `{canonical_source_ref(source)}`",
             f"Added at: `{source.added_at}`",
             f"Ingested at: `{finished_at}`",
+            *_build_content_key_facts(source_text),
         ]
         provenance_lines = [
             f"Manifest: `{_relative_to_root(root, manifest_path)}`",
@@ -656,7 +754,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         page_content = render_source_summary_page(
             frontmatter,
             source_section=source_section,
-            summary=_build_summary(source),
+            summary=_build_summary(source, source_text),
             key_facts=key_facts,
             extract=_rendered_extract(source_text, extract_mode),
             contradictions=render_contradiction_lines(
@@ -681,7 +779,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         page_content = render_source_summary_page(
             frontmatter,
             source_section=source_section,
-            summary=_build_summary(source),
+            summary=_build_summary(source, source_text),
             key_facts=key_facts,
             extract=_rendered_extract(source_text, extract_mode),
             contradictions=render_contradiction_lines(

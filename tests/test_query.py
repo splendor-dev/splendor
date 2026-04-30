@@ -328,6 +328,45 @@ def test_run_query_surfaces_contradiction_counts_and_review_tasks(tmp_path: Path
     assert match.review_task_ids == ["task-review-src-123-src-456-1234567890"]
 
 
+def test_run_query_ranks_dogfood_concept_above_review_task_noise(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "llm-wiki-pattern.md",
+        title="LLM Wiki Persistent Knowledge",
+        page_id="concept-llm-wiki-persistent-knowledge",
+        kind="concept",
+        tags=["llm-wiki", "persistent-knowledge"],
+        body=(
+            "# LLM Wiki Persistent Knowledge\n\n"
+            "LLM Wiki persistent knowledge keeps durable project memory in markdown pages "
+            "that agents can search and inspect.\n"
+        ),
+    )
+    create_task(
+        tmp_path,
+        "Review contradiction: LLM Wiki persistent knowledge source summary path mismatch",
+        record_id="task-review-llm-wiki-persistent-knowledge-source-summary-path-mismatch",
+        status="todo",
+        priority="high",
+        owner=None,
+        milestone_refs=[],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+        page_refs=[],
+        run_refs=[],
+    )
+
+    result = run_query(tmp_path, "LLM Wiki persistent knowledge")
+
+    assert result.match_count >= 2
+    assert result.matches[0].path == "wiki/concepts/llm-wiki-pattern.md"
+    assert result.matches[1].path == (
+        "planning/tasks/task-review-llm-wiki-persistent-knowledge-source-summary-path-mismatch.md"
+    )
+
+
 def test_query_snapshot_schema_round_trip(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     create_task(
