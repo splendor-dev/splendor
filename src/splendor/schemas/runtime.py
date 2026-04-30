@@ -14,7 +14,7 @@ class QueueItemRecord(StrictRecord):
     kind: Literal["queue_item"] = "queue_item"
     job_id: str
     job_type: str
-    status: Literal["pending", "leased", "done", "failed"] = "pending"
+    status: Literal["pending", "leased", "done", "failed", "dead_letter"] = "pending"
     created_at: str
     updated_at: str
     attempt_count: int = Field(default=0, ge=0)
@@ -22,6 +22,7 @@ class QueueItemRecord(StrictRecord):
     payload_ref: str
     lease_owner: str | None = None
     lease_expires_at: str | None = None
+    next_attempt_at: str | None = None
     last_error: str | None = None
 
 

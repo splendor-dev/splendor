@@ -599,12 +599,17 @@ def handle_queue_inspect(args: argparse.Namespace) -> int:
     print("Jobs:")
     for item in result.items:
         print(
-            f"- {item.job_id} [{item.status}] type={item.job_type} "
+            f"- {item.job_id} [{item.status}/{item.operator_state}] type={item.job_type} "
             f"attempts={item.attempt_count}/{item.max_attempts} payload={item.payload_ref}"
         )
-    if result.status_counts.get("failed", 0):
+    operator_states = {item.operator_state for item in result.items}
+    if "dead_letter" in operator_states:
+        print("Next: splendor queue retry <job-id> or splendor repair ingest <source-id>")
+    elif "failed_backoff" in operator_states:
+        print("Next: wait for retry backoff or run splendor queue retry <job-id>")
+    elif result.status_counts.get("failed", 0):
         print("Next: splendor queue retry <job-id>")
-    elif result.status_counts.get("pending", 0):
+    elif operator_states.intersection({"pending", "failed_due", "expired_leased"}):
         print("Next: splendor ingest --pending")
     return 0
 
@@ -663,13 +668,21 @@ def _print_queue_item_detail(item: QueueItemSnapshot) -> None:
     print(f"Updated: {item.updated_at}")
     print(f"Payload: {item.payload_ref}")
     print(f"Source ID: {item.source_id or '-'}")
+    print(f"Operator state: {item.operator_state}")
     print(f"Lease owner: {item.lease_owner or '-'}")
     print(f"Lease expires: {item.lease_expires_at or '-'}")
+    print(f"Next attempt: {item.next_attempt_at or '-'}")
     print(f"Last error: {item.last_error or '-'}")
     print(f"Record: {item.record_path}")
-    if item.status == "failed":
+    if item.status == "dead_letter":
+        print(
+            f"Next: splendor queue retry {item.job_id} or splendor repair ingest {item.source_id}"
+        )
+    elif item.operator_state == "failed_backoff":
+        print(f"Next: wait for retry backoff or run splendor queue retry {item.job_id}")
+    elif item.status == "failed":
         print(f"Next: splendor queue retry {item.job_id}")
-    elif item.status == "pending":
+    elif item.operator_state in {"pending", "failed_due", "expired_leased"}:
         print("Next: splendor ingest --pending")
 
 

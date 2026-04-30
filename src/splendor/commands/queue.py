@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
@@ -34,8 +35,10 @@ class QueueItemSnapshot:
     payload_ref: str
     lease_owner: str | None
     lease_expires_at: str | None
+    next_attempt_at: str | None
     last_error: str | None
     source_id: str | None
+    operator_state: str
     record_path: Path
 
 
@@ -130,7 +133,7 @@ def repair_ingest_source(root: Path, source_id: str) -> RepairIngestResult:
         if queue_item.job_type != "ingest_source":
             msg = f"Unsupported queue job type for repair: {queue_item.job_type}"
             raise ValueError(msg)
-        if queue_item.status == "failed":
+        if queue_item.status in {"failed", "dead_letter"}:
             write_queue_item(queue_path, _reset_failed_ingest_queue_item(queue_item))
         elif queue_item.status == "done":
             queue_path = enqueue_ingest_job(root, source_id)
@@ -204,7 +207,7 @@ def _reset_failed_ingest_queue_item(queue_item: QueueItemRecord) -> QueueItemRec
     if queue_item.status == "done":
         msg = f"Queue item is already done: {queue_item.job_id}"
         raise RuntimeError(msg)
-    if queue_item.status != "failed":
+    if queue_item.status not in {"failed", "dead_letter"}:
         msg = f"Queue item is not retryable: {queue_item.job_id}"
         raise RuntimeError(msg)
 
@@ -215,6 +218,7 @@ def _reset_failed_ingest_queue_item(queue_item: QueueItemRecord) -> QueueItemRec
             "max_attempts": _next_attempt_budget(queue_item),
             "lease_owner": None,
             "lease_expires_at": None,
+            "next_attempt_at": None,
             "last_error": None,
         }
     )
@@ -242,8 +246,10 @@ def _snapshot_queue_item(
         payload_ref=queue_item.payload_ref,
         lease_owner=queue_item.lease_owner,
         lease_expires_at=queue_item.lease_expires_at,
+        next_attempt_at=queue_item.next_attempt_at,
         last_error=queue_item.last_error,
         source_id=source_id_from_ingest_job_id(queue_item.job_id),
+        operator_state=_operator_state(queue_item),
         record_path=queue_path.relative_to(root),
     )
 
@@ -260,11 +266,40 @@ def _snapshot_payload(item: QueueItemSnapshot) -> dict[str, object]:
         "payload_ref": item.payload_ref,
         "lease_owner": item.lease_owner,
         "lease_expires_at": item.lease_expires_at,
+        "next_attempt_at": item.next_attempt_at,
         "last_error": item.last_error,
         "source_id": item.source_id,
+        "operator_state": item.operator_state,
         "record_path": item.record_path.as_posix(),
     }
 
 
 def _path_payload(root: Path, path: Path | None) -> str | None:
     return None if path is None else path.relative_to(root).as_posix()
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def _operator_state(queue_item: QueueItemRecord) -> str:
+    now = datetime.now(UTC).replace(microsecond=0)
+    if queue_item.status == "pending":
+        return "pending"
+    if queue_item.status == "done":
+        return "done"
+    if queue_item.status == "dead_letter":
+        return "dead_letter"
+    if queue_item.status == "leased":
+        expires_at = _parse_timestamp(queue_item.lease_expires_at)
+        if expires_at is None or expires_at <= now:
+            return "expired_leased"
+        return "active_leased"
+    if queue_item.status == "failed":
+        next_attempt_at = _parse_timestamp(queue_item.next_attempt_at)
+        if next_attempt_at is None or next_attempt_at <= now:
+            return "failed_due"
+        return "failed_backoff"
+    return queue_item.status

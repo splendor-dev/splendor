@@ -77,7 +77,6 @@ SUPPORTED_SOURCE_TYPES = {
     "hpp",
     "sh",
 }
-LEASE_TTL_SECONDS = 300
 _MARKDOWN_HEADING_PATTERN = re.compile(r"^(?P<level>#{1,6})\s+(?P<title>.+?)\s*#*\s*$")
 _CLAIM_SECTION_HEADINGS = {
     "core claims",
@@ -290,8 +289,8 @@ def _parse_timestamp(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value)
 
 
-def _lease_expires_at(now: datetime) -> str:
-    return (now + timedelta(seconds=LEASE_TTL_SECONDS)).isoformat()
+def _lease_expires_at(now: datetime, lease_ttl_seconds: int) -> str:
+    return (now + timedelta(seconds=lease_ttl_seconds)).isoformat()
 
 
 def _lease_is_expired(queue_item: QueueItemRecord, now: datetime) -> bool:
@@ -376,17 +375,29 @@ def _run_success_provenance_links(
     )
 
 
+def _next_attempt_is_due(queue_item: QueueItemRecord, now: datetime) -> bool:
+    next_attempt_at = _parse_timestamp(queue_item.next_attempt_at)
+    return next_attempt_at is None or next_attempt_at <= now
+
+
 def _is_queue_eligible(queue_item: QueueItemRecord, now: datetime) -> bool:
     if queue_item.job_type != "ingest_source":
         return False
     if queue_item.status == "pending":
         return True
+    if queue_item.status == "failed":
+        return _next_attempt_is_due(queue_item, now)
     return _lease_is_expired(queue_item, now)
 
 
 def _skip_message(queue_item: QueueItemRecord, now: datetime) -> str:
     if queue_item.status == "failed":
+        next_attempt_at = _parse_timestamp(queue_item.next_attempt_at)
+        if next_attempt_at is not None and next_attempt_at > now:
+            return f"retry after {queue_item.next_attempt_at}"
         return "status=failed"
+    if queue_item.status == "dead_letter":
+        return "status=dead_letter"
     if queue_item.status == "done":
         return "status=done"
     if queue_item.status == "leased":
@@ -451,6 +462,7 @@ def _finalize_queue_record(
     *,
     status: str,
     last_error: str | None = None,
+    next_attempt_at: str | None = None,
 ) -> QueueItemRecord:
     finalized = queue_item.model_copy(
         update={
@@ -458,6 +470,7 @@ def _finalize_queue_record(
             "updated_at": utc_now_iso(),
             "lease_owner": None,
             "lease_expires_at": None,
+            "next_attempt_at": next_attempt_at,
             "last_error": last_error,
         }
     )
@@ -477,6 +490,7 @@ def _mark_attempt_failed(
     source: SourceRecord | None = None,
     run_id: str | None = None,
 ) -> None:
+    config = load_config(root)
     failed_run = run
     if manifest_path is not None and source is not None:
         manifest_ref = _relative_to_root(root, manifest_path)
@@ -501,7 +515,19 @@ def _mark_attempt_failed(
         }
     )
     write_run_record(run_path, failed_run)
-    _finalize_queue_record(queue_path, queue_item, status="failed", last_error=error_message)
+    status = "dead_letter" if queue_item.attempt_count >= queue_item.max_attempts else "failed"
+    next_attempt_at = None
+    if status == "failed":
+        next_attempt_at = _next_attempt_at_for_failure(
+            queue_item, config.queue.retry_backoff_seconds
+        )
+    _finalize_queue_record(
+        queue_path,
+        queue_item,
+        status=status,
+        last_error=error_message,
+        next_attempt_at=next_attempt_at,
+    )
     if manifest_path is not None and source is not None and run_id is not None:
         failed_source = source.model_copy(update={"status": "failed", "last_run_id": run_id})
         write_source_record(manifest_path, failed_source)
@@ -511,8 +537,28 @@ def _mark_queue_failed_without_run(
     queue_path: Path,
     queue_item: QueueItemRecord,
     error_message: str,
+    backoff_seconds: list[int],
 ) -> None:
-    _finalize_queue_record(queue_path, queue_item, status="failed", last_error=error_message)
+    status = "dead_letter" if queue_item.attempt_count >= queue_item.max_attempts else "failed"
+    next_attempt_at = None
+    if status == "failed":
+        next_attempt_at = _next_attempt_at_for_failure(queue_item, backoff_seconds)
+    _finalize_queue_record(
+        queue_path,
+        queue_item,
+        status=status,
+        last_error=error_message,
+        next_attempt_at=next_attempt_at,
+    )
+
+
+def _next_attempt_at_for_failure(queue_item: QueueItemRecord, backoff_seconds: list[int]) -> str:
+    if not backoff_seconds:
+        return utc_now_iso()
+    backoff_index = max(0, min(queue_item.attempt_count - 1, len(backoff_seconds) - 1))
+    return (
+        datetime.now(UTC).replace(microsecond=0) + timedelta(seconds=backoff_seconds[backoff_index])
+    ).isoformat()
 
 
 def _commit_success(
@@ -588,17 +634,22 @@ def enqueue_ingest_job(root: Path, source_id: str) -> Path:
         created_at=created_at,
         updated_at=now.isoformat(),
         attempt_count=0 if existing_queue is None else existing_queue.attempt_count,
-        max_attempts=3 if existing_queue is None else existing_queue.max_attempts,
+        max_attempts=config.queue.max_attempts
+        if existing_queue is None
+        else existing_queue.max_attempts,
         payload_ref=_relative_to_root(root, manifest_path),
         lease_owner=None,
         lease_expires_at=None,
+        next_attempt_at=None,
         last_error=None,
     )
     write_queue_item(queue_path, queue_item)
     return queue_path
 
 
-def _claim_ingest_job(queue_path: Path, queue_item: QueueItemRecord) -> QueueItemRecord:
+def _claim_ingest_job(
+    queue_path: Path, queue_item: QueueItemRecord, *, lease_ttl_seconds: int
+) -> QueueItemRecord:
     now = _utc_now()
     leased_queue = queue_item.model_copy(
         update={
@@ -606,7 +657,8 @@ def _claim_ingest_job(queue_path: Path, queue_item: QueueItemRecord) -> QueueIte
             "updated_at": now.isoformat(),
             "attempt_count": queue_item.attempt_count + 1,
             "lease_owner": _lease_owner(),
-            "lease_expires_at": _lease_expires_at(now),
+            "lease_expires_at": _lease_expires_at(now, lease_ttl_seconds),
+            "next_attempt_at": None,
             "last_error": None,
         }
     )
@@ -627,16 +679,23 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
     if queue_item.status == "leased" and not _lease_is_expired(queue_item, now):
         msg = f"Queue item is already leased: {queue_item.job_id}"
         raise RuntimeError(msg)
-    if queue_item.status not in {"pending", "leased"}:
+    if queue_item.status not in {"pending", "leased", "failed"}:
         msg = f"Queue item is not runnable: {queue_item.job_id}"
         raise RuntimeError(msg)
+    if queue_item.status == "failed" and not _next_attempt_is_due(queue_item, now):
+        msg = f"Queue item retry is not due until {queue_item.next_attempt_at}: {queue_item.job_id}"
+        raise RuntimeError(msg)
 
-    queue_item = _claim_ingest_job(queue_path, queue_item)
+    queue_item = _claim_ingest_job(
+        queue_path, queue_item, lease_ttl_seconds=config.queue.lease_ttl_seconds
+    )
 
     try:
         manifest_path, source = _load_source_for_queue(root, queue_item)
     except (FileNotFoundError, ValueError) as exc:
-        _mark_queue_failed_without_run(queue_path, queue_item, str(exc))
+        _mark_queue_failed_without_run(
+            queue_path, queue_item, str(exc), config.queue.retry_backoff_seconds
+        )
         raise
 
     if _is_no_op(root, layout, source):
