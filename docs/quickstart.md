@@ -72,16 +72,17 @@ The command prints:
 - a stable `src-...` source ID
 - the manifest path under `state/manifests/sources/`
 - the source ref and storage mode
+- a pending ingest queue record and next command
 
 For in-repo files, the current default storage mode is `none`, which means Splendor tracks the
 workspace file directly instead of copying it into `raw/sources/`.
 
 ## 4. Ingest the source
 
-Copy the `src-...` identifier from the `add-source` output, then run:
+Drain the pending ingest queue:
 
 ```bash
-uv run splendor --root /tmp/demo-repo ingest <source-id>
+uv run splendor --root /tmp/demo-repo ingest --pending
 ```
 
 This creates:
@@ -90,6 +91,13 @@ This creates:
 - a queue record under `state/queue/`
 - a run record under `state/runs/`
 - updated `wiki/index.md` and `wiki/log.md`
+
+After ingest, use the source ID from the command output to inspect likely synthesis follow-up:
+
+```bash
+uv run splendor --root /tmp/demo-repo wiki status
+uv run splendor --root /tmp/demo-repo wiki suggest <source-id>
+```
 
 ## 5. Add a planning record
 

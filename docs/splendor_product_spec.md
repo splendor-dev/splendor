@@ -654,6 +654,21 @@ should print the exact next ingest command or enqueue the source for pending ing
 `wiki suggest` command. After query/file-answer commands, it should clearly state whether there is a
 follow-up filing or review step.
 
+Current implementation:
+
+- `splendor add-source <path>` registers the source and creates a pending ingest queue item for
+  CLI-created sources, so `splendor ingest --pending` can continue the loop without copying the
+  source ID.
+- `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
+  `splendor wiki suggest <source-id>` command.
+- `splendor wiki status` reports source, page, queue, run, review, contested, machine-generated,
+  and missing synthesis-follow-up counts, with optional JSON output.
+- `splendor wiki suggest <source-id>` deterministically ranks existing synthesis pages using source
+  metadata, source-summary text, frontmatter source refs, tags, source refs, and page content, with
+  optional JSON output.
+- Mutating `splendor wiki compile <source-id>` remains deferred to the review-gated compile-loop
+  slice.
+
 Later optional support:
 - PDF
 - image-based sources

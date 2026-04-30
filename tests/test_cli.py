@@ -494,7 +494,7 @@ def test_cli_health_command_passes_for_valid_sources(tmp_path: Path, capsys) -> 
 
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Checked records: 1" in captured.out
+    assert "Checked records: 2" in captured.out
     assert "Health check passed" in captured.out
     json_report, markdown_report = latest_report_paths(tmp_path, "health")
     assert json_report.stem == markdown_report.stem
@@ -502,7 +502,7 @@ def test_cli_health_command_passes_for_valid_sources(tmp_path: Path, capsys) -> 
     payload = json.loads(json_report.read_text(encoding="utf-8"))
     assert payload["command"] == "health"
     assert payload["status"] == "passed"
-    assert payload["checked_count"] == 1
+    assert payload["checked_count"] == 2
     assert payload["issue_count"] == 0
     markdown = markdown_report.read_text(encoding="utf-8")
     assert "# Splendor Health Report" in markdown
