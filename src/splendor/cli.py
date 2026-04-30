@@ -146,6 +146,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query_parser.set_defaults(handler=handle_query)
 
+    serve_parser = subparsers.add_parser("serve", help="Run the read-only local web UI")
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host interface to bind. Defaults to 127.0.0.1.",
+    )
+    serve_parser.add_argument(
+        "--port",
+        default=8000,
+        type=int,
+        help="Port to bind. Defaults to 8000.",
+    )
+    serve_parser.set_defaults(handler=handle_serve)
+
     file_answer_parser = subparsers.add_parser(
         "file-answer", help="File a saved query result back into the wiki"
     )
@@ -558,6 +572,18 @@ def handle_query(args: argparse.Namespace) -> int:
             print(f"   Contradictions: {match.contradiction_count}")
         if match.review_task_ids:
             print(f"   Review tasks: {', '.join(match.review_task_ids)}")
+    return 0
+
+
+def handle_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from splendor.web import create_app
+
+    root = args.root.resolve()
+    app = create_app(root)
+    print(f"Serving Splendor at http://{args.host}:{args.port}")
+    uvicorn.run(app, host=args.host, port=args.port)
     return 0
 
 

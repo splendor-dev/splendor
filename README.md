@@ -101,7 +101,7 @@ The companion-repo guidance and sample agent instructions live in
 ## What Splendor Is Not
 
 - A hosted service
-- A web UI product in the current MVP
+- A full web UI product beyond the local read-only browse/search shell
 - An OCR or rich-media ingestion pipeline in the current MVP
 - A mandatory GitHub-only workflow
 
@@ -118,12 +118,14 @@ Implemented today:
 - `splendor task|milestone|decision|question ...`
 - `splendor repo scan`
 - `splendor repo refresh`
+- `splendor serve` for a read-only local browse/search UI
 - `splendor lint` and `splendor health`
 
 Not implemented yet:
 
 - OCR and image extraction flows
-- local web UI
+- mutating web UI actions such as add-source forms
+- planning/runs UI views
 - changed-files-driven refresh suggestions
 
 ## Documentation
@@ -137,12 +139,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M8-P1.1`
-- Current planned slice: `M8-P2`
-- Current PR sub-slice: `M8-P2.1`
+- Previous completed PR sub-slice: `M8-P2.1`
+- Current planned slice: `M9-P1`
+- Current PR sub-slice: `M9-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M9-P1`
-- Next planned PR sub-slice: `M9-P1.1`
+- Next planned slice: `M9-P2`
+- Next planned PR sub-slice: `M9-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -152,8 +154,10 @@ Planning notation now distinguishes parent slices such as `M7-P2` from concrete 
 as `M7-P2.1`. `Current PR lifecycle: branch=in-progress; main=merged` means the current sub-slice
 is in progress on feature branches and is the latest merged work once observed on `main`.
 
-`M8-P1.1` is now implemented: GitHub Actions run Splendor lint on pull requests and pushes to
-`main`, run Splendor health nightly, and publish generated maintenance reports as artifacts.
+`M8-P1.1` is implemented: GitHub Actions run Splendor lint on pull requests and pushes to `main`,
+run Splendor health nightly, and publish generated maintenance reports as artifacts. `M8-P2.1` is
+implemented: generated-change automation can propose deterministic repo-refresh output through a
+reviewable PR workflow.
 
-The current PR sub-slice is `M8-P2.1`, under the parent slice `M8-P2`, which adds an optional
-PR-centric generated-change workflow for deterministic repo-refresh output.
+The current PR sub-slice is `M9-P1.1`, under the parent slice `M9-P1`, which adds the first
+read-only local web UI shell for browsing and searching wiki/planning markdown.
