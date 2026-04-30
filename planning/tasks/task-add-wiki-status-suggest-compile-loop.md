@@ -28,6 +28,10 @@ After each source was ingested, Splendor made the source summary searchable but 
 which concept, topic, or architecture pages should be updated. The user had to hold the knowledge
 maintenance loop manually.
 
+Roadmap slice: `M10-P0.1`.
+
+GitHub issue: https://github.com/splendor-dev/splendor/issues/40.
+
 ## Follow-up
 
 Design a text-native wiki-maintenance loop before richer source handling expands:

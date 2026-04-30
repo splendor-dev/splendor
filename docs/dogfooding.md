@@ -37,6 +37,11 @@ topic, architecture, comparison, or overview pages after ingesting a meaningful 
 bridge should add `splendor wiki status`, `splendor wiki suggest <source-id>`, project briefing, and
 a future review-gated compile/update workflow.
 
+Dogfood runs should record usability friction separately from knowledge gaps. Pay special attention
+to whether each command prints the next useful command, whether long source IDs need to be copied
+manually, whether query results show claim-bearing snippets, and whether the web UI exposes enough
+status to understand what changed without returning to the terminal.
+
 ## Validation
 
 Use `--no-save` for validation queries when you do not want to update

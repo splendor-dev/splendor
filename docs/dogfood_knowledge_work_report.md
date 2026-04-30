@@ -100,3 +100,28 @@ loop before expanding aggressively into rich document parsing.
   synthesis pages.
 - Add a project briefing command or UI view that assembles repository-local context for a stated
   goal.
+
+### Product workflow updates recommended
+
+- Add `M10-P0.3` as a dogfood workflow-polish slice after status/suggest and project briefing.
+- Fix the `add-source -> ingest --pending` handoff as a high-priority workflow bug.
+- Improve query snippets so source-summary results prefer claim-bearing source text over generated
+  metadata.
+- Add restrained next-action hints after `add-source`, `ingest`, `query`, and `file-answer`.
+- Add read-only web status overview and source detail pages after the CLI status contract exists.
+- Clarify generated artifacts, draft synthesis, reviewed synthesis, contested pages, and stale pages
+  across docs, lint/status output, query results, and web UI.
+
+Follow-up issues opened:
+
+- https://github.com/splendor-dev/splendor/issues/40 — `M10-P0.1` wiki status and source-impact
+  suggestions.
+- https://github.com/splendor-dev/splendor/issues/41 — `M10-P0.2` project briefing and
+  compile-loop contract.
+- https://github.com/splendor-dev/splendor/issues/42 — `M10-P0.3` dogfood workflow polish and
+  next-action hints.
+- https://github.com/splendor-dev/splendor/issues/43 — add-source to pending-ingest handoff.
+- https://github.com/splendor-dev/splendor/issues/44 — query snippets for generated source
+  summaries.
+- https://github.com/splendor-dev/splendor/issues/45 — web status overview, source detail pages,
+  and generated/maintained page-state visibility.

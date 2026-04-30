@@ -553,6 +553,7 @@ Provide a modest but useful human UI without changing the system’s center of g
 - `M9-P1.1` Read-only `splendor serve` browse/search shell
 - `M9-P1.2` Dogfood hardening after first local web UI trial
 - `M9-P1.3` Knowledge-work dogfood and wiki extension
+- `M10-P0.3` Dogfood workflow polish and web status surfaces
 
 ### Milestone 9 status
 
@@ -564,8 +565,10 @@ markdown source summaries, and contradiction-review filtering for source-summary
 boilerplate. `M9-P1.3` adds three researched dogfood rounds, extends the wiki with tool-landscape
 and agent-context synthesis, and files follow-up product tasks from the observed workflow friction.
 The next recommended slice is `M10-P0.1`, which should add CLI-first wiki status and source-impact
-suggestions before deeper planning/runs UI work. Mutating web actions, add-source forms, and
-planning/runs views remain deferred to later `M9` slices.
+suggestions before deeper planning/runs UI work. `M10-P0.3` should follow the status and briefing
+work with dogfood workflow polish: add-source/ingest handoff fixes, next-action hints, query
+snippet improvements, and read-only web status/source-detail surfaces. Mutating web actions,
+add-source forms, and planning/runs views remain deferred to later `M9` slices.
 
 ---
 
@@ -580,22 +583,32 @@ heavier queue repair or rich-source capabilities.
 - source-impact suggestions for concept, topic, architecture, comparison, and overview pages
 - project briefing over wiki, planning, source, and recent run state
 - explicit separation between source-summary generation and synthesis-page compile/update work
+- dogfood workflow polish around add-source, ingest, query, and review handoff
+- read-only web status and source-detail surfaces once the CLI status contract exists
 
 ### Deliverables
 - `splendor wiki status`
 - `splendor wiki suggest <source-id>`
 - initial project briefing command or UI view
 - documented contract for a future review-gated `splendor wiki compile <source-id>`
+- fixed or clarified `add-source -> ingest --pending` handoff
+- restrained next-action hints after major commands
+- read-only web status overview and source detail pages
 
 ### Exit criteria
 - users can see whether the wiki is healthy, stale, contested, or missing follow-up synthesis
 - users can ask which pages a newly ingested source should affect
 - agents can assemble a compact, source-backed project orientation before continuing work
+- users can move through `add-source -> ingest -> wiki suggest -> review` without copying long IDs
+  or guessing the next command
+- query results prefer substantive claim-bearing snippets over generated metadata boilerplate
+- local web browsing exposes enough source/run/page state to explain what changed
 - richer source handling remains downstream of the text-native maintenance loop
 
 ### Planned PR slices
 - `M10-P0.1` Wiki status and source-impact suggestions
 - `M10-P0.2` Project briefing and compile-loop contract
+- `M10-P0.3` Dogfood workflow polish and web status surfaces
 
 ---
 
@@ -793,6 +806,7 @@ Splendor should be called v1-ready when, in addition to the MVP, it has:
 - useful code awareness
 - robust queue and repair workflows
 - wiki status, source-impact suggestions, and project briefing
+- dogfood workflow polish for add/ingest/query/review loops
 - optional GitHub-native workflows
 - a coherent local UI
 - stable schemas, docs, and examples

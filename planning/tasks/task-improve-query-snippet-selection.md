@@ -26,6 +26,10 @@ run_refs: []
 Dogfood queries often ranked the correct page but sometimes showed snippets from generated
 `Key Facts` or provenance boilerplate instead of the source note's substantive claims.
 
+Roadmap slice: `M10-P0.3`.
+
+GitHub issue: https://github.com/splendor-dev/splendor/issues/44.
+
 ## Follow-up
 
 Prefer sections such as `Core Claims`, `Design Implications`, `Product Experience Notes`, and

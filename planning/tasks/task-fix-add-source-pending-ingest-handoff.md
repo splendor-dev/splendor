@@ -28,6 +28,10 @@ During three dogfood rounds, `splendor add-source` registered each new source su
 `splendor ingest --pending` repeatedly skipped older done queue records and did not process the
 newly registered source. Each new source required explicit `splendor ingest <source-id>`.
 
+Roadmap slice: `M10-P0.3`.
+
+GitHub issue: https://github.com/splendor-dev/splendor/issues/43.
+
 ## Follow-up
 
 Clarify and fix the handoff between registration and pending ingestion. Good outcomes include a

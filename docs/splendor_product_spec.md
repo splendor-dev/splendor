@@ -648,6 +648,12 @@ This workflow should start with text-native sources and deterministic page-impac
 compile step may remain human-reviewed or LLM-assisted behind explicit confirmation until the
 contract is trustworthy.
 
+Command output should support the workflow without becoming noisy. After `add-source`, Splendor
+should print the exact next ingest command or enqueue the source for pending ingestion. After
+`ingest`, it should point to the generated source-summary page and, once available, the relevant
+`wiki suggest` command. After query/file-answer commands, it should clearly state whether there is a
+follow-up filing or review step.
+
 Later optional support:
 - PDF
 - image-based sources
@@ -755,6 +761,11 @@ Later optional forms:
 - slide decks
 - charts
 - reports
+
+Query snippets should favor claim-bearing source text over generated metadata. For source-summary
+pages, sections such as `Core Claims`, `Design Implications`, `Product Experience Notes`, and the
+source extract should outrank frontmatter-derived facts, provenance boilerplate, and generic
+machine-generated labels.
 
 ### 17.3 Project briefing
 
@@ -945,8 +956,16 @@ Early web UI should be intentionally modest.
 - search/navigation
 - page backlinks/related links if available
 - planning object lists/detail pages
+- read-only status overview for source counts, page counts, queue/runs state, review state, and
+  latest log entries
+- source detail pages showing source metadata, generated summary page, ingest run, provenance, and
+  affected synthesis-page suggestions
 - source add form
 - basic queue/runs page later
+
+The web UI should make generated versus maintained pages visible without requiring raw frontmatter
+inspection. Users should be able to distinguish generated source summaries, draft synthesis,
+reviewed synthesis, contested pages, and stale pages while browsing or searching.
 
 ### Avoid early
 - heavy collaborative editing
@@ -986,7 +1005,8 @@ The smallest opinionated core should be:
 11. local query path
 12. source-impact suggestions and a reviewable compile/update loop
 13. project briefing
-14. optional file serving/browsing later
+14. dogfood workflow polish for add-source, ingest, query, and review handoffs
+15. optional file serving/browsing later
 
 ## 29. Acceptance Criteria for the Core Product
 
@@ -1000,10 +1020,12 @@ Splendor should be considered successful at the product-spec level if it can do 
 6. record queue/job/run state durably
 7. query the wiki via CLI
 8. assemble a compact project briefing for a goal
-9. create and query tasks/milestones/decisions/questions
-10. lint the repo deterministically
-11. operate locally without GitHub
-12. optionally integrate with GitHub Actions for maintenance
+9. guide the user through add-source, ingest, query, and review handoffs without requiring hidden
+   state or copied long IDs
+10. create and query tasks/milestones/decisions/questions
+11. lint the repo deterministically
+12. operate locally without GitHub
+13. optionally integrate with GitHub Actions for maintenance
 
 ## 30. Open Design Questions
 
