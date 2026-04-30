@@ -13,6 +13,7 @@ import bleach
 import markdown as markdown_lib
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from pydantic import ValidationError
 
 from splendor.commands.planning import model_for_planning_kind
 from splendor.commands.query import QueryMatch, QueryValidationError, run_query
@@ -292,7 +293,7 @@ def create_app(root: Path) -> FastAPI:
         layout = _layout_for(workspace_root)
         try:
             run_records = _run_records(workspace_root, layout)
-        except ValueError:
+        except (ValueError, ValidationError):
             _LOGGER.exception("Runs view failed while parsing run records.")
             return _page(
                 "Runs Error",
@@ -320,7 +321,7 @@ def create_app(root: Path) -> FastAPI:
         layout = _layout_for(workspace_root)
         try:
             queue_records = _queue_records(workspace_root, layout)
-        except ValueError:
+        except (ValueError, ValidationError):
             _LOGGER.exception("Queue view failed while parsing queue records.")
             return _page(
                 "Queue Error",

@@ -342,6 +342,30 @@ def test_runs_and_queue_pages_report_invalid_records_without_path_leak(tmp_path:
     assert str(bad_queue) not in queue.text
 
 
+def test_runs_and_queue_pages_report_schema_invalid_records_without_path_leak(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    bad_run = tmp_path / "state" / "runs" / "run-schema-bad.json"
+    bad_queue = tmp_path / "state" / "queue" / "queue-schema-bad.json"
+    bad_run.write_text('{"kind": "run", "run_id": "run-schema-bad"}\n', encoding="utf-8")
+    bad_queue.write_text(
+        '{"kind": "queue_item", "job_id": "queue-schema-bad"}\n',
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    runs = client.get("/runs")
+    queue = client.get("/queue")
+
+    assert runs.status_code == 500
+    assert "invalid run records" in runs.text
+    assert str(bad_run) not in runs.text
+    assert queue.status_code == 500
+    assert "invalid queue records" in queue.text
+    assert str(bad_queue) not in queue.text
+
+
 def test_document_detail_falls_back_for_invalid_planning_frontmatter(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     task_path = tmp_path / "planning" / "tasks" / "task-bad.md"
