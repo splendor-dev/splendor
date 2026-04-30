@@ -8,6 +8,7 @@ from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_task
 from splendor.schemas import KnowledgePageFrontmatter
+from splendor.state.source_registry import load_source_record
 from splendor.web import create_app
 
 
@@ -197,7 +198,7 @@ def test_status_page_reports_invalid_source_manifest_without_path_leak(tmp_path:
     response = client.get("/status")
 
     assert response.status_code == 500
-    assert "invalid source records" in response.text
+    assert "invalid records" in response.text
     assert str(tmp_path) not in response.text
 
 
@@ -227,6 +228,26 @@ def test_source_detail_shows_summary_run_and_synthesis_suggestions(tmp_path: Pat
     assert "wiki/sources/" in response.text
     assert "Dogfood workflow" in response.text
     assert "wiki/topics/dogfood-workflow.md" in response.text
+
+
+def test_source_detail_reports_invalid_linked_run_without_path_leak(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "invalid-run.md"
+    source.write_text("# Invalid run\n\nSource with a corrupt run record.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{added.source_id}.json"
+    run_id = load_source_record(manifest_path).last_run_id
+    assert run_id is not None
+    (tmp_path / "state" / "runs" / f"{run_id}.json").write_text("{not valid json", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get(f"/sources/{added.source_id}")
+
+    assert response.status_code == 200
+    assert "Linked run record" in response.text
+    assert "is invalid" in response.text
+    assert str(tmp_path) not in response.text
 
 
 def test_source_detail_returns_not_found_for_unknown_source_id(tmp_path: Path) -> None:

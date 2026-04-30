@@ -47,7 +47,6 @@ _BOILERPLATE_TERMS = {
     "pipeline",
     "provenance",
     "source",
-    "summary",
     "version",
 }
 
@@ -312,7 +311,7 @@ def _best_snippet(text: str, query_tokens: list[str]) -> str:
             -len(candidate),
         ),
     )
-    if _candidate_score(best, query_tokens) == 0:
+    if _candidate_score(best, query_tokens) <= 0:
         best = paragraphs[0] if paragraphs else lines[0]
     collapsed = _WHITESPACE_PATTERN.sub(" ", _strip_candidate_heading(best)).strip()
     if len(collapsed) <= 240:

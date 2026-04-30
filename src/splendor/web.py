@@ -150,15 +150,13 @@ def create_app(root: Path) -> FastAPI:
         layout = _layout_for(workspace_root)
         try:
             status_result = build_wiki_status(workspace_root)
-            source_rows = "\n".join(
-                _source_row(workspace_root, source) for source in load_sources(layout)
-            )
+            source_rows = "\n".join(_source_row(source) for source in load_sources(layout))
         except ValueError:
-            _LOGGER.exception("Status failed while parsing source records.")
+            _LOGGER.exception("Status failed while parsing workspace records.")
             return _page(
                 "Status Error",
                 '<p class="empty">'
-                "Status failed because the workspace contains invalid source records."
+                "Status failed because the workspace contains invalid records."
                 "</p>",
                 status_code=500,
             )
@@ -576,7 +574,7 @@ def _document_row(document: _DocumentSummary) -> str:
     )
 
 
-def _source_row(root: Path, source) -> str:
+def _source_row(source) -> str:
     href = f"/sources/{quote(source.source_id)}"
     summary = source.linked_pages[0] if source.linked_pages else "-"
     summary_html = html.escape(summary)
@@ -617,7 +615,15 @@ def _source_run_section(root: Path, layout: ResolvedLayout, run_id: str | None) 
             "<h2>Latest ingest run</h2>"
             f'<p class="empty">Linked run <code>{html.escape(run_id)}</code> is missing.</p>'
         )
-    run = load_run_record(run_path)
+    try:
+        run = load_run_record(run_path)
+    except ValueError:
+        _LOGGER.exception("Run record failed validation.")
+        return (
+            "<h2>Latest ingest run</h2>"
+            f'<p class="empty">Linked run record <code>{html.escape(run_id)}</code> '
+            "is invalid.</p>"
+        )
     run_ref = run_path.relative_to(root).as_posix()
     pages = ", ".join(run.page_refs) if run.page_refs else "-"
     return (
