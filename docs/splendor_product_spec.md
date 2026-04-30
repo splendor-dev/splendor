@@ -999,7 +999,7 @@ Early web UI should be intentionally modest.
 - source detail pages showing source metadata, generated summary page, ingest run, provenance, and
   affected synthesis-page suggestions
 - source add form
-- basic queue/runs page later
+- basic queue/runs page
 
 The web UI should make generated versus maintained pages visible without requiring raw frontmatter
 inspection. Users should be able to distinguish generated source summaries, draft synthesis,
@@ -1008,7 +1008,9 @@ reviewed synthesis, contested pages, and stale pages while browsing or searching
 Current implementation includes read-only `/status` and `/sources/{source-id}` pages layered on
 the CLI wiki status/suggest contracts. They expose source/page/queue/run/review counts, source
 manifests, linked source-summary pages, latest ingest run state, and deterministic affected
-synthesis-page suggestions without adding mutating web actions.
+synthesis-page suggestions without adding mutating web actions. It also includes read-only
+`/planning`, `/planning/{kind}`, `/runs`, and `/queue` pages that list durable planning and runtime
+records and link planning rows back to their markdown detail pages.
 
 ### Avoid early
 - heavy collaborative editing
