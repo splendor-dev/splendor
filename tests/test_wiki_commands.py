@@ -6,7 +6,7 @@ import yaml
 from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
-from splendor.schemas import KnowledgePageFrontmatter
+from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport
 from splendor.state.source_registry import load_source_record
 
 
@@ -457,6 +457,17 @@ def test_brief_json_includes_goal_state_matches_planning_and_next_actions(
             "in_progress",
         ]
     )
+    report = MaintenanceReport(
+        command="lint",
+        created_at="2026-04-30T00:00:00Z",
+        status="passed",
+        checked_count=3,
+        issue_count=0,
+    )
+    report_path = tmp_path / "reports" / "lint" / "20260430T000000Z.json"
+    report_path.write_text(
+        json.dumps(report.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8"
+    )
     capsys.readouterr()
 
     exit_code = main(["--root", str(tmp_path), "brief", "project", "briefing", "--json"])
@@ -471,6 +482,15 @@ def test_brief_json_includes_goal_state_matches_planning_and_next_actions(
     assert payload["planning_items"][0]["record_id"] == "task-briefing"
     assert payload["recent_sources"][0]["source_id"] == added.source_id
     assert payload["recent_runs"][0]["source_ids"] == [added.source_id]
+    assert payload["latest_reports"] == [
+        {
+            "command": "lint",
+            "status": "passed",
+            "created_at": "2026-04-30T00:00:00Z",
+            "issue_count": 0,
+            "path": "reports/lint/20260430T000000Z.json",
+        }
+    ]
     assert any("Open the top matching" in action for action in payload["next_actions"])
 
 
@@ -485,6 +505,20 @@ def test_brief_text_output_is_available_without_goal(tmp_path: Path, capsys) -> 
     assert "Project brief" in out
     assert "Goal: -" in out
     assert "Next actions:" in out
+
+
+def test_brief_json_output_is_available_without_goal(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["goal"] is None
+    assert "status" in payload
+    assert "latest_reports" in payload
+    assert "next_actions" in payload
 
 
 def test_brief_skips_invalid_query_matches_without_failing(tmp_path: Path, capsys) -> None:

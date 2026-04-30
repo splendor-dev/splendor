@@ -192,10 +192,6 @@ def _recent_runs(runs: list[RunRecord]) -> list[RecentRunSnapshot]:
     ]
 
 
-def load_recent_runs(layout) -> list[RecentRunSnapshot]:
-    return _recent_runs(_load_runs(layout))
-
-
 def build_wiki_status(root: Path) -> WikiStatus:
     config = load_config(root)
     layout = resolve_layout(root, config)
