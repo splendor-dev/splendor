@@ -17,9 +17,7 @@ This wiki is maintained by Splendor.
 - [round 1 llm wiki implementation landscape](sources/src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6.md) (`src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6`)
 - [round 2 context engineering and repo memory](sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.md) (`src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4`)
 - [round 3 competitive feature map](sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.md) (`src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b`)
-- [round 1 llm wiki implementation landscape](sources/src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6.md) (`src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6`)
-- [round 2 context engineering and repo memory](sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.md) (`src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4`)
-- [round 3 competitive feature map](sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.md) (`src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b`)
+
 ## Concepts
 
 - [LLM Wiki Pattern](concepts/llm-wiki-pattern.md) (`concept-llm-wiki-pattern`)
