@@ -99,6 +99,14 @@ uv run splendor --root /tmp/demo-repo wiki status
 uv run splendor --root /tmp/demo-repo wiki suggest <source-id>
 ```
 
+For a read-only browser view over the same status and source-detail contracts:
+
+```bash
+uv run splendor --root /tmp/demo-repo serve
+```
+
+Then open `/status` or `/sources/<source-id>` on the local server.
+
 ## 5. Add a planning record
 
 Planning records should link back to sources by source ID, not by raw file path.

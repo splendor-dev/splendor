@@ -16,9 +16,13 @@ from fastapi.responses import HTMLResponse
 
 from splendor.commands.planning import model_for_planning_kind
 from splendor.commands.query import QueryMatch, QueryValidationError, run_query
+from splendor.commands.wiki import build_wiki_status, load_sources, suggest_source_pages
 from splendor.config import load_config
 from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.state.paths import resolve_workspace_path
+from splendor.state.runtime import load_run_record
+from splendor.state.source_compat import canonical_source_ref
+from splendor.state.source_registry import load_source_record
 from splendor.utils.planning import parse_planning_document
 from splendor.utils.wiki import parse_wiki_markdown
 
@@ -128,6 +132,7 @@ def create_app(root: Path) -> FastAPI:
             '<button type="submit">Search</button>'
             "</form>"
             '<a class="button" href="/browse">Browse documents</a>'
+            '<a class="button secondary" href="/status">Status</a>'
             "</section>"
             f"{empty_state}"
             '<section class="stats">'
@@ -139,6 +144,102 @@ def create_app(root: Path) -> FastAPI:
             "</section>"
         )
         return _page("Splendor", body)
+
+    @app.get("/status", response_class=HTMLResponse)
+    def status() -> HTMLResponse:
+        layout = _layout_for(workspace_root)
+        status_result = build_wiki_status(workspace_root)
+        source_rows = "\n".join(
+            _source_row(workspace_root, source) for source in load_sources(layout)
+        )
+        if not source_rows:
+            source_rows = '<tr><td colspan="5" class="empty">No source manifests yet.</td></tr>'
+        recent_runs = "\n".join(
+            "<li>"
+            f"<code>{html.escape(run.run_id)}</code> {html.escape(run.status)} "
+            f"finished={html.escape(run.finished_at or '-')}"
+            "</li>"
+            for run in status_result.recent_runs
+        )
+        if not recent_runs:
+            recent_runs = '<li class="empty">No runs yet.</li>'
+        invalid_pages = "\n".join(
+            f"<li><code>{html.escape(page.path)}</code>: {html.escape(page.error)}</li>"
+            for page in status_result.invalid_page_examples
+        )
+        invalid_section = ""
+        if invalid_pages:
+            invalid_section = f"<h2>Invalid wiki pages</h2><ul>{invalid_pages}</ul>"
+        body = (
+            '<p class="breadcrumbs"><a href="/">Home</a> / Status</p>'
+            '<section class="stats">'
+            f"<div><strong>{status_result.source_total}</strong><span>Sources</span></div>"
+            f"<div><strong>{status_result.page_total}</strong><span>Pages</span></div>"
+            f"<div><strong>{status_result.queue_total}</strong><span>Queue records</span></div>"
+            f"<div><strong>{status_result.run_total}</strong><span>Runs</span></div>"
+            f"<div><strong>{status_result.review_needed_pages}</strong>"
+            "<span>Review needed</span></div>"
+            f"<div><strong>{status_result.sources_missing_synthesis}</strong>"
+            "<span>Synthesis follow-up</span></div>"
+            "</section>"
+            "<h2>Review state</h2>"
+            f"<p>{html.escape(_format_counts(status_result.review_state_counts)) or '-'}</p>"
+            "<h2>Queue</h2>"
+            f"<p>{html.escape(_format_counts(status_result.queue_status_counts)) or '-'}</p>"
+            "<h2>Recent runs</h2>"
+            f"<ul>{recent_runs}</ul>"
+            f"{invalid_section}"
+            "<h2>Sources</h2>"
+            "<table><thead><tr><th>Source</th><th>Status</th><th>Review</th>"
+            "<th>Summary page</th><th>Source ref</th></tr></thead>"
+            f"<tbody>{source_rows}</tbody></table>"
+        )
+        return _page("Status", body)
+
+    @app.get("/sources/{source_id}", response_class=HTMLResponse)
+    def source_detail(source_id: str) -> HTMLResponse:
+        layout = _layout_for(workspace_root)
+        source = _load_source_for_web(layout, source_id)
+        summary_links = "".join(
+            f'<li><a href="/documents/{quote(path, safe="/")}">'
+            f"<code>{html.escape(path)}</code></a></li>"
+            for path in source.linked_pages
+        )
+        if not summary_links:
+            summary_links = '<li class="empty">No generated source-summary page linked yet.</li>'
+        run_section = _source_run_section(workspace_root, layout, source.last_run_id)
+        suggestions = suggest_source_pages(workspace_root, source.source_id).suggestions
+        suggestion_rows = "\n".join(_suggestion_row(suggestion) for suggestion in suggestions)
+        if not suggestion_rows:
+            suggestion_rows = (
+                '<tr><td colspan="4" class="empty">'
+                "No likely synthesis-page matches found.</td></tr>"
+            )
+        manifest_ref = (layout.source_records_dir / f"{source.source_id}.json").relative_to(
+            workspace_root
+        )
+        body = (
+            '<p class="breadcrumbs"><a href="/status">Status</a> / '
+            f"{html.escape(source.source_id)}</p>"
+            '<section class="metadata">'
+            f"<div><strong>Status</strong><span>{html.escape(source.status)}</span></div>"
+            f"<div><strong>Review</strong><span>{html.escape(source.review_state)}</span></div>"
+            f"<div><strong>Type</strong><span>{html.escape(source.source_type)}</span></div>"
+            f"<div><strong>Storage</strong><span>{html.escape(source.storage_mode or '-')}"
+            "</span></div>"
+            f"<div><strong>Manifest</strong><span><code>{html.escape(manifest_ref.as_posix())}"
+            "</code></span></div>"
+            "</section>"
+            "<h2>Source ref</h2>"
+            f"<p><code>{html.escape(canonical_source_ref(source))}</code></p>"
+            "<h2>Generated source-summary pages</h2>"
+            f"<ul>{summary_links}</ul>"
+            f"{run_section}"
+            "<h2>Affected synthesis-page suggestions</h2>"
+            "<table><thead><tr><th>Page</th><th>Kind</th><th>Score</th><th>Reasons</th></tr></thead>"
+            f"<tbody>{suggestion_rows}</tbody></table>"
+        )
+        return _page(source.title, body)
 
     @app.get("/browse", response_class=HTMLResponse)
     def browse() -> HTMLResponse:
@@ -306,6 +407,10 @@ def _workspace_counts(
     )
 
 
+def _format_counts(counts: dict[str, int]) -> str:
+    return " ".join(f"{key}={counts[key]}" for key in sorted(counts))
+
+
 def _empty_workspace_panel() -> str:
     return (
         '<section class="empty-state">'
@@ -461,6 +566,76 @@ def _document_row(document: _DocumentSummary) -> str:
     )
 
 
+def _source_row(root: Path, source) -> str:
+    href = f"/sources/{quote(source.source_id)}"
+    summary = source.linked_pages[0] if source.linked_pages else "-"
+    summary_html = html.escape(summary)
+    if source.linked_pages:
+        summary_href = f"/documents/{quote(summary, safe='/')}"
+        summary_html = f'<a href="{summary_href}"><code>{summary_html}</code></a>'
+    return (
+        "<tr>"
+        f'<td><a href="{href}">{html.escape(source.title)}</a><br />'
+        f"<code>{html.escape(source.source_id)}</code></td>"
+        f"<td>{html.escape(source.status)}</td>"
+        f"<td>{html.escape(source.review_state)}</td>"
+        f"<td>{summary_html}</td>"
+        f"<td><code>{html.escape(canonical_source_ref(source))}</code></td>"
+        "</tr>"
+    )
+
+
+def _load_source_for_web(layout: ResolvedLayout, source_id: str):
+    if "\\" in source_id or "/" in source_id or ".." in source_id:
+        raise HTTPException(status_code=404, detail="Source not found")
+    manifest_path = layout.source_records_dir / f"{source_id}.json"
+    if not manifest_path.is_file():
+        raise HTTPException(status_code=404, detail="Source not found")
+    try:
+        return load_source_record(manifest_path)
+    except ValueError:
+        _LOGGER.exception("Source manifest failed validation.")
+        raise HTTPException(status_code=500, detail="Source manifest is invalid") from None
+
+
+def _source_run_section(root: Path, layout: ResolvedLayout, run_id: str | None) -> str:
+    if run_id is None:
+        return '<h2>Latest ingest run</h2><p class="empty">No ingest run linked yet.</p>'
+    run_path = layout.runs_dir / f"{run_id}.json"
+    if not run_path.is_file():
+        return (
+            "<h2>Latest ingest run</h2>"
+            f'<p class="empty">Linked run <code>{html.escape(run_id)}</code> is missing.</p>'
+        )
+    run = load_run_record(run_path)
+    run_ref = run_path.relative_to(root).as_posix()
+    pages = ", ".join(run.page_refs) if run.page_refs else "-"
+    return (
+        "<h2>Latest ingest run</h2>"
+        '<section class="metadata">'
+        f"<div><strong>Run</strong><span><code>{html.escape(run.run_id)}</code></span></div>"
+        f"<div><strong>Status</strong><span>{html.escape(run.status)}</span></div>"
+        f"<div><strong>Finished</strong><span>{html.escape(run.finished_at or '-')}</span></div>"
+        f"<div><strong>Record</strong><span><code>{html.escape(run_ref)}</code></span></div>"
+        f"<div><strong>Pages</strong><span>{html.escape(pages)}</span></div>"
+        "</section>"
+    )
+
+
+def _suggestion_row(suggestion) -> str:
+    href = f"/documents/{quote(suggestion.path, safe='/')}"
+    reasons = ", ".join(suggestion.reasons) if suggestion.reasons else "-"
+    return (
+        "<tr>"
+        f'<td><a href="{href}">{html.escape(suggestion.title)}</a><br />'
+        f"<code>{html.escape(suggestion.path)}</code></td>"
+        f"<td>{html.escape(suggestion.kind)}</td>"
+        f"<td>{suggestion.score}</td>"
+        f"<td>{html.escape(reasons)}</td>"
+        "</tr>"
+    )
+
+
 def _search_row(match: QueryMatch) -> str:
     href = f"/documents/{quote(match.path, safe='/')}"
     status = f" · {html.escape(match.status)}" if match.status else ""
@@ -498,6 +673,7 @@ def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
         "font:inherit;flex:1}"
         "button,.button{border:1px solid var(--accent);border-radius:6px;background:var(--accent);"
         "color:white;padding:9px 12px;font:inherit;cursor:pointer}"
+        ".button.secondary{background:white;color:var(--accent)}"
         ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
         ".stats div,.metadata,.result,.empty-state{border:1px solid var(--border);"
         "border-radius:8px;"

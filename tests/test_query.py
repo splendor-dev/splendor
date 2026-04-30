@@ -218,6 +218,35 @@ def test_run_query_uses_best_matching_snippet_and_truncates(tmp_path: Path) -> N
     )
 
 
+def test_run_query_prefers_claim_sections_over_source_summary_boilerplate(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "sources" / "src-claim.md",
+        title="Generated source summary",
+        page_id="src-claim",
+        kind="source-summary",
+        source_refs=["src-claim"],
+        body=(
+            "# Generated source summary\n\n"
+            "## Key Facts\n\n"
+            "- Source ID: src-claim\n"
+            "- Source type: markdown\n\n"
+            "## Core Claims\n\n"
+            "Dogfood workflow polish should keep source-summary pages separate from "
+            "maintained synthesis pages.\n"
+        ),
+    )
+
+    result = run_query(tmp_path, "source summary pages")
+
+    assert result.matches[0].snippet == (
+        "Dogfood workflow polish should keep source-summary pages separate from maintained "
+        "synthesis pages."
+    )
+
+
 def test_run_query_result_is_json_serializable(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     create_task(

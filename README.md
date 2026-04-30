@@ -123,13 +123,12 @@ Implemented today:
 - `splendor wiki compile <source-id>` as a non-mutating review-gated contract description
 - `splendor brief [goal]`
 - `splendor serve` for a read-only local browse/search UI
+- read-only web `/status` and `/sources/<source-id>` views
 - `splendor lint` and `splendor health`
 
 Not implemented yet:
 
 - mutating review-gated `splendor wiki compile`
-- broader next-action hints after query and file-answer commands
-- web status overview and source detail pages
 - OCR and image extraction flows
 - mutating web UI actions such as add-source forms
 - planning/runs UI views
@@ -147,12 +146,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M10-P0.1`
+- Previous completed PR sub-slice: `M10-P0.2`
 - Current planned slice: `M10-P0`
-- Current PR sub-slice: `M10-P0.2`
+- Current PR sub-slice: `M10-P0.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M10-P0`
-- Next planned PR sub-slice: `M10-P0.3`
+- Next planned slice: `M9-P2`
+- Next planned PR sub-slice: `M9-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -174,11 +173,10 @@ contradiction-review noise reduction. `M9-P1.3` is implemented: knowledge-work d
 the wiki and filed follow-up product tasks.
 
 `M10-P0.1` is implemented: Splendor now has CLI-first wiki status and source-impact suggestions
-for the text-native maintenance loop. The current PR sub-slice is `M10-P0.2`, which adds the first
-project briefing command and documents the review-gated compile-loop contract without mutating
-synthesis pages. The goal remains explicit separation: ingest creates source summaries; reviewed
+for the text-native maintenance loop. `M10-P0.2` is implemented: the first project briefing command
+and non-mutating review-gated compile-loop contract are in place without mutating synthesis pages.
+The current PR sub-slice is `M10-P0.3`, which smooths the visible workflow around
+`add-source -> ingest -> wiki suggest -> review`, adds restrained next-action hints after query and
+file-answer, improves claim-bearing query snippets, and exposes read-only web status/source-detail
+views. The goal remains explicit separation: ingest creates source summaries; reviewed
 compile/update workflows maintain concept, entity, topic, architecture, and glossary pages.
-
-The follow-on dogfood polish slice is `M10-P0.3`. It should smooth the visible workflow around
-`add-source -> ingest -> wiki suggest -> review`, add restrained next-action hints to command
-output, and expose read-only web status/source-detail views once the CLI status contract exists.

@@ -55,10 +55,12 @@ def test_add_source_queues_pending_ingest_for_cli_handoff(tmp_path: Path, capsys
     exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
 
     assert exit_code == 0
+    out = capsys.readouterr().out
     source_record = load_source_record(
         tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
     )
     assert source_record.status == "ingested"
+    assert f"Next: splendor wiki suggest {source_id}" in out
 
 
 def test_add_source_reports_warning_when_queue_handoff_fails(tmp_path: Path, capsys) -> None:

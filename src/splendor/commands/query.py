@@ -20,6 +20,36 @@ from splendor.utils.wiki import parse_wiki_markdown
 _PLANNING_KINDS = ("task", "milestone", "decision", "question")
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 _WHITESPACE_PATTERN = re.compile(r"\s+")
+_CLAIM_SECTION_HEADINGS = {
+    "core claims",
+    "design implications",
+    "product experience notes",
+    "extract",
+    "summary",
+    "key facts",
+}
+_BOILERPLATE_PREFIXES = (
+    "- Source ID:",
+    "- Source type:",
+    "- Source ref:",
+    "- Checksum:",
+    "- Added at:",
+    "- Ingested at:",
+    "- Pipeline version:",
+    "- Storage mode:",
+)
+_BOILERPLATE_TERMS = {
+    "checksum",
+    "generated",
+    "ingested",
+    "machine",
+    "metadata",
+    "pipeline",
+    "provenance",
+    "source",
+    "summary",
+    "version",
+}
 
 
 class QueryValidationError(ValueError):
@@ -269,18 +299,26 @@ def _best_snippet(text: str, query_tokens: list[str]) -> str:
     if not normalized:
         return ""
 
-    paragraphs = [
-        segment.strip() for segment in re.split(r"\n\s*\n", normalized) if segment.strip()
+    paragraphs = _candidate_segments(normalized)
+    lines = [
+        line.strip()
+        for line in normalized.splitlines()
+        if line.strip() and not _is_heading(line) and not _is_fence(line)
     ]
-    lines = [line.strip() for line in normalized.splitlines() if line.strip()]
     candidates = _unique_in_order([*paragraphs, *lines])
+    if not candidates:
+        return ""
     best = max(
         candidates,
-        key=lambda candidate: (_candidate_score(candidate, query_tokens), -len(candidate)),
+        key=lambda candidate: (
+            _candidate_score(candidate, query_tokens),
+            -_boilerplate_score(candidate),
+            -len(candidate),
+        ),
     )
     if _candidate_score(best, query_tokens) == 0:
         best = paragraphs[0] if paragraphs else lines[0]
-    collapsed = _WHITESPACE_PATTERN.sub(" ", best).strip()
+    collapsed = _WHITESPACE_PATTERN.sub(" ", _strip_candidate_heading(best)).strip()
     if len(collapsed) <= 240:
         return collapsed
     return collapsed[:237].rstrip() + "..."
@@ -288,7 +326,81 @@ def _best_snippet(text: str, query_tokens: list[str]) -> str:
 
 def _candidate_score(candidate: str, query_tokens: list[str]) -> int:
     candidate_tokens = _content_tokens(candidate)
-    return sum(candidate_tokens.count(token) for token in query_tokens)
+    token_score = sum(candidate_tokens.count(token) for token in query_tokens)
+    if token_score == 0:
+        return 0
+    heading = _candidate_heading(candidate)
+    heading_bonus = 0
+    if heading in _CLAIM_SECTION_HEADINGS:
+        heading_bonus = 3
+    boilerplate_penalty = _boilerplate_score(candidate)
+    return token_score + heading_bonus - boilerplate_penalty
+
+
+def _candidate_segments(text: str) -> list[str]:
+    segments: list[str] = []
+    active_heading: str | None = None
+    active_lines: list[str] = []
+    in_fence = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if _is_fence(line):
+            in_fence = not in_fence
+        if not in_fence and _is_heading(line):
+            if active_lines:
+                segments.extend(_section_segments(active_heading, active_lines))
+            active_heading = line.lstrip("#").strip().strip("#").strip().lower()
+            active_lines = []
+            continue
+        active_lines.append(raw_line)
+    if active_lines:
+        segments.extend(_section_segments(active_heading, active_lines))
+    return segments
+
+
+def _section_segments(heading: str | None, lines: list[str]) -> list[str]:
+    text = "\n".join(lines).strip()
+    if not text:
+        return []
+    prefix = f"__heading__:{heading}\n" if heading else ""
+    return [
+        prefix + segment.strip()
+        for segment in re.split(r"\n\s*\n", text)
+        if segment.strip() and not _is_boilerplate_line(segment.strip())
+    ]
+
+
+def _candidate_heading(candidate: str) -> str | None:
+    if not candidate.startswith("__heading__:"):
+        return None
+    first_line, *_rest = candidate.split("\n", 1)
+    return first_line.removeprefix("__heading__:") or None
+
+
+def _strip_candidate_heading(candidate: str) -> str:
+    if not candidate.startswith("__heading__:"):
+        return candidate
+    return candidate.split("\n", 1)[1] if "\n" in candidate else ""
+
+
+def _boilerplate_score(candidate: str) -> int:
+    stripped = _strip_candidate_heading(candidate)
+    if _is_boilerplate_line(stripped):
+        return 4
+    tokens = set(_content_tokens(stripped))
+    return min(3, len(tokens & _BOILERPLATE_TERMS))
+
+
+def _is_boilerplate_line(line: str) -> bool:
+    return line.startswith(_BOILERPLATE_PREFIXES)
+
+
+def _is_heading(line: str) -> bool:
+    return line.startswith("#")
+
+
+def _is_fence(line: str) -> bool:
+    return line.startswith("```") or line.startswith("~~~")
 
 
 def _unique_in_order(values: list[str]) -> list[str]:
