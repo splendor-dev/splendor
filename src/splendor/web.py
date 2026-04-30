@@ -148,10 +148,20 @@ def create_app(root: Path) -> FastAPI:
     @app.get("/status", response_class=HTMLResponse)
     def status() -> HTMLResponse:
         layout = _layout_for(workspace_root)
-        status_result = build_wiki_status(workspace_root)
-        source_rows = "\n".join(
-            _source_row(workspace_root, source) for source in load_sources(layout)
-        )
+        try:
+            status_result = build_wiki_status(workspace_root)
+            source_rows = "\n".join(
+                _source_row(workspace_root, source) for source in load_sources(layout)
+            )
+        except ValueError:
+            _LOGGER.exception("Status failed while parsing source records.")
+            return _page(
+                "Status Error",
+                '<p class="empty">'
+                "Status failed because the workspace contains invalid source records."
+                "</p>",
+                status_code=500,
+            )
         if not source_rows:
             source_rows = '<tr><td colspan="5" class="empty">No source manifests yet.</td></tr>'
         recent_runs = "\n".join(

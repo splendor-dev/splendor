@@ -188,6 +188,19 @@ def test_status_page_shows_source_run_and_review_counts(tmp_path: Path) -> None:
     assert "machine-generated" in response.text
 
 
+def test_status_page_reports_invalid_source_manifest_without_path_leak(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / "src-bad.json"
+    manifest_path.write_text("{not valid json", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get("/status")
+
+    assert response.status_code == 500
+    assert "invalid source records" in response.text
+    assert str(tmp_path) not in response.text
+
+
 def test_source_detail_shows_summary_run_and_synthesis_suggestions(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "dogfood-workflow.md"
