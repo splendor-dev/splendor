@@ -1,0 +1,52 @@
+{
+  "added_at": "2026-04-30T05:11:04+00:00",
+  "checksum": "51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac",
+  "derived_artifacts": [],
+  "discovered_by": null,
+  "generated_by_run_ids": [
+    "run-src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac-20260430T051115103716Z"
+  ],
+  "kind": "source",
+  "last_run_id": "run-src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac-20260430T051115103716Z",
+  "linked_pages": [
+    "wiki/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md"
+  ],
+  "materialized_at": null,
+  "origin_url": null,
+  "original_path": "raw/imports/llm-knowledge-work/karpathy-llm-wiki-pattern.md",
+  "path": "raw/imports/llm-knowledge-work/karpathy-llm-wiki-pattern.md",
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac",
+      "path_ref": "wiki/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac-20260430T051115103716Z",
+      "source_id": "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac"
+    }
+  ],
+  "review_state": "unreviewed",
+  "reviewed_at": null,
+  "reviewed_by": null,
+  "schema_version": "1",
+  "source_class": null,
+  "source_commit": null,
+  "source_id": "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac",
+  "source_labels": [],
+  "source_ref": "raw/imports/llm-knowledge-work/karpathy-llm-wiki-pattern.md",
+  "source_ref_kind": "workspace_path",
+  "source_type": "md",
+  "status": "ingested",
+  "storage_mode": "none",
+  "storage_path": null,
+  "title": "karpathy llm wiki pattern"
+}

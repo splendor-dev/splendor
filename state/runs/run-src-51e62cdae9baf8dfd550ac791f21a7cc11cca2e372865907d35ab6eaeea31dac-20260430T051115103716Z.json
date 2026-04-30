@@ -1,0 +1,67 @@
+{
+  "contradiction_ids": [],
+  "errors": [],
+  "finished_at": "2026-04-30T05:11:15+00:00",
+  "input_refs": [
+    "state/manifests/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.json",
+    "raw/imports/llm-knowledge-work/karpathy-llm-wiki-pattern.md"
+  ],
+  "job_id": "ingest-src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac",
+  "job_type": "ingest_source",
+  "kind": "run",
+  "output_refs": [
+    "wiki/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md",
+    "wiki/index.md",
+    "wiki/log.md"
+  ],
+  "page_ids": [
+    "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac"
+  ],
+  "page_refs": [
+    "wiki/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md"
+  ],
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "state/manifests/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.json",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac"
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "raw/imports/llm-knowledge-work/karpathy-llm-wiki-pattern.md",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac"
+    },
+    {
+      "note": null,
+      "page_id": "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac",
+      "path_ref": "wiki/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac",
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac-20260430T051115103716Z",
+      "source_id": null
+    }
+  ],
+  "run_id": "run-src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac-20260430T051115103716Z",
+  "schema_version": "1",
+  "source_ids": [
+    "src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac"
+  ],
+  "started_at": "2026-04-30T05:11:15+00:00",
+  "status": "succeeded",
+  "task_ids": [],
+  "warnings": []
+}

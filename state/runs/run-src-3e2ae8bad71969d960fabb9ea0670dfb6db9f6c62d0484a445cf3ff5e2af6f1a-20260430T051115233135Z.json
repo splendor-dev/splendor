@@ -1,0 +1,69 @@
+{
+  "contradiction_ids": [],
+  "errors": [],
+  "finished_at": "2026-04-30T05:11:15+00:00",
+  "input_refs": [
+    "state/manifests/sources/src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a.json",
+    "raw/imports/llm-knowledge-work/karpathy-x-llm-knowledge-bases.md"
+  ],
+  "job_id": "ingest-src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a",
+  "job_type": "ingest_source",
+  "kind": "run",
+  "output_refs": [
+    "wiki/sources/src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a.md",
+    "wiki/index.md",
+    "wiki/log.md",
+    "wiki/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md",
+    "planning/tasks/task-review-src-3e2ae8bad7-src-51e62cdae9-2fafa4671f.md"
+  ],
+  "page_ids": [
+    "src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a"
+  ],
+  "page_refs": [
+    "wiki/sources/src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a.md"
+  ],
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "state/manifests/sources/src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a.json",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a"
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "raw/imports/llm-knowledge-work/karpathy-x-llm-knowledge-bases.md",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a"
+    },
+    {
+      "note": null,
+      "page_id": "src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a",
+      "path_ref": "wiki/sources/src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": "src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a",
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a-20260430T051115233135Z",
+      "source_id": null
+    }
+  ],
+  "run_id": "run-src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a-20260430T051115233135Z",
+  "schema_version": "1",
+  "source_ids": [
+    "src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a"
+  ],
+  "started_at": "2026-04-30T05:11:15+00:00",
+  "status": "succeeded",
+  "task_ids": [],
+  "warnings": []
+}

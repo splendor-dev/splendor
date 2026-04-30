@@ -1,0 +1,73 @@
+{
+  "contradiction_ids": [],
+  "errors": [],
+  "finished_at": "2026-04-30T05:11:20+00:00",
+  "input_refs": [
+    "state/manifests/sources/src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd.json",
+    "raw/imports/llm-knowledge-work/lucas-astorian-llmwiki-implementation.md"
+  ],
+  "job_id": "ingest-src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd",
+  "job_type": "ingest_source",
+  "kind": "run",
+  "output_refs": [
+    "wiki/sources/src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd.md",
+    "wiki/index.md",
+    "wiki/log.md",
+    "wiki/sources/src-3e2ae8bad71969d960fabb9ea0670dfb6db9f6c62d0484a445cf3ff5e2af6f1a.md",
+    "wiki/sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md",
+    "wiki/sources/src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41.md",
+    "planning/tasks/task-review-src-3e2ae8bad7-src-e7f25dbe0c-bafa0b9ed2.md",
+    "planning/tasks/task-review-src-51e62cdae9-src-e7f25dbe0c-63695d8d80.md",
+    "planning/tasks/task-review-src-9143c8df18-src-e7f25dbe0c-763e8f543a.md"
+  ],
+  "page_ids": [
+    "src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd"
+  ],
+  "page_refs": [
+    "wiki/sources/src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd.md"
+  ],
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "state/manifests/sources/src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd.json",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd"
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "raw/imports/llm-knowledge-work/lucas-astorian-llmwiki-implementation.md",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd"
+    },
+    {
+      "note": null,
+      "page_id": "src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd",
+      "path_ref": "wiki/sources/src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": "src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd",
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd-20260430T051120687562Z",
+      "source_id": null
+    }
+  ],
+  "run_id": "run-src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd-20260430T051120687562Z",
+  "schema_version": "1",
+  "source_ids": [
+    "src-e7f25dbe0c913cb8938d30e2da9d2e4d03afbab29f519db40ea90b23e0113bfd"
+  ],
+  "started_at": "2026-04-30T05:11:20+00:00",
+  "status": "succeeded",
+  "task_ids": [],
+  "warnings": []
+}

@@ -1,0 +1,67 @@
+{
+  "contradiction_ids": [],
+  "errors": [],
+  "finished_at": "2026-04-30T05:11:19+00:00",
+  "input_refs": [
+    "state/manifests/sources/src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41.json",
+    "raw/imports/llm-knowledge-work/llm-research-knowledge-work-notes.md"
+  ],
+  "job_id": "ingest-src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41",
+  "job_type": "ingest_source",
+  "kind": "run",
+  "output_refs": [
+    "wiki/sources/src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41.md",
+    "wiki/index.md",
+    "wiki/log.md"
+  ],
+  "page_ids": [
+    "src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41"
+  ],
+  "page_refs": [
+    "wiki/sources/src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41.md"
+  ],
+  "pipeline_version": "0.1.0a0",
+  "provenance_links": [
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "state/manifests/sources/src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41.json",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41"
+    },
+    {
+      "note": null,
+      "page_id": null,
+      "path_ref": "raw/imports/llm-knowledge-work/llm-research-knowledge-work-notes.md",
+      "role": "input",
+      "run_id": null,
+      "source_id": "src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41"
+    },
+    {
+      "note": null,
+      "page_id": "src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41",
+      "path_ref": "wiki/sources/src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41.md",
+      "role": "generated-page",
+      "run_id": null,
+      "source_id": null
+    },
+    {
+      "note": null,
+      "page_id": "src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41",
+      "path_ref": null,
+      "role": "output",
+      "run_id": "run-src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41-20260430T051119086596Z",
+      "source_id": null
+    }
+  ],
+  "run_id": "run-src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41-20260430T051119086596Z",
+  "schema_version": "1",
+  "source_ids": [
+    "src-9143c8df18710ac189ed8d1fa38a8df92509acadedaaf96ab40e189ab4877a41"
+  ],
+  "started_at": "2026-04-30T05:11:19+00:00",
+  "status": "succeeded",
+  "task_ids": [],
+  "warnings": []
+}
