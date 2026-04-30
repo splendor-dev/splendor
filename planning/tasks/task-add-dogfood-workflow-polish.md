@@ -38,6 +38,6 @@ GitHub issue: https://github.com/splendor-dev/splendor/issues/42.
 ## Follow-up
 
 Add restrained next-action hints after major commands. Good examples include printing the exact
-`splendor ingest <source-id>` command after `add-source`, pointing to `splendor wiki suggest
-<source-id>` after ingest once that command exists, and making query/file-answer output clear about
-whether there is a follow-up filing or review step.
+`splendor ingest <source-id>` command after `add-source`, pointing to
+`splendor wiki suggest <source-id>` after ingest once that command exists, and making
+query/file-answer output clear about whether there is a follow-up filing or review step.

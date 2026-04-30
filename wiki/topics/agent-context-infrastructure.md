@@ -7,8 +7,7 @@ status: active
 review_state: machine-generated
 source_refs:
 - src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4
-generated_by_run_ids:
-- run-src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4-20260430T092129520858Z
+generated_by_run_ids: []
 last_generated_at: '2026-04-30T09:22:14+00:00'
 last_reviewed_at: null
 confidence: 0.74

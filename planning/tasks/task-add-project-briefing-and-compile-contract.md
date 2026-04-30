@@ -42,6 +42,6 @@ concept, topic, architecture, comparison, or overview pages.
 ## Follow-up
 
 Add a project briefing command or web view that accepts a goal and assembles wiki, planning, source,
-and recent run context. Define the reviewed compile/update contract for `splendor wiki compile
-<source-id>` or an equivalent operation, including provenance, proposed diffs, and explicit accept
-semantics before synthesis pages are updated.
+and recent run context. Define the reviewed compile/update contract for `splendor wiki compile <source-id>`
+or an equivalent operation, including provenance, proposed diffs, and explicit accept semantics
+before synthesis pages are updated.
