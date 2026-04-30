@@ -63,11 +63,15 @@ class UpdateQuestionAnswerResult:
     content: str
 
 
-def _model_for(kind: str):
+def model_for_planning_kind(kind: str):
     try:
         return _RECORD_MODELS[kind]
     except KeyError as exc:
         raise ValueError(f"Unsupported planning kind: {kind}") from exc
+
+
+def _model_for(kind: str):
+    return model_for_planning_kind(kind)
 
 
 def create_task(

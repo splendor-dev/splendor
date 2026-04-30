@@ -184,11 +184,11 @@ def _iter_wiki_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocum
 
 
 def _iter_planning_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocument]:
-    from splendor.commands.planning import _model_for  # imported lazily to avoid duplication
+    from splendor.commands.planning import model_for_planning_kind
 
     documents: list[_QueryDocument] = []
     for kind in _PLANNING_KINDS:
-        model = _model_for(kind)
+        model = model_for_planning_kind(kind)
         for path in iter_planning_paths(planning_directory(layout, kind)):
             parsed = parse_planning_document(path, model)
             record = parsed.record

@@ -14,7 +14,7 @@ import markdown as markdown_lib
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
-from splendor.commands.planning import _model_for
+from splendor.commands.planning import model_for_planning_kind
 from splendor.commands.query import QueryMatch, QueryValidationError, run_query
 from splendor.config import load_config
 from splendor.layout import ResolvedLayout, resolve_layout
@@ -72,13 +72,25 @@ class _DocumentDetail:
     body: str
 
 
+class WebLayoutError(ValueError):
+    """Raised when configured web document roots are unsafe to serve."""
+
+
 def create_app(root: Path) -> FastAPI:
     """Create the read-only Splendor web application for a workspace root."""
     workspace_root = root.resolve()
     app = FastAPI(title="Splendor", docs_url=None, redoc_url=None)
 
-    @app.exception_handler(ValueError)
-    def workspace_value_error(_, __: ValueError) -> HTMLResponse:
+    @app.exception_handler(HTTPException)
+    def http_error(_, exc: HTTPException) -> HTMLResponse:
+        title = "Not Found" if exc.status_code == 404 else "Request Error"
+        if exc.status_code >= 500:
+            title = "Workspace Error"
+        detail = html.escape(str(exc.detail))
+        return _page(title, f'<p class="empty">{detail}</p>', status_code=exc.status_code)
+
+    @app.exception_handler(WebLayoutError)
+    def workspace_layout_error(_, __: WebLayoutError) -> HTMLResponse:
         _LOGGER.exception("Workspace configuration error.")
         return _page(
             "Workspace Error",
@@ -193,15 +205,15 @@ def _layout_for(root: Path) -> ResolvedLayout:
 def _validate_layout_root(root: Path, value: str, *, label: str) -> None:
     path = Path(value)
     if "\\" in value or path.is_absolute() or not path.parts or ".." in path.parts:
-        raise ValueError(f"Configured {label} must be a workspace-relative directory: {value}")
+        raise WebLayoutError(f"Configured {label} must be a workspace-relative directory: {value}")
     resolved = (root / path).resolve()
     workspace_root = root.resolve()
     if resolved == workspace_root:
-        raise ValueError(f"Configured {label} must not be the workspace root: {value}")
+        raise WebLayoutError(f"Configured {label} must not be the workspace root: {value}")
     try:
         resolved.relative_to(workspace_root)
     except ValueError as exc:
-        raise ValueError(
+        raise WebLayoutError(
             f"Configured {label} must resolve inside the workspace root: {value}"
         ) from exc
 
@@ -270,7 +282,7 @@ def _document_detail(root: Path, layout: ResolvedLayout, path: Path) -> _Documen
             body=body,
         )
     try:
-        parsed = parse_planning_document(path, _model_for(planning_kind))
+        parsed = parse_planning_document(path, model_for_planning_kind(planning_kind))
     except ValueError:
         body = path.read_text(encoding="utf-8")
         return _DocumentDetail(

@@ -62,16 +62,13 @@ This page records deterministic ingestion output for source `src-51e62cdae9baf8d
 
 ## Extract
 
-`````text
-````text
 ```text
 # Karpathy LLM Wiki Pattern
 
 Source URL: https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
 
 Related announcement URL: https://x.com/karpathy/status/2039805659525644595
-````
-`````
+```
 
 ## Provenance
 

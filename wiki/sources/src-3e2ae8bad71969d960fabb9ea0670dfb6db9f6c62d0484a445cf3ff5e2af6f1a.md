@@ -62,14 +62,13 @@ This page records deterministic ingestion output for source `src-3e2ae8bad71969d
 
 ## Extract
 
-````text
 ```text
 # Karpathy X Post: LLM Knowledge Bases
 
 Source URL: https://x.com/karpathy/status/2039805659525644595
 
 Follow-up idea file: https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
-````
+```
 
 ## Provenance
 
