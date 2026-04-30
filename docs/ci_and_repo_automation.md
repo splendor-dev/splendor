@@ -114,6 +114,53 @@ Review expectations:
 - confirm the generating workflow's Splendor lint job passed
 - manually dispatch or rerun normal CI if repository policy requires checks on the generated PR
 
+## `planning-validator`
+
+File: `.github/workflows/planning-validator.yml`
+
+Runs on:
+
+- manual dispatch only during the first client-repo pilot
+
+What it does:
+
+- checks that `OPENAI_API_KEY` is configured before invoking the reusable workflow
+- invokes
+  `shaypal5/planning-validator/.github/workflows/reusable-planning-validator.yml@017c24056d7fca224285f1a395d3afa8db721182`
+- validates configured planning and tracking markdown against recent merged PR evidence
+- opens or updates one draft PR from `automation/planning-validator` when evidence-backed planning
+  updates are proposed
+
+Reviewed output paths:
+
+- `README.md`
+- `.agent-plan.md`
+- `docs/splendor_mvp_to_v1_roadmap.md`
+- `docs/splendor_product_spec.md`
+- `planning/tasks/*.md`
+
+The reusable workflow is pinned to an immutable `planning-validator` commit for the pilot. Move to a
+version tag once `planning-validator` publishes a release tag suitable for client repositories.
+
+Explicitly ignored or forbidden paths include source, tests, workflows, repository automation config,
+generated state, raw imports, reports, derived files, examples, and wiki pages. The pilot is
+intentionally manual-only until at least one generated PR has been reviewed.
+
+Permissions:
+
+- `contents: write`
+- `issues: write`
+- `pull-requests: write`
+
+Required secrets:
+
+- `OPENAI_API_KEY`
+
+Behavior without secret:
+
+- the workflow still triggers, but the reusable planning-validator job is skipped cleanly when
+  `OPENAI_API_KEY` is not configured
+
 ## `pr-agent-context-refresh`
 
 File: `.github/workflows/pr-agent-context-refresh.yml`

@@ -1,0 +1,61 @@
+schema_version: v1alpha1
+
+planning_files:
+  - README.md
+  - .agent-plan.md
+  - docs/splendor_mvp_to_v1_roadmap.md
+  - docs/splendor_product_spec.md
+
+tracking_files:
+  - planning/tasks/*.md
+
+lookback:
+  merged_pr_hours: 72
+  commit_hours: 72
+
+staleness:
+  require_pr_reflection: true
+  require_issue_reflection: false
+  min_signal_score: 0.55
+  max_files_to_update: 4
+  ignore_pr_labels:
+    - skip-planning-validator
+  ignore_paths:
+    - .github/**
+    - state/**
+    - raw/**
+    - reports/**
+    - derived/**
+    - examples/**
+    - tests/**
+
+patching:
+  provider: openai
+  model: gpt-5.4
+  temperature: 0.1
+  allowed_update_globs:
+    - README.md
+    - .agent-plan.md
+    - docs/splendor_mvp_to_v1_roadmap.md
+    - docs/splendor_product_spec.md
+    - planning/tasks/*.md
+  forbidden_update_globs:
+    - .github/**
+    - src/**
+    - tests/**
+    - state/**
+    - raw/**
+    - reports/**
+    - derived/**
+    - wiki/**
+    - examples/**
+
+pull_request:
+  branch: automation/planning-validator
+  draft: true
+  update_existing: true
+  title_template: "docs: refresh planning state"
+  labels:
+    - documentation
+    - area/planning
+    - type/automation
