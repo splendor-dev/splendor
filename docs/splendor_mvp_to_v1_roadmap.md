@@ -553,6 +553,8 @@ Provide a modest but useful human UI without changing the system’s center of g
 - `M9-P1.1` Read-only `splendor serve` browse/search shell
 - `M9-P1.2` Dogfood hardening after first local web UI trial
 - `M9-P1.3` Knowledge-work dogfood and wiki extension
+- `M10-P0.1` Wiki status and source-impact suggestions
+- `M10-P0.2` Project briefing and compile-loop contract
 - `M10-P0.3` Dogfood workflow polish and web status surfaces
 
 ### Milestone 9 status

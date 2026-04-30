@@ -124,4 +124,7 @@ Follow-up issues opened:
 - https://github.com/splendor-dev/splendor/issues/44 — query snippets for generated source
   summaries.
 - https://github.com/splendor-dev/splendor/issues/45 — web status overview, source detail pages,
-  and generated/maintained page-state visibility.
+  and source detail pages.
+- https://github.com/splendor-dev/splendor/issues/46 — generated versus maintained page-state
+  visibility.
+- https://github.com/splendor-dev/splendor/issues/47 — real ingest run durations in run records.

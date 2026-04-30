@@ -26,6 +26,9 @@ What it does:
 - publishes a `pr-agent-context` comment on pull requests
   - uses the floating stable major workflow ref
     `shaypal5/pr-agent-context/.github/workflows/pr-agent-context.yml@v4`
+  - this floating `@v4` ref, together with `tool_ref: v4`, is intentional repository policy for
+    `pr-agent-context`; it should not be treated as a review finding unless the policy itself is
+    being revisited
   - uses the `coverage-xml` artifact directly for patch coverage context
 
 Permissions:

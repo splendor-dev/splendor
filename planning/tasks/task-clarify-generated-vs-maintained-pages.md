@@ -32,7 +32,7 @@ UI do not yet make it obvious.
 
 Roadmap slice: `M10-P0.3`.
 
-GitHub issue: https://github.com/splendor-dev/splendor/issues/45.
+GitHub issue: https://github.com/splendor-dev/splendor/issues/46.
 
 ## Follow-up
 
