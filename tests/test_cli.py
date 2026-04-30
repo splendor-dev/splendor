@@ -494,6 +494,7 @@ def test_cli_health_command_passes_for_valid_sources(tmp_path: Path, capsys) -> 
 
     assert exit_code == 0
     captured = capsys.readouterr()
+    # add-source now creates one source manifest and one pending queue record.
     assert "Checked records: 2" in captured.out
     assert "Health check passed" in captured.out
     json_report, markdown_report = latest_report_paths(tmp_path, "health")

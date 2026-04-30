@@ -33,7 +33,7 @@ source-summary key facts during ingest.
 
 Ingest currently creates deterministic source summaries and run/provenance state. The first
 `M10-P0` bridge adds `splendor wiki status` and `splendor wiki suggest <source-id>` so users and
-agents can identify affected concept, topic, architecture, comparison, or overview pages before
+agents can identify affected concept, entity, topic, architecture, or glossary pages before
 manual review. Project briefing and a future review-gated compile/update workflow remain planned.
 
 Dogfood runs should record usability friction separately from knowledge gaps. Pay special attention

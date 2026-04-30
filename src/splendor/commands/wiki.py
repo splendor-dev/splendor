@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from splendor.config import load_config
@@ -18,7 +18,7 @@ from splendor.utils.wiki import parse_wiki_markdown
 
 _SYNTHESIS_KINDS = {"architecture", "concept", "entity", "glossary", "topic"}
 _REVIEW_NEEDED_STATES = {"draft", "machine-generated", "contested", "stale"}
-_TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{2,}")
+_TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
 _SOURCE_TERM_SECTIONS = {"summary", "key facts", "extract"}
 _GENERATED_KEY_FACT_PREFIXES = (
     "- Source ID:",
@@ -34,6 +34,7 @@ _STOPWORDS = {
     "for",
     "from",
     "into",
+    "md",
     "source",
     "sources",
     "summary",
@@ -192,6 +193,9 @@ def build_wiki_status(root: Path) -> WikiStatus:
     queue_status_counts = Counter(record.status for record in queue_records)
     run_status_counts = Counter(run.status for run in runs)
     review_state_counts = Counter(page.frontmatter.review_state for page in pages)
+    review_needed_pages = sum(
+        1 for page in pages if page.frontmatter.review_state in _REVIEW_NEEDED_STATES
+    )
     review_needed_synthesis_pages = sum(
         1
         for page in pages
@@ -199,13 +203,22 @@ def build_wiki_status(root: Path) -> WikiStatus:
         and page.frontmatter.review_state in _REVIEW_NEEDED_STATES
     )
 
-    synthesis_source_refs = {
+    synthesis_source_ids = {
         source_ref
         for page in pages
         if page.frontmatter.kind in _SYNTHESIS_KINDS
         for source_ref in page.frontmatter.source_refs
     }
-    ingested_source_ids = {source.source_id for source in sources if source.status == "ingested"}
+    synthesis_pages = [page for page in pages if page.frontmatter.kind in _SYNTHESIS_KINDS]
+    ingested_source_ids = {
+        source.source_id
+        for source in sources
+        if source.status == "ingested"
+        and not (
+            source.source_id in synthesis_source_ids
+            or any(canonical_source_ref(source) in page.body for page in synthesis_pages)
+        )
+    }
 
     return WikiStatus(
         source_total=len(sources),
@@ -220,9 +233,9 @@ def build_wiki_status(root: Path) -> WikiStatus:
         machine_generated_pages=review_state_counts["machine-generated"],
         contested_pages=review_state_counts["contested"],
         stale_pages=review_state_counts["stale"],
-        review_needed_pages=review_needed_synthesis_pages,
+        review_needed_pages=review_needed_pages,
         review_needed_synthesis_pages=review_needed_synthesis_pages,
-        sources_missing_synthesis=len(ingested_source_ids - synthesis_source_refs),
+        sources_missing_synthesis=len(ingested_source_ids),
         invalid_pages=len(invalid_pages),
         invalid_page_examples=invalid_pages[:5],
         recent_runs=_recent_runs(runs),
@@ -278,9 +291,7 @@ def _source_terms(source: SourceRecord, summary_pages: list[WikiPageSnapshot]) -
     label_text = " ".join(source.source_labels)
     return _tokens(
         source.title,
-        canonical_source_ref(source),
         Path(canonical_source_ref(source)).stem,
-        source.source_type,
         label_text,
         summary_text,
     )
@@ -386,8 +397,8 @@ def render_wiki_status_json(status: WikiStatus) -> str:
             "review_needed_synthesis_pages": status.review_needed_synthesis_pages,
             "sources_missing_synthesis": status.sources_missing_synthesis,
             "invalid_pages": status.invalid_pages,
-            "invalid_page_examples": [page.__dict__ for page in status.invalid_page_examples],
-            "recent_runs": [run.__dict__ for run in status.recent_runs],
+            "invalid_page_examples": [asdict(page) for page in status.invalid_page_examples],
+            "recent_runs": [asdict(run) for run in status.recent_runs],
         },
         indent=2,
     )
@@ -400,7 +411,7 @@ def render_wiki_suggest_json(result: WikiSuggestResult) -> str:
             "source_title": result.source_title,
             "source_ref": result.source_ref,
             "source_status": result.source_status,
-            "suggestions": [suggestion.__dict__ for suggestion in result.suggestions],
+            "suggestions": [asdict(suggestion) for suggestion in result.suggestions],
         },
         indent=2,
     )

@@ -175,7 +175,7 @@ the wiki and filed follow-up product tasks.
 The current PR sub-slice is `M10-P0.1`, which adds a CLI-first wiki status and source-impact
 suggestion bridge before deeper planning/runs UI or rich-source work. The goal is to make the
 text-native loop explicit: ingest creates source summaries; source-impact and compile workflows
-maintain concept, topic, architecture, comparison, and overview pages.
+maintain concept, entity, topic, architecture, and glossary pages.
 
 The follow-on dogfood polish slice is `M10-P0.3`. It should smooth the visible workflow around
 `add-source -> ingest -> wiki suggest -> review`, add restrained next-action hints to command
