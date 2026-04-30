@@ -112,6 +112,8 @@ Implemented today:
 - `splendor init`
 - `splendor add-source <path>`
 - `splendor ingest <source-id>` and `splendor ingest --pending`
+- `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
+- `splendor repair ingest <source-id>`
 - `splendor materialize-source <source-id>`
 - `splendor query "<question>"` and `splendor query "<question>" --json`
 - `splendor file-answer --from-last-query --title "..."`
@@ -129,6 +131,7 @@ Implemented today:
 Not implemented yet:
 
 - mutating review-gated `splendor wiki compile`
+- queue backoff, dead-letter, and stale-lease recovery policies
 - OCR and image extraction flows
 - mutating web UI actions such as add-source forms
 - changed-files-driven refresh suggestions
@@ -145,12 +148,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M10-P0.3`
-- Current planned slice: `M9-P2`
-- Current PR sub-slice: `M9-P2.1`
+- Previous completed PR sub-slice: `M9-P2.1`
+- Current planned slice: `M10-P1`
+- Current PR sub-slice: `M10-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M10-P1`
-- Next planned PR sub-slice: `M10-P1.1`
+- Next planned slice: `M10-P2`
+- Next planned PR sub-slice: `M10-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -179,5 +182,9 @@ and non-mutating review-gated compile-loop contract are in place without mutatin
 file-answer, improves claim-bearing query snippets, and exposes read-only web status/source-detail
 views. The goal remains explicit separation: ingest creates source summaries; reviewed
 compile/update workflows maintain concept, entity, topic, architecture, and glossary pages.
-The current PR sub-slice is `M9-P2.1`, which adds read-only planning and runtime inspection pages
-to the local web UI without adding mutating web actions.
+`M9-P2.1` is implemented: it adds read-only planning and runtime inspection pages to the local web
+UI without adding mutating web actions.
+
+The current PR sub-slice is `M10-P1.1`, which adds CLI-first queue inspection, failed ingest
+retry, and active ingest repair while leaving automatic backoff, dead-letter handling, and broader
+stale-lease recovery for `M10-P2`.

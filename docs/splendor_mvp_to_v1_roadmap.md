@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M10-P0.3`
-- Current planned slice: `M9-P2`
-- Current PR sub-slice: `M9-P2.1`
+- Previous completed PR sub-slice: `M9-P2.1`
+- Current planned slice: `M10-P1`
+- Current PR sub-slice: `M10-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M10-P1`
-- Next planned PR sub-slice: `M10-P1.1`
+- Next planned slice: `M10-P2`
+- Next planned PR sub-slice: `M10-P2.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
@@ -645,6 +645,16 @@ Make Splendor resilient in the face of failed ingest/maintenance jobs.
 ### Planned PR slices
 - `M10-P1` Queue inspect/retry/repair commands
 - `M10-P2` Backoff, dead-letter, and stale-lease recovery
+
+### Current PR sub-slices
+- `M10-P1.1` Queue inspect/retry/repair commands
+- `M10-P2.1` Backoff, dead-letter, and stale-lease recovery
+
+### Milestone 10 status
+
+`M10-P1.1` adds CLI-first queue inspection, failed ingest retry, and active ingest repair for
+recovering broken text-native ingest jobs. Backoff, dead-letter handling, and broader stale-lease
+recovery remain deferred to `M10-P2.1`.
 
 ---
 

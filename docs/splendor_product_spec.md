@@ -974,8 +974,9 @@ splendor brief "continue scraping-policy work"
 splendor file-answer --from-last-query
 splendor lint
 splendor health
-splendor queue list
+splendor queue inspect [job-id]
 splendor queue retry job-id
+splendor repair ingest source-id
 splendor task create
 splendor milestone create
 splendor decision create

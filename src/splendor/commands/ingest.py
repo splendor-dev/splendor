@@ -21,10 +21,12 @@ from splendor.schemas import (
 from splendor.schemas.types import SummaryMode
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import (
+    ingest_job_id,
     load_queue_item,
     load_run_record,
     queue_item_path_for,
     run_record_path_for,
+    source_id_from_ingest_job_id,
     write_queue_item,
     write_run_record,
 )
@@ -121,16 +123,6 @@ class DrainResult:
 def _make_run_id(source_id: str) -> str:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     return f"run-{source_id}-{stamp}"
-
-
-def _ingest_job_id(source_id: str) -> str:
-    return f"ingest-{source_id}"
-
-
-def _source_id_from_job_id(job_id: str) -> str:
-    if job_id.startswith("ingest-"):
-        return job_id.removeprefix("ingest-")
-    return job_id
 
 
 def _lease_owner() -> str:
@@ -427,6 +419,10 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     return run.status == "succeeded" and run.pipeline_version == __version__
 
 
+def is_ingest_current(root: Path, layout, source: SourceRecord) -> bool:
+    return _is_no_op(root, layout, source)
+
+
 def _validate_workspace_files(layout) -> None:
     required_files = [layout.index_file, layout.log_file]
     missing = [path for path in required_files if not path.exists()]
@@ -442,7 +438,7 @@ def _load_source_for_queue(root: Path, queue_item: QueueItemRecord) -> tuple[Pat
         msg = f"Queue payload is missing source manifest: {manifest_path}"
         raise FileNotFoundError(msg)
     source = load_source_record(manifest_path)
-    expected_source_id = _source_id_from_job_id(queue_item.job_id)
+    expected_source_id = source_id_from_ingest_job_id(queue_item.job_id)
     if source.source_id != expected_source_id:
         msg = f"Queue payload source ID does not match queued job: {queue_item.job_id}"
         raise ValueError(msg)
@@ -571,7 +567,7 @@ def enqueue_ingest_job(root: Path, source_id: str) -> Path:
         raise ValueError(msg)
 
     now = _utc_now()
-    queue_path = queue_item_path_for(layout, _ingest_job_id(source_id))
+    queue_path = queue_item_path_for(layout, ingest_job_id(source_id))
     existing_queue = load_queue_item(queue_path) if queue_path.exists() else None
     if (
         existing_queue is not None
@@ -586,7 +582,7 @@ def enqueue_ingest_job(root: Path, source_id: str) -> Path:
         created_at = existing_queue.created_at
 
     queue_item = QueueItemRecord(
-        job_id=_ingest_job_id(source_id),
+        job_id=ingest_job_id(source_id),
         job_type="ingest_source",
         status="pending",
         created_at=created_at,
@@ -929,7 +925,7 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
     item_results: list[DrainItemResult] = []
 
     for queue_path, queue_item in ordered_items:
-        source_id = _source_id_from_job_id(queue_item.job_id)
+        source_id = source_id_from_ingest_job_id(queue_item.job_id) or queue_item.job_id
         if not _is_queue_eligible(queue_item, now):
             skipped += 1
             item_results.append(
