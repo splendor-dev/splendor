@@ -8,6 +8,7 @@ from pathlib import Path
 
 from splendor import __version__
 from splendor.commands.add_source import add_source
+from splendor.commands.brief import build_project_brief, render_project_brief_json
 from splendor.commands.file_answer import (
     default_answer_page_id,
     file_answer_from_last_query,
@@ -32,6 +33,8 @@ from splendor.commands.repo_refresh import refresh_repo, render_repo_refresh_jso
 from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
 from splendor.commands.wiki import (
     build_wiki_status,
+    describe_wiki_compile_contract,
+    render_wiki_compile_contract_json,
     render_wiki_status_json,
     render_wiki_suggest_json,
     suggest_source_pages,
@@ -133,6 +136,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     wiki_suggest_parser.set_defaults(handler=handle_wiki_suggest)
+    wiki_compile_parser = wiki_subparsers.add_parser(
+        "compile", help="Describe the review-gated synthesis compile contract for a source"
+    )
+    wiki_compile_parser.add_argument("source_id", help="Registered source identifier to inspect")
+    wiki_compile_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    wiki_compile_parser.set_defaults(handler=handle_wiki_compile)
 
     materialize_parser = subparsers.add_parser(
         "materialize-source", help="Create or refresh a source storage artifact"
@@ -180,6 +194,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not update the last-query snapshot.",
     )
     query_parser.set_defaults(handler=handle_query)
+
+    brief_parser = subparsers.add_parser(
+        "brief", help="Assemble a compact project briefing for a goal"
+    )
+    brief_parser.add_argument("goal", nargs="*", help="Optional goal or search phrase.")
+    brief_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    brief_parser.set_defaults(handler=handle_brief)
 
     serve_parser = subparsers.add_parser("serve", help="Run the read-only local web UI")
     serve_parser.add_argument(
@@ -557,6 +583,31 @@ def handle_wiki_suggest(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_wiki_compile(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = describe_wiki_compile_contract(root, args.source_id)
+    except (FileNotFoundError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_wiki_compile_contract_json(result))
+        return 0
+
+    print(f"Source: {result.source_id}")
+    print(f"Title: {result.source_title}")
+    print(f"Source ref: {result.source_ref}")
+    print(f"Status: {result.source_status}")
+    print("Compile contract: review-gated synthesis maintenance")
+    print("Mutates wiki: no")
+    for item in result.contract:
+        print(f"- {item}")
+    print("Next steps:")
+    for item in result.next_steps:
+        print(f"- {item}")
+    return 0
+
+
 def handle_materialize_source(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
@@ -708,6 +759,65 @@ def handle_query(args: argparse.Namespace) -> int:
             print(f"   Contradictions: {match.contradiction_count}")
         if match.review_task_ids:
             print(f"   Review tasks: {', '.join(match.review_task_ids)}")
+    return 0
+
+
+def handle_brief(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    goal = " ".join(args.goal).strip() or None
+    try:
+        result = build_project_brief(root, goal)
+    except (OSError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_project_brief_json(result))
+        return 0
+
+    print("Project brief")
+    print(f"Goal: {result.goal or '-'}")
+    if result.query_summary is not None:
+        print(f"Query: {result.query_summary}")
+    print(
+        "State: "
+        f"sources={result.status.source_total} "
+        f"pages={result.status.page_total} "
+        f"queue={result.status.queue_total} "
+        f"runs={result.status.run_total} "
+        f"review_needed={result.status.review_needed_pages} "
+        f"synthesis_followup={result.status.sources_missing_synthesis}"
+    )
+    if result.matches:
+        print("Relevant records:")
+        for match in result.matches:
+            print(f"- {match.path} [{match.kind}] score={match.score}: {match.title}")
+    if result.planning_items:
+        print("Active planning:")
+        for item in result.planning_items:
+            print(f"- {item.record_id} [{item.kind}/{item.status}] {item.title}")
+    if result.recent_sources:
+        print("Recent sources:")
+        for source in result.recent_sources:
+            print(f"- {source.source_id} [{source.status}] {source.title}")
+    if result.recent_runs:
+        print("Recent runs:")
+        for run in result.recent_runs:
+            finished = run.finished_at or "-"
+            print(f"- {run.run_id} {run.status} finished={finished}")
+    if result.latest_reports:
+        print("Latest maintenance:")
+        for report in result.latest_reports:
+            print(f"- {report.command}: {report.status} issues={report.issue_count}")
+    if result.last_query is not None:
+        print(f"Last query: {result.last_query.query} ({result.last_query.match_count} matches)")
+    if result.warnings:
+        print("Warnings:")
+        for warning in result.warnings:
+            subject = warning.path or warning.area
+            print(f"- {subject}: {warning.message}")
+    print("Next actions:")
+    for action in result.next_actions:
+        print(f"- {action}")
     return 0
 
 

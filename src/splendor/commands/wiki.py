@@ -109,11 +109,23 @@ class WikiSuggestResult:
     suggestions: list[WikiSuggestion]
 
 
+@dataclass(frozen=True)
+class WikiCompileContract:
+    source_id: str
+    source_title: str
+    source_ref: str
+    source_status: str
+    mutates: bool
+    status: str
+    contract: list[str]
+    next_steps: list[str]
+
+
 def _relative(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
-def _load_sources(layout) -> list[SourceRecord]:
+def load_sources(layout) -> list[SourceRecord]:
     sources: list[SourceRecord] = []
     for manifest_path in sorted(layout.source_records_dir.glob("*.json")):
         sources.append(load_source_record(manifest_path))
@@ -183,7 +195,7 @@ def _recent_runs(runs: list[RunRecord]) -> list[RecentRunSnapshot]:
 def build_wiki_status(root: Path) -> WikiStatus:
     config = load_config(root)
     layout = resolve_layout(root, config)
-    sources = _load_sources(layout)
+    sources = load_sources(layout)
     pages, invalid_pages = _load_wiki_pages(root, layout)
     queue_records = _load_queue(layout)
     runs = _load_runs(layout)
@@ -375,6 +387,38 @@ def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
     )
 
 
+def describe_wiki_compile_contract(root: Path, source_id: str) -> WikiCompileContract:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    manifest_path = layout.source_records_dir / f"{source_id}.json"
+    if not manifest_path.exists():
+        msg = f"Unknown source ID: {source_id}"
+        raise FileNotFoundError(msg)
+
+    source = load_source_record(manifest_path)
+    return WikiCompileContract(
+        source_id=source.source_id,
+        source_title=source.title,
+        source_ref=canonical_source_ref(source),
+        source_status=source.status,
+        mutates=False,
+        status="contract-only",
+        contract=[
+            "Validate the source record and current source-summary page.",
+            "Use `splendor wiki suggest <source-id>` to identify affected synthesis pages.",
+            "Propose synthesis-page edits with source refs, provenance links, run state, "
+            "and review state.",
+            "Keep generated source-summary pages separate from maintained synthesis pages.",
+            "Require human review before mutating wiki synthesis pages.",
+        ],
+        next_steps=[
+            f"Run `splendor wiki suggest {source.source_id}`.",
+            "Review suggested synthesis pages and apply changes through a reviewed future "
+            "compile loop.",
+        ],
+    )
+
+
 def render_wiki_status_json(status: WikiStatus) -> str:
     return json.dumps(
         {
@@ -412,3 +456,7 @@ def render_wiki_suggest_json(result: WikiSuggestResult) -> str:
         },
         indent=2,
     )
+
+
+def render_wiki_compile_contract_json(result: WikiCompileContract) -> str:
+    return json.dumps(asdict(result), indent=2)

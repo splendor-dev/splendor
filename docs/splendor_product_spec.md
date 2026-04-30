@@ -648,6 +648,12 @@ This workflow should start with text-native sources and deterministic page-impac
 compile step may remain human-reviewed or LLM-assisted behind explicit confirmation until the
 contract is trustworthy.
 
+Initial `splendor wiki compile <source-id>` support is intentionally non-mutating. It validates the
+source record and prints the review-gated contract: inspect the source summary, run source-impact
+suggestions, propose synthesis-page edits with provenance/run state, keep generated source-summary
+pages separate from maintained synthesis pages, and require human review before wiki synthesis is
+changed.
+
 Command output should support the workflow without becoming noisy. After `add-source`, Splendor
 should print the exact next ingest command or enqueue the source for pending ingestion. After
 `ingest`, it should point to the generated source-summary page and, once available, the relevant
@@ -667,7 +673,9 @@ Current implementation:
 - `splendor wiki suggest <source-id>` deterministically ranks existing synthesis pages using source
   metadata, source-summary text, frontmatter source refs, tags, source refs, and page content, with
   optional JSON output.
-- Mutating `splendor wiki compile <source-id>` remains deferred to the review-gated compile-loop
+- `splendor wiki compile <source-id>` exposes the review-gated compile-loop contract, validates the
+  source, and reports that it does not mutate synthesis pages yet.
+- Mutating `splendor wiki compile <source-id>` remains deferred to a later reviewed compile-loop
   slice.
 
 Later optional support:
@@ -797,6 +805,14 @@ A briefing command or UI view should assemble:
 
 This is the natural bridge between repository-local memory and limited model context. Search finds
 records; a briefing prepares compact working context for a session.
+
+Current implementation:
+
+- `splendor brief [goal]` assembles a terminal-friendly and JSON project brief from deterministic
+  query matches, wiki status, active planning records, recent sources/runs, latest lint/health
+  reports, the last query snapshot, and likely next actions.
+- Briefing is read-only and does not replace `splendor query`; query finds records, while briefing
+  packages the surrounding project state needed to resume work.
 
 ## 18. Search Model
 
