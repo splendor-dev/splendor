@@ -810,6 +810,11 @@ def handle_brief(args: argparse.Namespace) -> int:
             print(f"- {report.command}: {report.status} issues={report.issue_count}")
     if result.last_query is not None:
         print(f"Last query: {result.last_query.query} ({result.last_query.match_count} matches)")
+    if result.warnings:
+        print("Warnings:")
+        for warning in result.warnings:
+            subject = warning.path or warning.area
+            print(f"- {subject}: {warning.message}")
     print("Next actions:")
     for action in result.next_actions:
         print(f"- {action}")

@@ -393,6 +393,30 @@ def test_wiki_compile_reports_review_gated_contract_without_mutating(
     assert page_path.read_text(encoding="utf-8") == before
 
 
+def test_wiki_compile_text_reports_review_gated_contract_without_mutating(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-contract.md"
+    source.write_text("# Compile contract\n\nSynthesis remains review-gated.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    page_path = tmp_path / "wiki" / "sources" / f"{added.source_id}.md"
+    before = page_path.read_text(encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "compile", added.source_id])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert f"Source: {added.source_id}" in out
+    assert "Compile contract" in out
+    assert "Mutates wiki: no" in out
+    assert "Next steps:" in out
+    assert "Run `splendor wiki suggest" in out
+    assert page_path.read_text(encoding="utf-8") == before
+
+
 def test_wiki_compile_reports_unknown_source(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
 
@@ -441,6 +465,8 @@ def test_brief_json_includes_goal_state_matches_planning_and_next_actions(
     payload = json.loads(capsys.readouterr().out)
     assert payload["goal"] == "project briefing"
     assert payload["status"]["source_total"] == 1
+    assert "recent_runs" in payload["status"]
+    assert "machine_generated_pages" in payload["status"]
     assert payload["matches"][0]["path"] == "wiki/topics/project-briefing.md"
     assert payload["planning_items"][0]["record_id"] == "task-briefing"
     assert payload["recent_sources"][0]["source_id"] == added.source_id
@@ -459,3 +485,48 @@ def test_brief_text_output_is_available_without_goal(tmp_path: Path, capsys) -> 
     assert "Project brief" in out
     assert "Goal: -" in out
     assert "Next actions:" in out
+
+
+def test_brief_skips_invalid_query_matches_without_failing(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    bad_page = tmp_path / "wiki" / "topics" / "bad.md"
+    bad_page.write_text("---\nkind: topic\nbogus: true\n---\n\n# Bad\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "bad", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["query_summary"].startswith("Query skipped:")
+    assert payload["matches"] == []
+    assert payload["status"]["invalid_pages"] == 1
+    assert any("invalid wiki pages" in action for action in payload["next_actions"])
+
+
+def test_brief_skips_invalid_planning_records_without_failing(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    bad_task = tmp_path / "planning" / "tasks" / "bad.md"
+    bad_task.write_text("---\nkind: task\nbogus: true\n---\n\n# Bad\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["planning_items"] == []
+    assert payload["warnings"][0]["area"] == "planning"
+    assert payload["warnings"][0]["path"] == "planning/tasks/bad.md"
+    assert any("skipped planning records" in action for action in payload["next_actions"])
+
+
+def test_brief_skips_invalid_goal_without_failing(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "???", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["goal"] == "???"
+    assert payload["query_summary"].startswith("Query skipped:")
+    assert payload["matches"] == []

@@ -24,7 +24,6 @@ from .wiki import (
     RecentRunSnapshot,
     WikiStatus,
     build_wiki_status,
-    load_recent_runs,
     load_sources,
 )
 
@@ -61,6 +60,13 @@ class BriefPlanningItem:
     title: str
     status: str
     path: str
+
+
+@dataclass(frozen=True)
+class BriefWarning:
+    area: str
+    path: str | None
+    message: str
 
 
 @dataclass(frozen=True)
@@ -101,6 +107,7 @@ class ProjectBrief:
     recent_runs: list[RecentRunSnapshot]
     latest_reports: list[BriefReportSnapshot]
     last_query: BriefLastQuery | None
+    warnings: list[BriefWarning]
     next_actions: list[str]
 
 
@@ -114,18 +121,24 @@ def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
     if normalized_goal:
         try:
             query_result = run_query(root, normalized_goal)
-        except QueryValidationError:
+        except (QueryValidationError, OSError, ValueError) as exc:
             query_result = None
+            query_summary = f"Query skipped: {_brief_error(exc)}"
         if query_result is not None:
             query_summary = query_result.summary
             matches = [_brief_match(match) for match in query_result.matches[:_BRIEF_MATCH_LIMIT]]
 
-    planning_items = _active_planning_items(root, layout)
+    planning_items, warnings = _active_planning_items(root, layout)
     recent_sources = _recent_sources(root, layout)
-    recent_runs = load_recent_runs(layout)
+    recent_runs = status.recent_runs
     latest_reports = _latest_reports(root, layout)
     last_query = _last_query(layout)
-    next_actions = _next_actions(status=status, matches=matches, planning_items=planning_items)
+    next_actions = _next_actions(
+        status=status,
+        matches=matches,
+        planning_items=planning_items,
+        warnings=warnings,
+    )
     return ProjectBrief(
         goal=normalized_goal or None,
         query_summary=query_summary,
@@ -136,6 +149,7 @@ def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
         recent_runs=recent_runs,
         latest_reports=latest_reports,
         last_query=last_query,
+        warnings=warnings,
         next_actions=next_actions,
     )
 
@@ -155,13 +169,30 @@ def _brief_match(match: QueryMatch) -> BriefMatch:
     )
 
 
-def _active_planning_items(root: Path, layout) -> list[BriefPlanningItem]:
+def _brief_error(exc: Exception) -> str:
+    return " ".join(str(exc).splitlines()).strip() or exc.__class__.__name__
+
+
+def _active_planning_items(
+    root: Path, layout
+) -> tuple[list[BriefPlanningItem], list[BriefWarning]]:
     items: list[BriefPlanningItem] = []
+    warnings: list[BriefWarning] = []
     for kind, statuses in _PLANNING_STATUSES.items():
         model = model_for_planning_kind(kind)
         id_field = record_id_field(kind)
         for path in iter_planning_paths(planning_directory(layout, kind)):
-            parsed = parse_planning_document(path, model)
+            try:
+                parsed = parse_planning_document(path, model)
+            except (OSError, ValueError) as exc:
+                warnings.append(
+                    BriefWarning(
+                        area="planning",
+                        path=path.relative_to(root).as_posix(),
+                        message=_brief_error(exc),
+                    )
+                )
+                continue
             record = parsed.record
             status = record.status
             if status not in statuses:
@@ -176,7 +207,7 @@ def _active_planning_items(root: Path, layout) -> list[BriefPlanningItem]:
                 )
             )
     items.sort(key=lambda item: (item.kind, item.status, item.record_id))
-    return items[:_BRIEF_PLANNING_LIMIT]
+    return items[:_BRIEF_PLANNING_LIMIT], warnings
 
 
 def _recent_sources(root: Path, layout) -> list[BriefSourceItem]:
@@ -232,6 +263,7 @@ def _next_actions(
     status: WikiStatus,
     matches: list[BriefMatch],
     planning_items: list[BriefPlanningItem],
+    warnings: list[BriefWarning],
 ) -> list[str]:
     actions: list[str] = []
     if status.queue_status_counts.get("pending", 0):
@@ -249,6 +281,8 @@ def _next_actions(
         actions.append("Open the top matching wiki or planning records for the stated goal.")
     if planning_items:
         actions.append("Continue or close the active planning records listed in this brief.")
+    if warnings:
+        actions.append("Fix skipped planning records so future briefs include the full plan state.")
     if not actions:
         actions.append(
             "Run `splendor add-source <path>` or `splendor query <question>` to extend "
@@ -262,27 +296,14 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
         {
             "goal": brief.goal,
             "query_summary": brief.query_summary,
-            "status": {
-                "source_total": brief.status.source_total,
-                "source_counts": brief.status.source_counts,
-                "page_total": brief.status.page_total,
-                "page_kind_counts": brief.status.page_kind_counts,
-                "queue_total": brief.status.queue_total,
-                "queue_status_counts": brief.status.queue_status_counts,
-                "run_total": brief.status.run_total,
-                "run_status_counts": brief.status.run_status_counts,
-                "review_state_counts": brief.status.review_state_counts,
-                "review_needed_pages": brief.status.review_needed_pages,
-                "review_needed_synthesis_pages": brief.status.review_needed_synthesis_pages,
-                "sources_missing_synthesis": brief.status.sources_missing_synthesis,
-                "invalid_pages": brief.status.invalid_pages,
-            },
+            "status": asdict(brief.status),
             "matches": [asdict(match) for match in brief.matches],
             "planning_items": [asdict(item) for item in brief.planning_items],
             "recent_sources": [asdict(source) for source in brief.recent_sources],
             "recent_runs": [asdict(run) for run in brief.recent_runs],
             "latest_reports": [asdict(report) for report in brief.latest_reports],
             "last_query": asdict(brief.last_query) if brief.last_query else None,
+            "warnings": [asdict(warning) for warning in brief.warnings],
             "next_actions": brief.next_actions,
         },
         indent=2,
