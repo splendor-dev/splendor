@@ -21,7 +21,7 @@ staleness:
   ignore_pr_labels:
     - skip-planning-validator
   ignore_paths:
-    - .github/workflows/**
+    - .github/**
     - state/**
     - raw/**
     - reports/**
@@ -31,7 +31,7 @@ staleness:
 
 patching:
   provider: openai
-  model: gpt-5.4-thinking
+  model: gpt-5.4
   temperature: 0.1
   allowed_update_globs:
     - README.md

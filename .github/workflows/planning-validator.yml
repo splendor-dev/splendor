@@ -13,8 +13,28 @@ permissions:
   pull-requests: write
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check automation secret availability
+        id: check
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "${OPENAI_API_KEY}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   run:
-    uses: shaypal5/planning-validator/.github/workflows/reusable-planning-validator.yml@main
+    needs: gate
+    if: ${{ needs.gate.outputs.enabled == 'true' }}
+    uses: shaypal5/planning-validator/.github/workflows/reusable-planning-validator.yml@017c24056d7fca224285f1a395d3afa8db721182
     with:
       config_path: .github/planning-validator.yml
     secrets:
