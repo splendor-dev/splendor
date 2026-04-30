@@ -74,6 +74,26 @@ def test_cli_repo_refresh_parser_accepts_json_flag() -> None:
     assert args.json_output is True
 
 
+def test_cli_serve_parser_uses_default_host_and_port() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["serve"])
+
+    assert args.command == "serve"
+    assert args.host == "127.0.0.1"
+    assert args.port == 8000
+
+
+def test_cli_serve_parser_accepts_host_and_port() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["serve", "--host", "0.0.0.0", "--port", "8123"])
+
+    assert args.command == "serve"
+    assert args.host == "0.0.0.0"
+    assert args.port == 8123
+
+
 def test_cli_repo_refresh_command_generates_pages(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     (tmp_path / "splendor.yaml").unlink()

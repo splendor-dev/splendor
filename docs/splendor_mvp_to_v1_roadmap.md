@@ -334,15 +334,15 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M8-P1.1`
-- Current planned slice: `M8-P2`
-- Current PR sub-slice: `M8-P2.1`
+- Previous completed PR sub-slice: `M8-P2.1`
+- Current planned slice: `M9-P1`
+- Current PR sub-slice: `M9-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M9-P1`
-- Next planned PR sub-slice: `M9-P1.1`
+- Next planned slice: `M9-P2`
+- Next planned PR sub-slice: `M9-P2.1`
 
-The current PR sub-slice is `M8-P2.1`, under parent slice `M8-P2`, which moves the roadmap forward
-into optional PR-centric generated-change workflows. The lifecycle marker means `M8-P2.1` is in
+The current PR sub-slice is `M9-P1.1`, under parent slice `M9-P1`, which moves the roadmap forward
+into the first local web UI browse/search shell. The lifecycle marker means `M9-P1.1` is in
 progress on feature branches and merged once the same committed state is observed on `main`.
 
 ---
@@ -543,6 +543,16 @@ Provide a modest but useful human UI without changing the system’s center of g
 ### Planned PR slices
 - `M9-P1` Local web UI browse/search shell
 - `M9-P2` Planning/runs UI views
+
+### Current PR sub-slices
+- `M9-P1.1` Read-only `splendor serve` browse/search shell
+
+### Milestone 9 status
+
+`M9-P1.1` implements the first local web UI shell: a foreground FastAPI-backed `splendor serve`
+command with read-only browsing, markdown detail rendering, and deterministic search over existing
+wiki and planning records. Mutating web actions, add-source forms, and planning/runs views remain
+deferred to later `M9` slices.
 
 ---
 
