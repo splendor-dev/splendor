@@ -312,10 +312,13 @@ def test_runs_and_queue_pages_show_runtime_state(tmp_path: Path) -> None:
     assert "run-src-web" in runs.text
     assert "ingest-src-web" in runs.text
     assert "wiki/sources/src-web.md" in runs.text
+    assert "source missing" in runs.text
     assert "state/runs/run-src-web.json" in runs.text
     assert queue.status_code == 200
     assert "failed=1" in queue.text
     assert "2/3" in queue.text
+    assert "2026-04-30T10:00:00+00:00" in queue.text
+    assert "2026-04-30T10:05:00+00:00" in queue.text
     assert "source missing" in queue.text
     assert "state/queue/ingest-src-web.json" in queue.text
 

@@ -303,13 +303,14 @@ def create_app(root: Path) -> FastAPI:
             )
         rows = "\n".join(_run_row(run) for run in run_records[:25])
         if not rows:
-            rows = '<tr><td colspan="8" class="empty">No run records yet.</td></tr>'
+            rows = '<tr><td colspan="9" class="empty">No run records yet.</td></tr>'
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Runs</p>'
             '<p class="empty">Recent run records are shown from durable filesystem state. '
             "This page does not start, retry, or mutate jobs.</p>"
             "<table><thead><tr><th>Run</th><th>Status</th><th>Job</th><th>Started</th>"
-            "<th>Finished</th><th>Sources</th><th>Pages</th><th>Record</th></tr></thead>"
+            "<th>Finished</th><th>Sources</th><th>Pages</th><th>Warnings / Errors</th>"
+            "<th>Record</th></tr></thead>"
             f"<tbody>{rows}</tbody></table>"
         )
         return _page("Runs", body)
@@ -333,7 +334,7 @@ def create_app(root: Path) -> FastAPI:
             status_counts[item.record.status] = status_counts.get(item.record.status, 0) + 1
         rows = "\n".join(_queue_row(item) for item in queue_records[:50])
         if not rows:
-            rows = '<tr><td colspan="8" class="empty">No queue records yet.</td></tr>'
+            rows = '<tr><td colspan="10" class="empty">No queue records yet.</td></tr>'
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Queue</p>'
             '<section class="stats">'
@@ -344,7 +345,8 @@ def create_app(root: Path) -> FastAPI:
             '<p class="empty">Queue state is read-only here. Use CLI commands for ingestion, '
             "repair, retry, or other mutations.</p>"
             "<table><thead><tr><th>Job</th><th>Status</th><th>Type</th><th>Attempts</th>"
-            "<th>Payload</th><th>Lease</th><th>Error</th><th>Record</th></tr></thead>"
+            "<th>Created</th><th>Updated</th><th>Payload</th><th>Lease</th><th>Error</th>"
+            "<th>Record</th></tr></thead>"
             f"<tbody>{rows}</tbody></table>"
         )
         return _page("Queue", body)
@@ -927,6 +929,7 @@ def _run_row(item: _RunSummary) -> str:
     source_ids = ", ".join(run.source_ids[:3])
     if len(run.source_ids) > 3:
         source_ids += f" (+{len(run.source_ids) - 3})"
+    diagnostics = _bounded_detail([*run.errors, *run.warnings])
     return (
         "<tr>"
         f"<td><code>{html.escape(run.run_id)}</code></td>"
@@ -936,6 +939,7 @@ def _run_row(item: _RunSummary) -> str:
         f"<td>{html.escape(run.finished_at or '-')}</td>"
         f"<td>{html.escape(source_ids or '-')}</td>"
         f"<td>{html.escape(page_refs or '-')}</td>"
+        f"<td>{html.escape(diagnostics)}</td>"
         f"<td><code>{html.escape(item.path)}</code></td>"
         "</tr>"
     )
@@ -952,12 +956,23 @@ def _queue_row(item: _QueueSummary) -> str:
         f"<td>{html.escape(queue.status)}</td>"
         f"<td>{html.escape(queue.job_type)}</td>"
         f"<td>{queue.attempt_count}/{queue.max_attempts}</td>"
+        f"<td>{html.escape(queue.created_at)}</td>"
+        f"<td>{html.escape(queue.updated_at)}</td>"
         f"<td><code>{html.escape(queue.payload_ref)}</code></td>"
         f"<td>{html.escape(lease)}</td>"
         f"<td>{html.escape(queue.last_error or '-')}</td>"
         f"<td><code>{html.escape(item.path)}</code></td>"
         "</tr>"
     )
+
+
+def _bounded_detail(values: list[str], *, limit: int = 3) -> str:
+    if not values:
+        return "-"
+    detail = "; ".join(values[:limit])
+    if len(values) > limit:
+        detail += f" (+{len(values) - limit})"
+    return detail
 
 
 def _suggestion_row(suggestion) -> str:
