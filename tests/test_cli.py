@@ -787,10 +787,29 @@ def test_cli_query_command_persists_last_query_snapshot(tmp_path: Path, capsys) 
 
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert 'Next: splendor file-answer --from-last-query --title "query"' in captured.out
+    assert "Next: splendor file-answer --from-last-query --title query" in captured.out
     snapshot = load_query_snapshot(tmp_path / "state" / "queries" / "last-query.json")
     assert snapshot.query == "query"
     assert snapshot.match_count == 1
+
+
+def test_cli_query_command_shell_escapes_file_answer_title_hint(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    write_queryable_wiki_page(
+        tmp_path / "wiki" / "topics" / "quoted.md",
+        title='Quoted "ranking" note',
+        page_id="topic-quoted-ranking",
+        body='Quoted "ranking" evidence appears here.\n',
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", 'quoted "ranking"'])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert (
+        "Next: splendor file-answer --from-last-query --title 'quoted \"ranking\"'" in captured.out
+    )
 
 
 def test_cli_query_command_persists_snapshot_for_json_output(tmp_path: Path, capsys) -> None:

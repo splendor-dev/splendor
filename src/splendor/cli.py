@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 from pathlib import Path
 
 from splendor import __version__
@@ -776,7 +777,7 @@ def handle_query(args: argparse.Namespace) -> int:
             print(f"   Review tasks: {', '.join(match.review_task_ids)}")
     if result.matches and not args.no_save:
         title = _suggested_answer_title(result.query)
-        print(f'Next: splendor file-answer --from-last-query --title "{title}"')
+        print(f"Next: splendor file-answer --from-last-query --title {shlex.quote(title)}")
     elif result.matches and args.no_save:
         print("Next: rerun without --no-save to enable file-answer")
     return 0

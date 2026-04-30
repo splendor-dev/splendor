@@ -229,6 +229,16 @@ def test_source_detail_shows_summary_run_and_synthesis_suggestions(tmp_path: Pat
     assert "wiki/topics/dogfood-workflow.md" in response.text
 
 
+def test_source_detail_returns_not_found_for_unknown_source_id(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/sources/src-missing")
+
+    assert response.status_code == 404
+    assert "Source not found" in response.text
+
+
 def test_document_detail_rejects_unsafe_or_unsupported_paths(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     client = TestClient(create_app(tmp_path))

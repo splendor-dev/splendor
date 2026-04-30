@@ -63,6 +63,24 @@ def test_add_source_queues_pending_ingest_for_cli_handoff(tmp_path: Path, capsys
     assert f"Next: splendor wiki suggest {source_id}" in out
 
 
+def test_pending_ingest_multiple_sources_points_back_to_status(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    first = tmp_path / "first.md"
+    second = tmp_path / "second.md"
+    first.write_text("# First\n\nFirst source covers workflow polish.\n", encoding="utf-8")
+    second.write_text("# Second\n\nSecond source covers web status.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(first)])
+    main(["--root", str(tmp_path), "add-source", str(second)])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Drain summary: processed=2 succeeded=2 failed=0 skipped=0" in out
+    assert "Next: splendor wiki status" in out
+
+
 def test_add_source_reports_warning_when_queue_handoff_fails(tmp_path: Path, capsys) -> None:
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nThis source is registered before init.\n", encoding="utf-8")

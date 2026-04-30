@@ -300,11 +300,7 @@ def _best_snippet(text: str, query_tokens: list[str]) -> str:
         return ""
 
     paragraphs = _candidate_segments(normalized)
-    lines = [
-        line.strip()
-        for line in normalized.splitlines()
-        if line.strip() and not _is_heading(line) and not _is_fence(line)
-    ]
+    lines = _snippet_lines(normalized)
     candidates = _unique_in_order([*paragraphs, *lines])
     if not candidates:
         return ""
@@ -346,6 +342,9 @@ def _candidate_segments(text: str) -> list[str]:
         line = raw_line.strip()
         if _is_fence(line):
             in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if not in_fence and _is_heading(line):
             if active_lines:
                 segments.extend(_section_segments(active_heading, active_lines))
@@ -356,6 +355,20 @@ def _candidate_segments(text: str) -> list[str]:
     if active_lines:
         segments.extend(_section_segments(active_heading, active_lines))
     return segments
+
+
+def _snippet_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    in_fence = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if _is_fence(line):
+            in_fence = not in_fence
+            continue
+        if in_fence or not line or _is_heading(line):
+            continue
+        lines.append(line)
+    return lines
 
 
 def _section_segments(heading: str | None, lines: list[str]) -> list[str]:
