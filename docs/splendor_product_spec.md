@@ -691,8 +691,8 @@ Current implementation:
   including maintained synthesis pages and generated source-summary pages, without mutating the
   pages themselves.
 - `splendor query` prefers claim-bearing source-summary sections over generated metadata
-  boilerplate when selecting snippets, and text output points to `file-answer` when a saved query
-  has matches.
+  boilerplate when selecting snippets, supports tag/source filters, records those filters in JSON
+  and saved snapshots, and text output points to `file-answer` when a saved query has matches.
 - `splendor file-answer` prints the created page and a restrained review hint after filing.
 - Mutating `splendor wiki compile <source-id>` remains deferred to a later reviewed compile-loop
   slice.
@@ -814,6 +814,12 @@ pages, sections such as `Core Claims`, `Design Implications`, `Product Experienc
 source extract should outrank frontmatter-derived facts, provenance boilerplate, and generic
 machine-generated labels.
 
+Current query output includes any active deterministic filters. `splendor query --tag <tag>`
+restricts matches to wiki pages carrying all requested tags, and
+`splendor query --source <source-id>` validates the canonical source ID before returning wiki or
+planning records whose `source_refs` include that ID. Filter-only source lookup is allowed so
+agents can ask which pages reference a known source without inventing a search phrase.
+
 ### 17.3 Project briefing
 
 Splendor should support a briefing workflow for humans and agents entering an existing repository.
@@ -834,6 +840,9 @@ Current implementation:
 - `splendor brief [goal]` assembles a terminal-friendly and JSON project brief from deterministic
   query matches, wiki status, active planning records, recent sources/runs, latest lint/health
   reports, the last query snapshot, and likely next actions.
+- `splendor brief --agent-context [goal]` renders the same deterministic state as a compact
+  coding-agent handoff with relevant matches, source refs, wiki status, active planning records,
+  recent sources/runs, maintenance reports, warnings, and next actions.
 - Briefing is read-only and does not replace `splendor query`; query finds records, while briefing
   packages the surrounding project state needed to resume work.
 

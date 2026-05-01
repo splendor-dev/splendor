@@ -3,6 +3,7 @@ from pathlib import Path
 
 import yaml
 
+from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_question, create_task
 from splendor.commands.query import run_query
@@ -76,6 +77,67 @@ def test_run_query_returns_ranked_matches_from_wiki_and_planning(tmp_path: Path)
     assert wiki_match.provenance_links == []
     assert wiki_match.contradiction_count == 0
     assert wiki_match.review_task_ids == []
+
+
+def test_run_query_filters_by_wiki_tag(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "preprocessing.md",
+        title="Preprocessing pipeline",
+        page_id="topic-preprocessing-pipeline",
+        tags=["preprocessing", "audio"],
+        body="Lowpass filter notes for the preprocessing pipeline.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "deployment.md",
+        title="Deployment pipeline",
+        page_id="topic-deployment-pipeline",
+        tags=["deployment"],
+        body="Deployment pipeline notes mention preprocessing only as background.",
+    )
+
+    result = run_query(tmp_path, "pipeline", tags=["preprocessing"])
+
+    assert result.filters.tags == ["preprocessing"]
+    assert [match.path for match in result.matches] == ["wiki/topics/preprocessing.md"]
+
+
+def test_run_query_filters_by_source_ref_and_allows_filter_only_lookup(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "briefing.md",
+        title="Briefing notes",
+        page_id="topic-briefing-notes",
+        source_refs=[added.source_id],
+        body="Briefing notes carry source-backed context.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "other.md",
+        title="Other notes",
+        page_id="topic-other-notes",
+        body="Other notes do not reference the source.",
+    )
+
+    result = run_query(tmp_path, "", source_id=added.source_id)
+
+    assert result.query == ""
+    assert result.filters.source_id == added.source_id
+    assert result.match_count == 1
+    assert result.matches[0].path == "wiki/topics/briefing.md"
+
+
+def test_run_query_rejects_unknown_source_filter(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+
+    try:
+        run_query(tmp_path, "briefing", source_id="src-missing")
+    except FileNotFoundError as exc:
+        assert str(exc) == "Unknown source ID: src-missing"
+    else:
+        raise AssertionError("Expected unknown source filter failure")
 
 
 def test_run_query_excludes_index_and_log(tmp_path: Path) -> None:

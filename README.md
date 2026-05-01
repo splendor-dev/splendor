@@ -118,7 +118,8 @@ Implemented today:
 - `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
 - `splendor repair ingest <source-id>`
 - `splendor materialize-source <source-id>`
-- `splendor query "<question>"` and `splendor query "<question>" --json`
+- `splendor query "<question>"`, `splendor query --tag <tag>`,
+  `splendor query --source <source-id>`, and `splendor query "<question>" --json`
 - `splendor file-answer --from-last-query --title "..."`
 - `splendor task|milestone|decision|question ...`
 - `splendor repo scan`
@@ -128,7 +129,7 @@ Implemented today:
 - `splendor wiki suggest <source-id>`
 - `splendor wiki compile <source-id>` as a non-mutating review-gated contract description
 - `splendor wiki rebuild-index`
-- `splendor brief [goal]`
+- `splendor brief [goal]` and `splendor brief --agent-context [goal]`
 - `splendor serve` for a read-only local browse/search/status/planning/runtime UI
 - read-only web `/status`, `/sources/<source-id>`, `/planning`, `/runs`, and `/queue` views
 - `splendor lint` and `splendor health`
@@ -152,12 +153,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M11-P1.1`
-- Current planned slice: `M11-P2`
-- Current PR sub-slice: `M11-P2.1`
+- Previous completed PR sub-slice: `M11-P2.1`
+- Current planned slice: `M11-P3`
+- Current PR sub-slice: `M11-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M11-P3`
-- Next planned PR sub-slice: `M11-P3.1`
+- Next planned slice: `M12-P1`
+- Next planned PR sub-slice: `M12-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -195,6 +196,7 @@ explicit dead-letter records, and stale-lease recovery.
 
 `M11-P1.1` is implemented: it adds deterministic bulk source registration, explicit source
 refresh through the existing ingest queue, and readable source lookup by title or path without
-changing canonical source IDs. The current PR sub-slice is `M11-P2.1`, which adds CLI-first topic
-scaffolding, deterministic templates, and wiki index rebuild support. After `M11-P2`, the next
-Milestone 11 work moves to query/source lookup and agent-context improvements.
+changing canonical source IDs. `M11-P2.1` is implemented: it adds CLI-first topic scaffolding,
+deterministic templates, and wiki index rebuild support. The current PR sub-slice is `M11-P3.1`,
+which adds query filters for tags/source refs and a compact agent-context handoff mode before the
+roadmap moves to richer source handling in `M12-P1`.

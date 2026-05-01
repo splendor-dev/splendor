@@ -238,6 +238,26 @@ Task records now also reserve:
 Those fields let contradiction-review tasks carry explicit links back to the affected wiki pages
 and the ingest run that surfaced the conflict.
 
+## Query snapshots
+
+The latest saved query snapshot lives at `state/queries/last-query.json`.
+
+Current implementation fields:
+
+- `schema_version`
+- `query`
+- `filters`
+  - `tags`
+  - `source_id`
+- `summary`
+- `match_count`
+- `created_at`
+- `matches`
+
+Query matches preserve rank, score, class/kind, record identity, path, status/review state, snippet,
+source refs, generated run IDs, provenance links, contradiction counts, review task IDs, and tags.
+`splendor query --no-save` preserves query output behavior but does not update this snapshot.
+
 ## Queue and run records
 
 The runtime contracts are now used by deterministic single-source ingestion.

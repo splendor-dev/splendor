@@ -716,6 +716,75 @@ def test_brief_json_output_is_available_without_goal(tmp_path: Path, capsys) -> 
     assert "next_actions" in payload
 
 
+def test_brief_agent_context_json_packages_handoff_state(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "briefing.md"
+    source.write_text(
+        "# Briefing\n\nAgent context should include source-backed handoff state.",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "agent-context.md",
+        kind="topic",
+        title="Agent context",
+        page_id="topic-agent-context",
+        source_refs=[added.source_id],
+        body="Agent context packages query matches and planning state.",
+    )
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Continue agent context",
+            "--id",
+            "task-agent-context",
+            "--status",
+            "in_progress",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "agent",
+            "context",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["agent_context"] is True
+    assert payload["goal"] == "agent context"
+    assert payload["wiki_status"]["source_total"] == 1
+    assert payload["source_refs"] == [added.source_id]
+    assert any(match["path"] == "wiki/topics/agent-context.md" for match in payload["matches"])
+    assert payload["active_planning"][0]["record_id"] == "task-agent-context"
+    assert payload["recent_runs"][0]["source_ids"] == [added.source_id]
+    assert payload["next_actions"]
+
+
+def test_brief_agent_context_text_output_is_compact(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--agent-context"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Agent context" in out
+    assert "Wiki status:" in out
+    assert "Next actions:" in out
+
+
 def test_brief_skips_invalid_query_matches_without_failing(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     bad_page = tmp_path / "wiki" / "topics" / "bad.md"

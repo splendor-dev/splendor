@@ -167,11 +167,17 @@ That writes a task markdown record under `planning/tasks/`.
 
 ```bash
 uv run splendor --root /tmp/demo-repo query "durable wiki"
+uv run splendor --root /tmp/demo-repo query "durable wiki" --tag architecture
+uv run splendor --root /tmp/demo-repo query --source <source-id>
 uv run splendor --root /tmp/demo-repo query "durable wiki" --json
+uv run splendor --root /tmp/demo-repo brief --agent-context "durable wiki" --json
 ```
 
-The query command searches maintained wiki pages and planning records. The JSON form is useful for
-agent or script integration.
+The query command searches maintained wiki pages and planning records. Tag filters apply to wiki
+frontmatter tags; source filters require a known canonical source ID and return records whose
+`source_refs` include that ID. The JSON form includes active filters and is useful for agent or
+script integration. `brief --agent-context` packages query matches, source refs, wiki status,
+active planning records, recent runs, and next actions for a new coding-agent thread.
 
 ## 7. Run deterministic checks
 
