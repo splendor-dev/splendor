@@ -8,7 +8,7 @@ import shlex
 from pathlib import Path
 
 from splendor import __version__
-from splendor.commands.add_source import add_source
+from splendor.commands.add_source import add_source, expand_source_paths
 from splendor.commands.brief import build_project_brief, render_project_brief_json
 from splendor.commands.file_answer import (
     default_answer_page_id,
@@ -43,6 +43,14 @@ from splendor.commands.queue import (
 )
 from splendor.commands.repo_refresh import refresh_repo, render_repo_refresh_json
 from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
+from splendor.commands.source import (
+    SourceLookupResult,
+    list_sources,
+    lookup_sources,
+    refresh_source,
+    render_source_lookup_json,
+    render_source_refresh_json,
+)
 from splendor.commands.wiki import (
     build_wiki_status,
     describe_wiki_compile_contract,
@@ -63,6 +71,7 @@ from splendor.schemas import (
 )
 from splendor.schemas.types import STORAGE_MODES
 from splendor.state.query_snapshot import last_query_path_for, write_query_snapshot
+from splendor.state.source_compat import canonical_source_ref
 from splendor.utils.provenance import summarize_provenance_links
 from splendor.utils.time import utc_now_iso
 
@@ -88,8 +97,24 @@ def build_parser() -> argparse.ArgumentParser:
     add_source_parser = subparsers.add_parser("add-source", help="Register a new immutable source")
     add_source_parser.add_argument(
         "path",
+        nargs="?",
         type=Path,
         help="Path to the source file to register.",
+    )
+    add_source_parser.add_argument(
+        "--glob",
+        action="append",
+        default=[],
+        dest="glob_patterns",
+        help="Register all files matching a glob pattern, in deterministic order.",
+    )
+    add_source_parser.add_argument(
+        "--dir",
+        action="append",
+        default=[],
+        dest="directories",
+        type=Path,
+        help="Register direct child files from a directory, in deterministic order.",
     )
     add_source_parser.add_argument(
         "--storage-mode",
@@ -111,6 +136,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_source_parser.set_defaults(capture_source_commit=None)
     add_source_parser.set_defaults(handler=handle_add_source)
+
+    source_parser = subparsers.add_parser("source", help="Inspect and refresh source records")
+    source_subparsers = source_parser.add_subparsers(dest="source_command", required=True)
+    source_list_parser = source_subparsers.add_parser(
+        "list", help="List registered sources with readable titles and paths"
+    )
+    source_list_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    source_list_parser.set_defaults(handler=handle_source_list)
+    source_lookup_parser = source_subparsers.add_parser(
+        "lookup", help="Find source IDs by title, path, or source ID"
+    )
+    source_lookup_parser.add_argument("query", nargs="?", help="Title, path, or source ID to find")
+    source_lookup_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    source_lookup_parser.set_defaults(handler=handle_source_lookup)
+    source_refresh_parser = source_subparsers.add_parser(
+        "refresh", help="Detect source content changes and queue ingest work"
+    )
+    source_refresh_parser.add_argument("query", help="Source ID, title, or path to refresh")
+    source_refresh_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    source_refresh_parser.set_defaults(handler=handle_source_refresh)
 
     ingest_parser = subparsers.add_parser("ingest", help="Ingest registered sources into the wiki")
     ingest_parser.add_argument(
@@ -482,12 +542,74 @@ def _is_missing_workspace_wiki_error(exc: Exception) -> bool:
 
 def handle_add_source(args: argparse.Namespace) -> int:
     root = args.root.resolve()
-    candidate_path = args.path.expanduser()
-    source_path = candidate_path if candidate_path.is_absolute() else root / candidate_path
+    try:
+        source_paths = expand_source_paths(
+            root,
+            source_path=args.path,
+            glob_patterns=args.glob_patterns,
+            directories=args.directories,
+        )
+        if not source_paths:
+            print("Error: add-source requires a path, --glob match, or --dir with files")
+            return 1
+    except (FileNotFoundError, IsADirectoryError, NotADirectoryError, ValueError) as exc:
+        return _print_error(exc)
+
+    if len(source_paths) > 1:
+        results = []
+        registration_errors = 0
+        queue_warnings = 0
+        missing_init_warning = False
+        queued = 0
+        for source_path in source_paths:
+            try:
+                result = add_source(
+                    root,
+                    source_path,
+                    storage_mode=args.storage_mode,
+                    capture_source_commit=args.capture_source_commit,
+                )
+            except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
+                registration_errors += 1
+                print(f"- {source_path}: registration failed: {_error_message(exc)}")
+                continue
+
+            results.append(result)
+            action = "already registered" if result.already_registered else "registered"
+            print(f"- {result.source_id} ({action}) {result.source_ref}")
+            if result.already_registered:
+                continue
+            try:
+                enqueue_ingest_job(root, result.source_id)
+            except (FileNotFoundError, RuntimeError, ValueError) as exc:
+                queue_warnings += 1
+                missing_init_warning = missing_init_warning or _is_missing_workspace_wiki_error(exc)
+                print(
+                    f"  Warning: source registered but ingest was not queued: {_error_message(exc)}"
+                )
+                continue
+            queued += 1
+
+        print(f"Registered sources: {sum(not result.already_registered for result in results)}")
+        print(f"Already registered: {sum(result.already_registered for result in results)}")
+        print(f"Registration failures: {registration_errors}")
+        print(f"Queued ingest jobs: {queued}")
+        print(f"Queue warnings: {queue_warnings}")
+        if missing_init_warning:
+            print("Next: splendor init")
+            print("Then: splendor ingest --pending")
+        elif queue_warnings:
+            print("Next: splendor queue inspect")
+        elif queued:
+            print("Next: splendor ingest --pending")
+        else:
+            print("Next: splendor source lookup")
+        return 1 if registration_errors or queue_warnings else 0
+
     try:
         result = add_source(
             root,
-            source_path,
+            source_paths[0],
             storage_mode=args.storage_mode,
             capture_source_commit=args.capture_source_commit,
         )
@@ -516,6 +638,61 @@ def handle_add_source(args: argparse.Namespace) -> int:
         print("Next: splendor ingest --pending")
     else:
         print(f"Next: splendor ingest {result.source_id}")
+    return 0
+
+
+def handle_source_list(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        results = list_sources(root)
+    except (FileNotFoundError, ValueError) as exc:
+        return _print_error(exc)
+    if args.json_output:
+        print(render_source_lookup_json(root, results))
+        return 0
+    _print_source_lookup_results(results)
+    return 0
+
+
+def handle_source_lookup(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        results = lookup_sources(root, args.query)
+    except (FileNotFoundError, ValueError) as exc:
+        return _print_error(exc)
+    if args.json_output:
+        print(render_source_lookup_json(root, results))
+        return 0
+    _print_source_lookup_results(results)
+    return 0
+
+
+def handle_source_refresh(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = refresh_source(root, args.query)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+    if args.json_output:
+        print(render_source_refresh_json(root, result))
+        return 0
+
+    if result.changed:
+        print(f"Detected changed source content for {result.requested.source_id}")
+        if result.refreshed.record.source_id != result.requested.source_id:
+            if result.refreshed.already_registered:
+                print(f"Matched existing source version {result.refreshed.record.source_id}")
+            else:
+                print(f"Registered refreshed source {result.refreshed.record.source_id}")
+    else:
+        print(f"No source content change detected for {result.requested.source_id}")
+    print(f"Source ref: {result.refreshed.source_ref}")
+    if result.queued and result.queue_path is not None:
+        print(f"Queued ingest: {result.queue_path}")
+        print("Next: splendor ingest --pending")
+    else:
+        print(f"Refresh skipped: {result.message}")
+        print(f"Next: splendor wiki suggest {result.refreshed.record.source_id}")
     return 0
 
 
@@ -684,6 +861,21 @@ def _print_queue_item_detail(item: QueueItemSnapshot) -> None:
         print(f"Next: splendor queue retry {item.job_id}")
     elif item.operator_state in {"pending", "failed_due", "expired_leased"}:
         print("Next: splendor ingest --pending")
+
+
+def _print_source_lookup_results(results: list[SourceLookupResult]) -> None:
+    print(f"Sources: {len(results)}")
+    if not results:
+        print("No matching sources.")
+        return
+    for result in results:
+        source = result.source
+        print(
+            f"- {source.source_id} [{source.status}] {source.title} "
+            f"ref={canonical_source_ref(source)}"
+        )
+        print(f"  Manifest: {result.manifest_path}")
+    print("Next: splendor source refresh <source-id|title|path>")
 
 
 def handle_wiki_status(args: argparse.Namespace) -> int:

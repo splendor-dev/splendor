@@ -110,7 +110,10 @@ The companion-repo guidance and sample agent instructions live in
 Implemented today:
 
 - `splendor init`
-- `splendor add-source <path>`
+- `splendor add-source <path>`, `splendor add-source --glob "pattern"`, and
+  `splendor add-source --dir path`
+- `splendor source list`, `splendor source lookup [query]`, and
+  `splendor source refresh <source-id|title|path>`
 - `splendor ingest <source-id>` and `splendor ingest --pending`
 - `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
 - `splendor repair ingest <source-id>`
@@ -131,7 +134,6 @@ Implemented today:
 Not implemented yet:
 
 - mutating review-gated `splendor wiki compile`
-- source bulk registration and refresh workflows
 - topic scaffolding, templates, and index rebuild
 - OCR and image extraction flows
 - mutating web UI actions such as add-source forms
@@ -149,12 +151,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M10-P1.1`
-- Current planned slice: `M10-P2`
-- Current PR sub-slice: `M10-P2.1`
+- Previous completed PR sub-slice: `M10-P2.1`
+- Current planned slice: `M11-P1`
+- Current PR sub-slice: `M11-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M11-P1`
-- Next planned PR sub-slice: `M11-P1.1`
+- Next planned slice: `M11-P2`
+- Next planned PR sub-slice: `M11-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -187,6 +189,10 @@ compile/update workflows maintain concept, entity, topic, architecture, and glos
 UI without adding mutating web actions.
 
 `M10-P1.1` is implemented: it adds CLI-first queue inspection, failed ingest retry, and active
-ingest repair. The current PR sub-slice is `M10-P2.1`, which adds configurable queue retry/backoff
-policy, explicit dead-letter records, and stale-lease recovery. After Milestone 10, the next
-milestone shifts to text-native agent synthesis workflows before rich-source/PDF/OCR expansion.
+ingest repair. `M10-P2.1` is implemented: it adds configurable queue retry/backoff policy,
+explicit dead-letter records, and stale-lease recovery.
+
+The current PR sub-slice is `M11-P1.1`, which adds deterministic bulk source registration,
+explicit source refresh through the existing ingest queue, and readable source lookup by title or
+path without changing canonical source IDs. After `M11-P1`, the next Milestone 11 work moves to
+topic scaffolding, templates, and index rebuild.

@@ -77,6 +77,21 @@ The command prints:
 For in-repo files, the current default storage mode is `none`, which means Splendor tracks the
 workspace file directly instead of copying it into `raw/sources/`.
 
+To register a batch, use a glob or direct directory scan. Both forms process files in deterministic
+path order and create pending ingest jobs for newly registered sources:
+
+```bash
+uv run splendor --root /tmp/demo-repo add-source --glob "docs/*.md"
+uv run splendor --root /tmp/demo-repo add-source --dir docs
+```
+
+Readable source lookup maps titles and paths back to canonical source IDs without renaming source
+records or generated `wiki/sources/src-...md` pages:
+
+```bash
+uv run splendor --root /tmp/demo-repo source lookup product-note
+```
+
 ## 4. Ingest the source
 
 Drain the pending ingest queue:
@@ -102,6 +117,18 @@ After ingest, use the source ID from the command output to inspect likely synthe
 uv run splendor --root /tmp/demo-repo wiki status
 uv run splendor --root /tmp/demo-repo wiki suggest <source-id>
 ```
+
+When a tracked source file changes, refresh it by ID, title, or path. Refresh detects changed
+content, registers the current content as a new canonical source version when needed, and queues
+ingest through the same ledger used by `add-source`:
+
+```bash
+uv run splendor --root /tmp/demo-repo source refresh product-note.md
+uv run splendor --root /tmp/demo-repo ingest --pending
+```
+
+Refresh does not override active ingest leases or dead-letter protections; use `queue retry` or
+`repair ingest` for those recovery cases.
 
 For a read-only browser view over the same status and source-detail contracts:
 

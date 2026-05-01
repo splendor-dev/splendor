@@ -135,6 +135,22 @@ Implemented fields:
     - `manual`
     - `repo_scan`
 
+### Source lifecycle commands
+
+- `splendor add-source <path>` preserves single-file registration behavior.
+- `splendor add-source --glob "pattern"` expands matching files in deterministic path order.
+- `splendor add-source --dir path` registers direct child files in deterministic path order.
+- Newly registered CLI sources are handed to the existing ingest queue as `ingest-<source-id>`
+  records; already registered sources are reported without creating duplicate work.
+- `splendor source list` and `splendor source lookup [query]` provide a readable title/path to
+  `source_id` mapping. They are lookup surfaces only and do not rename canonical source IDs or
+  generated `wiki/sources/src-...md` pages.
+- `splendor source refresh <source-id|title|path>` resolves the tracked workspace or external path,
+  compares current bytes to the manifest checksum, registers changed content as a new canonical
+  source version, and queues ingest through the same queue handoff used by `add-source`.
+- Refresh uses the queue ledger directly, so active leases remain protected and dead-lettered jobs
+  still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
+
 ### Recommended default policy
 
 Recommended defaults:
