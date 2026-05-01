@@ -312,7 +312,76 @@ def test_cli_queue_inspect_distinguishes_backoff_expired_lease_and_dead_letter(
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "dead_letter" in out
-    assert "Next: splendor queue retry <job-id> or splendor repair ingest <source-id>" in out
+    assert "Next: splendor ingest --pending" in out
+
+
+def test_cli_queue_inspect_prioritizes_runnable_next_action(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    pending_source = tmp_path / "pending.md"
+    pending_source.write_text("# Pending\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(pending_source)])
+    backoff_source = tmp_path / "backoff.md"
+    backoff_source.write_text("# Backoff\n\nhello\n", encoding="utf-8")
+    manifests_before = set((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    main(["--root", str(tmp_path), "add-source", str(backoff_source)])
+    manifests_after = set((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    backoff_id = (manifests_after - manifests_before).pop().stem
+    backoff_path = tmp_path / "state" / "queue" / f"ingest-{backoff_id}.json"
+    write_queue_item(
+        backoff_path,
+        load_queue_item(backoff_path).model_copy(
+            update={
+                "status": "failed",
+                "last_error": "temporary",
+                "next_attempt_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            }
+        ),
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "inspect"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Next: splendor ingest --pending" in out
+
+
+def test_queue_inspect_handles_z_and_invalid_timestamps(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    z_source = tmp_path / "z.md"
+    z_source.write_text("# Z\n\nhello\n", encoding="utf-8")
+    z_added = add_source(tmp_path, z_source)
+    z_queue_path = enqueue_ingest_job(tmp_path, z_added.source_id)
+    invalid_source = tmp_path / "invalid.md"
+    invalid_source.write_text("# Invalid\n\nhello\n", encoding="utf-8")
+    invalid_added = add_source(tmp_path, invalid_source)
+    invalid_queue_path = enqueue_ingest_job(tmp_path, invalid_added.source_id)
+    write_queue_item(
+        z_queue_path,
+        load_queue_item(z_queue_path).model_copy(
+            update={
+                "status": "failed",
+                "last_error": "temporary",
+                "next_attempt_at": "2099-01-01T00:00:00Z",
+            }
+        ),
+    )
+    write_queue_item(
+        invalid_queue_path,
+        load_queue_item(invalid_queue_path).model_copy(
+            update={
+                "status": "failed",
+                "last_error": "temporary",
+                "next_attempt_at": "not-a-timestamp",
+            }
+        ),
+    )
+
+    result = inspect_queue(tmp_path)
+
+    states = {item.source_id: item.operator_state for item in result.items}
+    assert states[z_added.source_id] == "failed_backoff"
+    assert states[invalid_added.source_id] == "failed_due"
 
 
 def test_cli_repair_ingest_requeues_and_runs_fixed_failed_source(tmp_path: Path, capsys) -> None:

@@ -281,7 +281,14 @@ def _path_payload(root: Path, path: Path | None) -> str | None:
 def _parse_timestamp(value: str | None) -> datetime | None:
     if value is None:
         return None
-    return datetime.fromisoformat(value)
+    normalized_value = f"{value[:-1]}+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized_value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
 
 
 def _operator_state(queue_item: QueueItemRecord) -> str:

@@ -95,6 +95,16 @@ def test_load_config_rejects_unknown_queue_keys(tmp_path: Path) -> None:
         load_config(tmp_path)
 
 
+def test_load_config_rejects_negative_queue_backoff(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        ("schema_version: '1'\nproject_name: Example\nqueue:\n  retry_backoff_seconds: [60, -1]\n"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_config(tmp_path)
+
+
 def test_load_config_accepts_unknown_top_level_keys(tmp_path: Path) -> None:
     (tmp_path / "splendor.yaml").write_text(
         (

@@ -286,7 +286,21 @@ def _best_available_source_ref(source: SourceRecord) -> str:
 def _parse_timestamp(value: str | None) -> datetime | None:
     if value is None:
         return None
-    return datetime.fromisoformat(value)
+    normalized_value = f"{value[:-1]}+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized_value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _dead_letter_recovery_message(job_id: str, source_id: str) -> str:
+    return (
+        f"Queue item is dead-lettered: {job_id}. Run "
+        f"`splendor queue retry {job_id}` or `splendor repair ingest {source_id}`."
+    )
 
 
 def _lease_expires_at(now: datetime, lease_ttl_seconds: int) -> str:
@@ -615,6 +629,9 @@ def enqueue_ingest_job(root: Path, source_id: str) -> Path:
     now = _utc_now()
     queue_path = queue_item_path_for(layout, ingest_job_id(source_id))
     existing_queue = load_queue_item(queue_path) if queue_path.exists() else None
+    if existing_queue is not None and existing_queue.status == "dead_letter":
+        msg = _dead_letter_recovery_message(existing_queue.job_id, source_id)
+        raise RuntimeError(msg)
     if (
         existing_queue is not None
         and existing_queue.status == "leased"

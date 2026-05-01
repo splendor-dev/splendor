@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,7 +65,9 @@ class QueueConfig(BaseModel):
 
     max_attempts: int = Field(default=3, ge=1)
     lease_ttl_seconds: int = Field(default=300, ge=1)
-    retry_backoff_seconds: list[int] = Field(default_factory=lambda: [60, 300, 900])
+    retry_backoff_seconds: list[Annotated[int, Field(ge=0)]] = Field(
+        default_factory=lambda: [60, 300, 900]
+    )
 
 
 class SplendorConfig(BaseModel):

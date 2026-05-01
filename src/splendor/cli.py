@@ -603,14 +603,14 @@ def handle_queue_inspect(args: argparse.Namespace) -> int:
             f"attempts={item.attempt_count}/{item.max_attempts} payload={item.payload_ref}"
         )
     operator_states = {item.operator_state for item in result.items}
-    if "dead_letter" in operator_states:
+    if operator_states.intersection({"pending", "failed_due", "expired_leased"}):
+        print("Next: splendor ingest --pending")
+    elif "dead_letter" in operator_states:
         print("Next: splendor queue retry <job-id> or splendor repair ingest <source-id>")
     elif "failed_backoff" in operator_states:
         print("Next: wait for retry backoff or run splendor queue retry <job-id>")
     elif result.status_counts.get("failed", 0):
         print("Next: splendor queue retry <job-id>")
-    elif operator_states.intersection({"pending", "failed_due", "expired_leased"}):
-        print("Next: splendor ingest --pending")
     return 0
 
 

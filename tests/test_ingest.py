@@ -565,6 +565,51 @@ def test_exhausted_failed_ingest_becomes_dead_letter(tmp_path: Path) -> None:
     assert queue_record.next_attempt_at is None
 
 
+def test_direct_ingest_rejects_dead_letter_queue_without_mutation(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    dead_letter = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "dead_letter",
+            "attempt_count": 3,
+            "max_attempts": 3,
+            "last_error": "broken",
+        }
+    )
+    write_queue_item(queue_path, dead_letter)
+    queue_before = queue_path.read_text(encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="Queue item is dead-lettered"):
+        ingest_source(tmp_path, added.source_id)
+
+    assert queue_path.read_text(encoding="utf-8") == queue_before
+
+
+def test_invalid_failed_next_attempt_is_treated_as_due(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    failed_queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "failed",
+            "attempt_count": 1,
+            "last_error": "temporary",
+            "next_attempt_at": "not-a-timestamp",
+        }
+    )
+    write_queue_item(queue_path, failed_queue)
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.succeeded == 1
+    assert load_queue_item(queue_path).status == "done"
+
+
 def test_drain_pending_ingest_jobs_continues_after_failure(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     ok_source = tmp_path / "brief.md"
