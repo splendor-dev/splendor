@@ -15,3 +15,10 @@ layout:
   state_dir: state
   reports_dir: reports
   source_records_dir: state/manifests/sources
+queue:
+  max_attempts: 3
+  lease_ttl_seconds: 300
+  retry_backoff_seconds:
+  - 60
+  - 300
+  - 900

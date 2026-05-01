@@ -17,7 +17,7 @@ from splendor.commands.init import initialize_workspace
 from splendor.config import load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
 from splendor.schemas.types import SummaryMode
-from splendor.state.runtime import load_queue_item, load_run_record
+from splendor.state.runtime import load_queue_item, load_run_record, write_queue_item
 from splendor.state.source_pointer import load_source_pointer, write_source_pointer
 from splendor.state.source_registry import load_source_record, write_source_record
 
@@ -477,7 +477,13 @@ def test_drain_pending_ingest_jobs_skips_nonexpired_and_failed_items(tmp_path: P
     failed_source.write_bytes(b"\xff\xfe\xfa")
     failed_added = add_source(tmp_path, failed_source)
     failed_queue_path = enqueue_ingest_job(tmp_path, failed_added.source_id)
-    failed_queue = load_queue_item(failed_queue_path).model_copy(update={"status": "failed"})
+    failed_queue = load_queue_item(failed_queue_path).model_copy(
+        update={
+            "status": "failed",
+            "next_attempt_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            "last_error": "broken",
+        }
+    )
     failed_queue_path.write_text(failed_queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
     result = drain_pending_ingest_jobs(tmp_path)
@@ -490,7 +496,199 @@ def test_drain_pending_ingest_jobs_skips_nonexpired_and_failed_items(tmp_path: P
     assert len(result.items) == 2
     messages = {item.source_id: item.message for item in result.items}
     assert "lease active until" in messages[added.source_id]
-    assert messages[failed_added.source_id] == "status=failed"
+    assert "retry after" in messages[failed_added.source_id]
+
+
+def test_failed_ingest_sets_retry_backoff_and_clears_lease(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "broken.md"
+    source.write_bytes(b"\xff\xfe\xfa")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    with pytest.raises(ValueError):
+        run_ingest_job(tmp_path, queue_path)
+
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert queue_record.attempt_count == 1
+    assert queue_record.last_error is not None
+    assert queue_record.lease_owner is None
+    assert queue_record.lease_expires_at is None
+    assert queue_record.next_attempt_at is not None
+
+
+def test_due_failed_jobs_are_retried_by_pending_drain(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    failed_queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "failed",
+            "attempt_count": 1,
+            "last_error": "temporary",
+            "next_attempt_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+        }
+    )
+    write_queue_item(queue_path, failed_queue)
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.processed == 1
+    assert result.succeeded == 1
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "done"
+    assert queue_record.attempt_count == 2
+    assert queue_record.next_attempt_at is None
+
+
+def test_exhausted_failed_ingest_becomes_dead_letter(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.queue.max_attempts = 1
+    write_config(tmp_path, config)
+    source = tmp_path / "broken.md"
+    source.write_bytes(b"\xff\xfe\xfa")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    with pytest.raises(ValueError):
+        run_ingest_job(tmp_path, queue_path)
+
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "dead_letter"
+    assert queue_record.attempt_count == 1
+    assert queue_record.max_attempts == 1
+    assert queue_record.last_error is not None
+    assert queue_record.next_attempt_at is None
+
+
+def test_direct_ingest_rejects_dead_letter_queue_without_mutation(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    dead_letter = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "dead_letter",
+            "attempt_count": 3,
+            "max_attempts": 3,
+            "last_error": "broken",
+        }
+    )
+    write_queue_item(queue_path, dead_letter)
+    queue_before = queue_path.read_text(encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="Queue item is dead-lettered"):
+        ingest_source(tmp_path, added.source_id)
+
+    assert queue_path.read_text(encoding="utf-8") == queue_before
+
+
+def test_invalid_failed_next_attempt_is_treated_as_due(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    failed_queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "failed",
+            "attempt_count": 1,
+            "last_error": "temporary",
+            "next_attempt_at": "not-a-timestamp",
+        }
+    )
+    write_queue_item(queue_path, failed_queue)
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.succeeded == 1
+    assert load_queue_item(queue_path).status == "done"
+
+
+def test_failed_ingest_with_empty_backoff_is_immediately_due(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.queue.retry_backoff_seconds = []
+    write_config(tmp_path, config)
+    source = tmp_path / "broken.md"
+    source.write_bytes(b"\xff\xfe\xfa")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    with pytest.raises(ValueError):
+        run_ingest_job(tmp_path, queue_path)
+
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert queue_record.next_attempt_at is not None
+    result = drain_pending_ingest_jobs(tmp_path)
+    assert result.failed == 1
+
+
+def test_drain_pending_reports_dead_letter_and_done_as_skipped(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    dead_source = tmp_path / "dead.md"
+    dead_source.write_text("# Dead\n\nhello world\n", encoding="utf-8")
+    dead_added = add_source(tmp_path, dead_source)
+    dead_queue_path = enqueue_ingest_job(tmp_path, dead_added.source_id)
+    write_queue_item(
+        dead_queue_path,
+        load_queue_item(dead_queue_path).model_copy(
+            update={"status": "dead_letter", "last_error": "broken"}
+        ),
+    )
+    done_source = tmp_path / "done.md"
+    done_source.write_text("# Done\n\nhello world\n", encoding="utf-8")
+    done_added = add_source(tmp_path, done_source)
+    done_queue_path = enqueue_ingest_job(tmp_path, done_added.source_id)
+    write_queue_item(
+        done_queue_path,
+        load_queue_item(done_queue_path).model_copy(update={"status": "done"}),
+    )
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.processed == 0
+    assert result.skipped == 2
+    messages = {item.source_id: item.message for item in result.items}
+    assert messages[dead_added.source_id] == "status=dead_letter"
+    assert messages[done_added.source_id] == "status=done"
+
+
+def test_run_ingest_job_rejects_future_backoff_and_terminal_records(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(
+            update={
+                "status": "failed",
+                "last_error": "temporary",
+                "next_attempt_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="retry is not due"):
+        run_ingest_job(tmp_path, queue_path)
+
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(
+            update={"status": "dead_letter", "last_error": "broken", "next_attempt_at": None}
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Queue item is not runnable"):
+        run_ingest_job(tmp_path, queue_path)
 
 
 def test_drain_pending_ingest_jobs_continues_after_failure(tmp_path: Path) -> None:

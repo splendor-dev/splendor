@@ -85,6 +85,10 @@ Drain the pending ingest queue:
 uv run splendor --root /tmp/demo-repo ingest --pending
 ```
 
+`ingest --pending` also handles due failed retries and expired ingest leases. Failed jobs wait until
+their persisted `next_attempt_at` backoff time, and exhausted jobs move to `dead_letter` until an
+operator runs `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
+
 This creates:
 
 - a source-summary page under `wiki/sources/`
@@ -154,6 +158,9 @@ It includes:
 - one source-summary page
 - one planning task
 - queue and run records for the ingest
+
+Queue retry behavior is configured in `splendor.yaml` under `queue.max_attempts`,
+`queue.lease_ttl_seconds`, and `queue.retry_backoff_seconds`.
 
 ## Next step
 

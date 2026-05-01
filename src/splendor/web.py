@@ -335,7 +335,7 @@ def create_app(root: Path) -> FastAPI:
             status_counts[item.record.status] = status_counts.get(item.record.status, 0) + 1
         rows = "\n".join(_queue_row(item) for item in queue_records[:50])
         if not rows:
-            rows = '<tr><td colspan="10" class="empty">No queue records yet.</td></tr>'
+            rows = '<tr><td colspan="11" class="empty">No queue records yet.</td></tr>'
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Queue</p>'
             '<section class="stats">'
@@ -346,8 +346,8 @@ def create_app(root: Path) -> FastAPI:
             '<p class="empty">Queue state is read-only here. Use CLI commands for ingestion, '
             "repair, retry, or other mutations.</p>"
             "<table><thead><tr><th>Job</th><th>Status</th><th>Type</th><th>Attempts</th>"
-            "<th>Created</th><th>Updated</th><th>Payload</th><th>Lease</th><th>Error</th>"
-            "<th>Record</th></tr></thead>"
+            "<th>Created</th><th>Updated</th><th>Payload</th><th>Lease</th>"
+            "<th>Next attempt</th><th>Error</th><th>Record</th></tr></thead>"
             f"<tbody>{rows}</tbody></table>"
         )
         return _page("Queue", body)
@@ -961,6 +961,7 @@ def _queue_row(item: _QueueSummary) -> str:
         f"<td>{html.escape(queue.updated_at)}</td>"
         f"<td><code>{html.escape(queue.payload_ref)}</code></td>"
         f"<td>{html.escape(lease)}</td>"
+        f"<td>{html.escape(queue.next_attempt_at or '-')}</td>"
         f"<td>{html.escape(queue.last_error or '-')}</td>"
         f"<td><code>{html.escape(item.path)}</code></td>"
         "</tr>"

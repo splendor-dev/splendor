@@ -344,12 +344,15 @@ def _validate_queue_record(
             check_name="queue-state",
         )
 
-    if queue_record.status == "failed":
+    if queue_record.status in {"failed", "dead_letter"}:
         if not queue_record.last_error:
             _append_issue(
                 issues,
                 code="invalid-queue-error-state",
-                message="Failed queue items should persist last_error for repair diagnostics.",
+                message=(
+                    "Failed and dead-letter queue items should persist last_error for repair "
+                    "diagnostics."
+                ),
                 path=queue_relpath,
                 record_id=canonical_job_id,
                 check_name="queue-state",
@@ -358,11 +361,37 @@ def _validate_queue_record(
         _append_issue(
             issues,
             code="invalid-queue-error-state",
-            message="Only failed queue items should persist last_error details.",
+            message="Only failed or dead-letter queue items should persist last_error details.",
             path=queue_relpath,
             record_id=canonical_job_id,
             check_name="queue-state",
         )
+
+    if queue_record.next_attempt_at is not None:
+        if queue_record.status != "failed":
+            _append_issue(
+                issues,
+                code="invalid-queue-next-attempt-state",
+                message="Only failed queue items may carry next_attempt_at values.",
+                path=queue_relpath,
+                record_id=canonical_job_id,
+                check_name="queue-state",
+            )
+        else:
+            try:
+                _parse_timestamp(
+                    queue_record.next_attempt_at,
+                    context="Queue next attempt timestamp",
+                )
+            except ValueError as exc:
+                _append_issue(
+                    issues,
+                    code="invalid-queue-next-attempt",
+                    message=str(exc),
+                    path=queue_relpath,
+                    record_id=canonical_job_id,
+                    check_name="queue-state",
+                )
 
     if queue_record.attempt_count > queue_record.max_attempts:
         _append_issue(

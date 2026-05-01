@@ -15,6 +15,9 @@ def test_default_config_includes_source_policy_defaults() -> None:
     assert config.sources.capture_source_commit is True
     assert config.sources.summarize_in_repo_extracts_as == "excerpt"
     assert config.sources.summarize_external_extracts_as == "full"
+    assert config.queue.max_attempts == 3
+    assert config.queue.lease_ttl_seconds == 300
+    assert config.queue.retry_backoff_seconds == [60, 300, 900]
 
 
 def test_load_config_accepts_yaml_without_sources_block(tmp_path: Path) -> None:
@@ -55,6 +58,46 @@ def test_load_config_rejects_invalid_sources_values(tmp_path: Path) -> None:
 def test_load_config_rejects_unknown_sources_keys(tmp_path: Path) -> None:
     (tmp_path / "splendor.yaml").write_text(
         ("schema_version: '1'\nproject_name: Example\nsources:\n  external_storage_mdoe: copy\n"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_config(tmp_path)
+
+
+def test_load_config_accepts_queue_policy(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        (
+            "schema_version: '1'\n"
+            "project_name: Example\n"
+            "queue:\n"
+            "  max_attempts: 5\n"
+            "  lease_ttl_seconds: 120\n"
+            "  retry_backoff_seconds: [1, 2, 3]\n"
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.queue.max_attempts == 5
+    assert config.queue.lease_ttl_seconds == 120
+    assert config.queue.retry_backoff_seconds == [1, 2, 3]
+
+
+def test_load_config_rejects_unknown_queue_keys(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        ("schema_version: '1'\nproject_name: Example\nqueue:\n  max_attemptz: 5\n"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_config(tmp_path)
+
+
+def test_load_config_rejects_negative_queue_backoff(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        ("schema_version: '1'\nproject_name: Example\nqueue:\n  retry_backoff_seconds: [60, -1]\n"),
         encoding="utf-8",
     )
 
@@ -105,5 +148,6 @@ def test_write_config_serializes_sources_block(tmp_path: Path) -> None:
     written = (tmp_path / "splendor.yaml").read_text(encoding="utf-8")
 
     assert "sources:" in written
+    assert "queue:" in written
     assert "in_repo_storage_mode: none" in written
     assert "external_storage_mode: copy" in written

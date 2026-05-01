@@ -131,7 +131,8 @@ Implemented today:
 Not implemented yet:
 
 - mutating review-gated `splendor wiki compile`
-- queue backoff, dead-letter, and stale-lease recovery policies
+- source bulk registration and refresh workflows
+- topic scaffolding, templates, and index rebuild
 - OCR and image extraction flows
 - mutating web UI actions such as add-source forms
 - changed-files-driven refresh suggestions
@@ -148,12 +149,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M9-P2.1`
-- Current planned slice: `M10-P1`
-- Current PR sub-slice: `M10-P1.1`
+- Previous completed PR sub-slice: `M10-P1.1`
+- Current planned slice: `M10-P2`
+- Current PR sub-slice: `M10-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M10-P2`
-- Next planned PR sub-slice: `M10-P2.1`
+- Next planned slice: `M11-P1`
+- Next planned PR sub-slice: `M11-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -185,6 +186,7 @@ compile/update workflows maintain concept, entity, topic, architecture, and glos
 `M9-P2.1` is implemented: it adds read-only planning and runtime inspection pages to the local web
 UI without adding mutating web actions.
 
-The current PR sub-slice is `M10-P1.1`, which adds CLI-first queue inspection, failed ingest
-retry, and active ingest repair while leaving automatic backoff, dead-letter handling, and broader
-stale-lease recovery for `M10-P2`.
+`M10-P1.1` is implemented: it adds CLI-first queue inspection, failed ingest retry, and active
+ingest repair. The current PR sub-slice is `M10-P2.1`, which adds configurable queue retry/backoff
+policy, explicit dead-letter records, and stale-lease recovery. After Milestone 10, the next
+milestone shifts to text-native agent synthesis workflows before rich-source/PDF/OCR expansion.

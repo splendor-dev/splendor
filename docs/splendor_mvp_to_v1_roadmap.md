@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M9-P2.1`
-- Current planned slice: `M10-P1`
-- Current PR sub-slice: `M10-P1.1`
+- Previous completed PR sub-slice: `M10-P1.1`
+- Current planned slice: `M10-P2`
+- Current PR sub-slice: `M10-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M10-P2`
-- Next planned PR sub-slice: `M10-P2.1`
+- Next planned slice: `M11-P1`
+- Next planned PR sub-slice: `M11-P1.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
@@ -653,12 +653,44 @@ Make Splendor resilient in the face of failed ingest/maintenance jobs.
 ### Milestone 10 status
 
 `M10-P1.1` adds CLI-first queue inspection, failed ingest retry, and active ingest repair for
-recovering broken text-native ingest jobs. Backoff, dead-letter handling, and broader stale-lease
-recovery remain deferred to `M10-P2.1`.
+recovering broken text-native ingest jobs. `M10-P2.1` completes the queue robustness milestone with
+configurable retry/backoff policy, explicit dead-letter records, and stale-lease recovery.
 
 ---
 
-## Milestone 11 — Post-MVP: richer source handling
+## Milestone 11 — Post-MVP: agent synthesis workflow
+
+### Goal
+Make text-native Splendor workflows smoother for coding agents and human maintainers using real
+project knowledge bases.
+
+### Scope
+- source lifecycle refresh and bulk registration
+- readable source lookup
+- topic scaffolding and index management
+- query/source lookup improvements
+- compact agent-context handoff surfaces
+
+### Deliverables
+- bulk source registration and explicit source refresh commands
+- topic creation helpers, templates, and wiki index rebuild
+- query filters for tags and source references
+- agent-context output that packages relevant project state for a new coding-agent thread
+
+### Exit criteria
+- agents can register, refresh, find, and synthesize text-native project knowledge without manual
+  state surgery
+- topic pages and indexes stay easier to create and maintain
+- field-report gaps from the SynthBanshee dogfood session are represented by planned work
+
+### Planned PR slices
+- `M11-P1` Source lifecycle, bulk registration, refresh, and readable source lookup
+- `M11-P2` Topic scaffolding, templates, and index rebuild
+- `M11-P3` Query/source lookup and agent-context improvements
+
+---
+
+## Milestone 12 — Post-MVP: richer source handling
 
 ### Goal
 Expand supported source types where they materially increase product value.
@@ -693,12 +725,12 @@ feed the same source-impact and compile/update workflow used for markdown and te
 - failures in OCR-heavy paths do not destabilize the core system
 
 ### Planned PR slices
-- `M11-P1` Rich-source dispatch and PDF path
-- `M11-P2` OCR/image ingest path
+- `M12-P1` Rich-source dispatch and PDF path
+- `M12-P2` OCR/image ingest path
 
 ---
 
-## Milestone 12 — v1 stabilization and release
+## Milestone 13 — v1 stabilization and release
 
 ### Goal
 Publish a coherent, documented v1 that feels like a complete product.
@@ -713,8 +745,8 @@ Publish a coherent, documented v1 that feels like a complete product.
 - one or two real-world showcase repos
 
 ### Planned PR slices
-- `M12-P1` Schema/docs/migration stabilization
-- `M12-P2` Extension/performance/release finalization
+- `M13-P1` Schema/docs/migration stabilization
+- `M13-P2` Extension/performance/release finalization
 
 ### Deliverables
 - v1 schema versions
@@ -793,8 +825,8 @@ A practical initial sequence:
 2. Milestones 1–4 as the MVP core
 3. Milestone 5 to harden and publish MVP
 4. Milestones 6–8 as the first serious post-MVP wave
-5. Milestones 9–11 selectively, depending on user demand
-6. Milestone 12 for v1 release
+5. Milestones 9–12 selectively, depending on user demand
+6. Milestone 13 for v1 release
 
 ## 6. Suggested Definition of MVP
 

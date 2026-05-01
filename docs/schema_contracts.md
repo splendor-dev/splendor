@@ -219,13 +219,19 @@ and the ingest run that surfaced the conflict.
 
 The runtime contracts are now used by deterministic single-source ingestion.
 
-- `QueueItemRecord` captures item lifecycle, retries, and leases.
+- `QueueItemRecord` captures item lifecycle, retries, backoff scheduling, dead-letter state, and
+  leases.
 - `RunRecord` captures pipeline inputs, outputs, warnings, and failures.
 
 Current persisted locations:
 
 - `state/queue/<job_id>.json`
 - `state/runs/<run_id>.json`
+
+Queue status values are `pending`, `leased`, `done`, `failed`, and `dead_letter`. Failed records may
+carry `next_attempt_at` to defer the next automatic `splendor ingest --pending` retry. Dead-letter
+records preserve `last_error` and require an explicit `splendor queue retry <job-id>` or
+`splendor repair ingest <source-id>` action.
 
 Run records now reserve explicit provenance fields beside the original generic refs so later
 pipeline steps can answer questions like "which page did this run generate?" without parsing

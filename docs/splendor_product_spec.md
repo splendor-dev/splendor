@@ -742,6 +742,9 @@ Splendor should use a **durable work ledger**, not an overengineered distributed
 - dead-letter after threshold
 - inspect/retry manually
 
+Queue backoff is persisted on the queue item with `next_attempt_at`. Exhausted ingest jobs move to
+the terminal `dead_letter` status and require explicit operator action before another attempt.
+
 ### 16.2 Queue persistence
 
 Initial queue persistence should be file-based under `state/queue/`.

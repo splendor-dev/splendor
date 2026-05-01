@@ -6,6 +6,7 @@ from splendor.schemas import (
     ContradictionEvidence,
     KnowledgePageFrontmatter,
     ProvenanceLink,
+    QueueItemRecord,
     RunRecord,
     SourcePointerArtifact,
     SourceRecord,
@@ -264,6 +265,26 @@ def test_source_pointer_artifact_accepts_valid_payload() -> None:
     )
 
     assert artifact.kind == "source-pointer"
+
+
+def test_queue_item_accepts_dead_letter_and_next_attempt_payload() -> None:
+    record = QueueItemRecord(
+        job_id="ingest-src-123",
+        job_type="ingest_source",
+        status="dead_letter",
+        created_at="2026-04-10T15:00:00+00:00",
+        updated_at="2026-04-10T15:01:00+00:00",
+        attempt_count=3,
+        max_attempts=3,
+        payload_ref="state/manifests/sources/src-123.json",
+        last_error="broken",
+    )
+    failed = record.model_copy(
+        update={"status": "failed", "next_attempt_at": "2026-04-10T15:05:00+00:00"}
+    )
+
+    assert record.status == "dead_letter"
+    assert failed.next_attempt_at == "2026-04-10T15:05:00+00:00"
 
 
 def test_source_pointer_artifact_rejects_bad_checksum() -> None:

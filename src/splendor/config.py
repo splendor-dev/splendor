@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -59,11 +60,22 @@ class ReviewsConfig(BaseModel):
     contradictions: ContradictionsReviewConfig = Field(default_factory=ContradictionsReviewConfig)
 
 
+class QueueConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_attempts: int = Field(default=3, ge=1)
+    lease_ttl_seconds: int = Field(default=300, ge=1)
+    retry_backoff_seconds: list[Annotated[int, Field(ge=0)]] = Field(
+        default_factory=lambda: [60, 300, 900]
+    )
+
+
 class SplendorConfig(BaseModel):
     schema_version: str = "1"
     project_name: str = "Splendor workspace"
     layout: LayoutConfig = Field(default_factory=LayoutConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
+    queue: QueueConfig = Field(default_factory=QueueConfig)
     reviews: ReviewsConfig = Field(default_factory=ReviewsConfig)
 
 
