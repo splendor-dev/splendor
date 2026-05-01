@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M10-P1.1`
-- Current planned slice: `M10-P2`
-- Current PR sub-slice: `M10-P2.1`
+- Previous completed PR sub-slice: `M10-P2.1`
+- Current planned slice: `M11-P1`
+- Current PR sub-slice: `M11-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M11-P1`
-- Next planned PR sub-slice: `M11-P1.1`
+- Next planned slice: `M11-P2`
+- Next planned PR sub-slice: `M11-P2.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
@@ -687,6 +687,18 @@ project knowledge bases.
 - `M11-P1` Source lifecycle, bulk registration, refresh, and readable source lookup
 - `M11-P2` Topic scaffolding, templates, and index rebuild
 - `M11-P3` Query/source lookup and agent-context improvements
+
+### Current PR sub-slices
+- `M11-P1.1` Source lifecycle, bulk registration, refresh, and readable source lookup
+- `M11-P2.1` Topic scaffolding, templates, and index rebuild
+- `M11-P3.1` Query/source lookup and agent-context improvements
+
+### Milestone 11 status
+
+`M11-P1.1` is in progress: it adds deterministic bulk registration through `add-source --glob`
+and `add-source --dir`, explicit source refresh via the existing ingest queue, and readable source
+lookup by title/path without changing canonical source IDs. Topic scaffolding and broader
+query/source lookup work remain planned for `M11-P2.1` and `M11-P3.1`.
 
 ---
 

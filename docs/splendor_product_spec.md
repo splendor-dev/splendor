@@ -665,6 +665,13 @@ Current implementation:
 - `splendor add-source <path>` registers the source and creates a pending ingest queue item for
   CLI-created sources, so `splendor ingest --pending` can continue the loop without copying the
   source ID.
+- `splendor add-source --glob "pattern"` and `splendor add-source --dir path` register batches in
+  deterministic path order with filename-derived titles.
+- `splendor source list` and `splendor source lookup [query]` map human-readable titles and paths
+  back to canonical source IDs without renaming existing source-summary pages.
+- `splendor source refresh <source-id|title|path>` detects changed source content, registers the
+  current bytes as a new canonical source version when the checksum changed, and queues ingest via
+  the existing queue ledger while preserving active-lease and dead-letter protections.
 - `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
   `splendor wiki suggest <source-id>` command.
 - `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
@@ -727,6 +734,7 @@ A source should not be re-ingested merely because it exists in the repo. Re-inge
 - the pipeline version changed
 - the user explicitly requests re-ingestion
 - a repair job targets the source
+- a source refresh detects changed content and registers the current source version
 
 ## 16. Queue Model
 

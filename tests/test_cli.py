@@ -16,6 +16,7 @@ from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
 from splendor.state.query_snapshot import last_query_path_for, load_query_snapshot
 from splendor.state.runtime import load_queue_item
+from splendor.state.source_registry import load_source_record
 
 
 def latest_report_paths(root: Path, command: str) -> tuple[Path, Path]:
@@ -48,12 +49,31 @@ def test_cli_add_source_capture_source_commit_flags_are_tri_state() -> None:
     parser = build_parser()
 
     no_flag = parser.parse_args(["add-source", "brief.md"])
+    glob_flag = parser.parse_args(["add-source", "--glob", "docs/*.md"])
+    dir_flag = parser.parse_args(["add-source", "--dir", "docs"])
     yes_flag = parser.parse_args(["add-source", "--capture-source-commit", "brief.md"])
     no_capture_flag = parser.parse_args(["add-source", "--no-capture-source-commit", "brief.md"])
 
     assert no_flag.capture_source_commit is None
+    assert glob_flag.glob_patterns == ["docs/*.md"]
+    assert dir_flag.directories == [Path("docs")]
     assert yes_flag.capture_source_commit is True
     assert no_capture_flag.capture_source_commit is False
+
+
+def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
+    parser = build_parser()
+
+    lookup = parser.parse_args(["source", "lookup", "brief", "--json"])
+    refresh = parser.parse_args(["source", "refresh", "docs/brief.md", "--json"])
+
+    assert lookup.command == "source"
+    assert lookup.source_command == "lookup"
+    assert lookup.query == "brief"
+    assert lookup.json_output is True
+    assert refresh.source_command == "refresh"
+    assert refresh.query == "docs/brief.md"
+    assert refresh.json_output is True
 
 
 def test_cli_repo_scan_parser_accepts_json_flag() -> None:
@@ -145,6 +165,47 @@ def test_cli_add_source_command_reports_workspace_backed_registration(
     assert "Storage artifact:" not in captured.out
 
 
+def test_cli_add_source_glob_registers_sources_in_deterministic_order(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "zeta.md").write_text("# Zeta\n", encoding="utf-8")
+    (docs / "alpha.md").write_text("# Alpha\n", encoding="utf-8")
+    (docs / "ignore.txt").write_text("Ignore\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "add-source", "--glob", "docs/*.md"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Registered sources: 2" in out
+    assert out.index("docs/alpha.md") < out.index("docs/zeta.md")
+    manifests = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    assert len(manifests) == 2
+    refs = sorted(load_source_record(path).source_ref for path in manifests)
+    assert refs == ["docs/alpha.md", "docs/zeta.md"]
+    assert len(list((tmp_path / "state" / "queue").glob("*.json"))) == 2
+
+
+def test_cli_add_source_dir_registers_direct_child_files(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    docs = tmp_path / "docs"
+    nested = docs / "nested"
+    nested.mkdir(parents=True)
+    (docs / "brief.md").write_text("# Brief\n", encoding="utf-8")
+    (nested / "skip.md").write_text("# Skip\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "add-source", "--dir", "docs"])
+
+    assert exit_code == 0
+    manifests = list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    assert len(manifests) == 1
+    assert load_source_record(manifests[0]).source_ref == "docs/brief.md"
+
+
 def test_cli_add_source_resolves_relative_paths_against_root(tmp_path: Path, capsys) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
@@ -160,6 +221,92 @@ def test_cli_add_source_resolves_relative_paths_against_root(tmp_path: Path, cap
     captured = capsys.readouterr()
     assert "Source ref: docs/brief.md" in captured.out
     assert "Storage mode: none" in captured.out
+
+
+def test_cli_source_lookup_maps_readable_path_to_source_id(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    source = docs / "audio-quality-feedback.md"
+    source.write_text("# Audio Quality Feedback\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "lookup", "audio quality"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Sources: 1" in out
+    assert "Audio Quality Feedback" in out or "audio quality feedback" in out
+    assert "docs/audio-quality-feedback.md" in out
+
+
+def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_manifest = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    original_id = original_manifest.stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert f"Detected changed source content for {original_id}" in out
+    manifests = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    assert len(manifests) == 2
+    refreshed_id = [path.stem for path in manifests if path.stem != original_id][0]
+    assert f"Registered refreshed source {refreshed_id}" in out
+    assert (tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").exists()
+
+
+def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "lease_owner": "local-cli:test",
+            "lease_expires_at": "2999-01-01T00:00:00+00:00",
+        }
+    )
+    queue_path.write_text(queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 1
+    assert f"Error: Queue item is already leased: ingest-{source_id}" in capsys.readouterr().out
+
+
+def test_cli_source_refresh_preserves_dead_letter_protection(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue = load_queue_item(queue_path).model_copy(
+        update={"status": "dead_letter", "last_error": "too many failures"}
+    )
+    queue_path.write_text(queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "dead-lettered" in out
+    assert "splendor queue retry" in out
 
 
 def test_cli_add_source_expands_user_paths(tmp_path: Path, capsys, monkeypatch) -> None:

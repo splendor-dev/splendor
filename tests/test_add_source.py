@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from splendor.commands.add_source import add_source
+from splendor.commands.add_source import add_source, expand_source_paths
 from splendor.commands.init import initialize_workspace
 from splendor.commands.materialize_source import materialize_source
 from splendor.state.source_pointer import load_source_pointer
@@ -67,6 +67,28 @@ def test_add_source_registers_workspace_file_without_copy_by_default(tmp_path: P
     assert manifest.discovered_by is None
     assert manifest.original_path == "note.md"
     assert not (tmp_path / "raw" / "sources" / result.source_id).exists()
+
+
+def test_expand_source_paths_deduplicates_and_sorts_bulk_selectors(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "zeta.md").write_text("# Zeta\n", encoding="utf-8")
+    (docs / "alpha.md").write_text("# Alpha\n", encoding="utf-8")
+    (docs / "notes.txt").write_text("Notes\n", encoding="utf-8")
+
+    paths = expand_source_paths(
+        tmp_path,
+        source_path=Path("docs/zeta.md"),
+        glob_patterns=["docs/*.md"],
+        directories=[Path("docs")],
+    )
+
+    assert [path.relative_to(tmp_path).as_posix() for path in paths] == [
+        "docs/alpha.md",
+        "docs/notes.txt",
+        "docs/zeta.md",
+    ]
 
 
 def test_resolve_manifest_storage_path_rejects_absolute_paths(tmp_path: Path) -> None:
