@@ -377,6 +377,8 @@ Field meanings:
   - Optional nullable capture intent persisted separately from `source_commit`. `true` preserves an
     explicit capture request across refreshes, `false` preserves an explicit opt-out, and `null`
     means refresh uses the workspace `sources.capture_source_commit` default.
+  - Legacy manifests without this field preserve positive capture intent when `source_commit` is
+    already populated.
 - `source_commit`
   - Optional git commit SHA captured for clean tracked workspace files when the project wants
     stronger repo-native provenance.

@@ -484,23 +484,21 @@ def register_source(
         existing_stored_path, existing_storage_mode, existing_source_ref = (
             _validated_existing_registration(root=root, layout=layout, existing=existing)
         )
+        updated_fields: dict[str, object] = {}
+        if capture_source_commit is not None:
+            updated_fields["source_commit_capture"] = capture_source_commit
         if refresh_existing_metadata and existing.source_ref_kind == "workspace_path":
-            updated = SourceRecord.model_validate(
-                existing.model_dump(mode="json")
-                | {
-                    "source_class": source_class
-                    if source_class is not None
-                    else existing.source_class,
-                    "source_labels": sorted(
-                        source_labels if source_labels is not None else existing.source_labels
-                    ),
-                    "discovered_by": (
-                        existing.discovered_by
-                        if existing.discovered_by is not None
-                        else discovered_by
-                    ),
-                }
-            )
+            updated_fields |= {
+                "source_class": source_class if source_class is not None else existing.source_class,
+                "source_labels": sorted(
+                    source_labels if source_labels is not None else existing.source_labels
+                ),
+                "discovered_by": (
+                    existing.discovered_by if existing.discovered_by is not None else discovered_by
+                ),
+            }
+        if updated_fields:
+            updated = SourceRecord.model_validate(existing.model_dump(mode="json") | updated_fields)
             if updated != existing:
                 write_source_record(manifest_path, updated)
                 existing = updated

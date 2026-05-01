@@ -529,6 +529,37 @@ def test_add_source_persists_explicit_commit_capture_intent(tmp_path: Path) -> N
     assert disabled_manifest.source_commit_capture is False
 
 
+def test_add_source_updates_existing_commit_capture_intent(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    unchanged = add_source(tmp_path, source)
+    assert unchanged.already_registered is True
+    assert load_source_record(first.manifest_path).source_commit_capture is None
+
+    enabled = add_source(tmp_path, source, capture_source_commit=True)
+    assert enabled.already_registered is True
+    assert load_source_record(first.manifest_path).source_commit_capture is True
+
+    disabled = add_source(tmp_path, source, capture_source_commit=False)
+    assert load_source_record(first.manifest_path).source_commit_capture is False
+    assert disabled.already_registered is True
+
+
+def test_add_source_keeps_existing_commit_capture_intent_without_flag(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    repeat = add_source(tmp_path, source)
+
+    assert repeat.already_registered is True
+    assert load_source_record(first.manifest_path).source_commit_capture is None
+
+
 def test_add_source_leaves_source_commit_null_for_untracked_workspace_file(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     init_git_repo(tmp_path)

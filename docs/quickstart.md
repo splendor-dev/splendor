@@ -79,6 +79,8 @@ workspace file directly instead of copying it into `raw/sources/`.
 Commit provenance capture is also explicit in the manifest: `source_commit_capture: true` preserves
 an explicit `--capture-source-commit` request, `false` preserves `--no-capture-source-commit`, and
 `null` means future refreshes use `sources.capture_source_commit` from `splendor.yaml`.
+Older manifests that predate this field still preserve positive capture intent when they already
+contain a `source_commit`.
 
 To register a batch, use a glob or direct directory scan. Both forms process files in deterministic
 path order and create pending ingest jobs for newly registered sources:

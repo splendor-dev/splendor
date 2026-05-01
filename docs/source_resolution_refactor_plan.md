@@ -195,6 +195,9 @@ Nullable intent flag controlling whether refresh should attempt source commit ca
 - `false`: capture was explicitly disabled
 - `null`: use the current workspace `sources.capture_source_commit` default
 
+Legacy manifests without this field preserve positive capture intent when `source_commit` is
+already populated.
+
 ### `source_commit`
 
 Optional git commit SHA captured for clean tracked workspace files when stronger repo-native
