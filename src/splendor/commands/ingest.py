@@ -492,7 +492,7 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
             return False
 
     run = load_run_record(run_path)
-    if not _ocr_metadata_is_current(root, source):
+    if not _ocr_metadata_is_current(root, layout, source):
         return False
     return run.status == "succeeded" and run.pipeline_version == __version__
 
@@ -501,12 +501,10 @@ def is_ingest_current(root: Path, layout, source: SourceRecord) -> bool:
     return _is_no_op(root, layout, source)
 
 
-def _ocr_metadata_is_current(root: Path, source: SourceRecord) -> bool:
-    metadata_refs = [
-        artifact_ref
-        for artifact_ref in source.derived_artifacts
-        if artifact_ref.startswith("derived/metadata/") and artifact_ref.endswith(".ocr.json")
-    ]
+def _ocr_metadata_is_current(root: Path, layout, source: SourceRecord) -> bool:
+    metadata_refs = _ocr_metadata_artifact_refs(root, layout, source)
+    if metadata_refs is None:
+        return False
     if not metadata_refs:
         return True
 
@@ -536,6 +534,24 @@ def _ocr_metadata_is_current(root: Path, source: SourceRecord) -> bool:
         if sha256_file(sidecar_path) != sidecar_checksum:
             return False
     return True
+
+
+def _ocr_metadata_artifact_refs(root: Path, layout, source: SourceRecord) -> list[str] | None:
+    metadata_root = layout.derived_metadata_dir.resolve()
+    metadata_refs: list[str] = []
+    for artifact_ref in source.derived_artifacts:
+        if not artifact_ref.endswith(".ocr.json"):
+            continue
+        try:
+            artifact_path = resolve_workspace_path(root, artifact_ref, context="OCR metadata")
+        except ValueError:
+            return None
+        try:
+            artifact_path.resolve().relative_to(metadata_root)
+        except ValueError:
+            continue
+        metadata_refs.append(artifact_ref)
+    return metadata_refs
 
 
 def _validate_workspace_files(layout) -> None:

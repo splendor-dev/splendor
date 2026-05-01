@@ -484,6 +484,35 @@ def test_ingest_source_ocr_sidecar_change_forces_reingest(tmp_path: Path) -> Non
     assert metadata["sidecar_ref"] == "diagram.png.ocr.txt"
 
 
+def test_ingest_source_ocr_sidecar_change_forces_reingest_with_custom_metadata_dir(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.layout.derived_metadata_dir = "custom-derived/metadata"
+    config.sources.ocr_enabled = True
+    config.sources.ocr_provider = "sidecar-text"
+    write_config(tmp_path, config)
+    source = tmp_path / "diagram.png"
+    sidecar = Path(f"{source}.ocr.txt")
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    sidecar.write_text("Initial OCR text.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    first = ingest_source(tmp_path, added.source_id)
+    sidecar.write_text("Updated OCR text.\n", encoding="utf-8")
+    second = ingest_source(tmp_path, added.source_id)
+
+    assert first.no_op is False
+    assert second.no_op is False
+    metadata_artifact = tmp_path / "custom-derived" / "metadata" / f"{added.source_id}.ocr.json"
+    assert metadata_artifact.is_file()
+    manifest = load_source_record(added.manifest_path)
+    assert metadata_artifact.relative_to(tmp_path).as_posix() in manifest.derived_artifacts
+    ocr_artifact = tmp_path / "derived" / "ocr" / f"{added.source_id}.txt"
+    assert ocr_artifact.read_text(encoding="utf-8") == "Updated OCR text.\n"
+
+
 def test_ingest_source_external_image_uses_original_sidecar_for_copied_source(
     tmp_path: Path,
 ) -> None:

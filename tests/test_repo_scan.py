@@ -66,6 +66,24 @@ def test_repo_scan_registers_and_classifies_supported_workspace_files(tmp_path: 
     assert manifest_by_ref["src/main.py"].source_class == "code"
 
 
+def test_repo_scan_classifies_image_sources_as_other(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "diagram.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    result = scan_repo(tmp_path)
+
+    assert result.scanned == 1
+    assert result.class_counts == {
+        "code": 0,
+        "documentation": 0,
+        "configuration": 0,
+        "other": 1,
+    }
+    assert result.touched_sources[0].path == "diagram.png"
+    assert result.touched_sources[0].source_class == "other"
+
+
 def test_repo_scan_ignores_managed_and_transient_directories(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
