@@ -59,6 +59,14 @@ def lookup_sources(root: Path, query: str | None = None) -> list[SourceLookupRes
     return [result for result in results if _matches_source(result.source, needle)]
 
 
+def source_commit_capture_intent(source: SourceRecord) -> bool | None:
+    if source.source_commit_capture is not None:
+        return source.source_commit_capture
+    if source.source_commit is not None:
+        return True
+    return None
+
+
 def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     matches = lookup_sources(root, source_query)
     exact_matches = [
@@ -85,7 +93,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
             root,
             current_path,
             storage_mode=requested.storage_mode,
-            capture_source_commit=requested.source_commit is not None,
+            capture_source_commit=source_commit_capture_intent(requested),
             source_class=requested.source_class,
             source_labels=requested.source_labels,
             discovered_by=requested.discovered_by,

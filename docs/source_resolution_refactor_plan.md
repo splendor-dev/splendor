@@ -137,6 +137,7 @@ New fields to add:
 - `storage_mode`
 - `storage_path`
 - `materialized_at`
+- `source_commit_capture`
 - `source_commit`
 
 Compatibility plan:
@@ -185,6 +186,17 @@ Optional repo-relative path, usually under `raw/sources/`, used when a source is
 ### `materialized_at`
 
 Timestamp capturing when the storage artifact was created or refreshed.
+
+### `source_commit_capture`
+
+Nullable intent flag controlling whether refresh should attempt source commit capture again:
+
+- `true`: capture was explicitly requested, even if no commit was available at registration time
+- `false`: capture was explicitly disabled
+- `null`: use the current workspace `sources.capture_source_commit` default
+
+Legacy manifests without this field preserve positive capture intent when `source_commit` is
+already populated.
 
 ### `source_commit`
 

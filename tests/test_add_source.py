@@ -62,6 +62,7 @@ def test_add_source_registers_workspace_file_without_copy_by_default(tmp_path: P
     assert manifest.storage_mode == "none"
     assert manifest.storage_path is None
     assert manifest.materialized_at is None
+    assert manifest.source_commit_capture is None
     assert manifest.source_class is None
     assert manifest.source_labels == []
     assert manifest.discovered_by is None
@@ -504,7 +505,59 @@ def test_add_source_captures_head_for_clean_tracked_workspace_file(tmp_path: Pat
     result = add_source(tmp_path, source)
 
     manifest = load_source_record(result.manifest_path)
+    assert manifest.source_commit_capture is None
     assert manifest.source_commit == head
+
+
+def test_add_source_persists_explicit_commit_capture_intent(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    disabled_source = tmp_path / "disabled.md"
+    source.write_text("# note\n", encoding="utf-8")
+    disabled_source.write_text("# disabled\n", encoding="utf-8")
+
+    requested = add_source(tmp_path, source, capture_source_commit=True)
+    disabled = add_source(
+        tmp_path,
+        disabled_source,
+        capture_source_commit=False,
+    )
+
+    requested_manifest = load_source_record(requested.manifest_path)
+    disabled_manifest = load_source_record(disabled.manifest_path)
+    assert requested_manifest.source_commit_capture is True
+    assert disabled_manifest.source_commit_capture is False
+
+
+def test_add_source_updates_existing_commit_capture_intent(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    unchanged = add_source(tmp_path, source)
+    assert unchanged.already_registered is True
+    assert load_source_record(first.manifest_path).source_commit_capture is None
+
+    enabled = add_source(tmp_path, source, capture_source_commit=True)
+    assert enabled.already_registered is True
+    assert load_source_record(first.manifest_path).source_commit_capture is True
+
+    disabled = add_source(tmp_path, source, capture_source_commit=False)
+    assert load_source_record(first.manifest_path).source_commit_capture is False
+    assert disabled.already_registered is True
+
+
+def test_add_source_keeps_existing_commit_capture_intent_without_flag(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    first = add_source(tmp_path, source)
+    repeat = add_source(tmp_path, source)
+
+    assert repeat.already_registered is True
+    assert load_source_record(first.manifest_path).source_commit_capture is None
 
 
 def test_add_source_leaves_source_commit_null_for_untracked_workspace_file(tmp_path: Path) -> None:

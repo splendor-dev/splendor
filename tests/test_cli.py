@@ -12,7 +12,7 @@ from splendor import __version__
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
 from splendor.commands.source import refresh_source
-from splendor.config import load_config
+from splendor.config import load_config, write_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
 from splendor.state.query_snapshot import last_query_path_for, load_query_snapshot
@@ -480,6 +480,9 @@ def test_cli_source_refresh_preserves_no_commit_capture_intent(
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", "--no-capture-source-commit", str(source)])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    manifest = load_source_record(manifest_path)
+    assert manifest.source_commit_capture is False
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
 
     def fail_if_called(*_args, **_kwargs):
@@ -491,6 +494,12 @@ def test_cli_source_refresh_preserves_no_commit_capture_intent(
     exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
 
     assert exit_code == 0
+    refreshed_records = [
+        load_source_record(path)
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if path != manifest_path
+    ]
+    assert refreshed_records[0].source_commit_capture is False
 
 
 def test_cli_source_refresh_preserves_positive_commit_capture_intent(
@@ -502,7 +511,10 @@ def test_cli_source_refresh_preserves_positive_commit_capture_intent(
     main(["--root", str(tmp_path), "add-source", str(source)])
     manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
     manifest = load_source_record(manifest_path)
-    write_source_record(manifest_path, manifest.model_copy(update={"source_commit": "old"}))
+    write_source_record(
+        manifest_path,
+        manifest.model_copy(update={"source_commit_capture": True, "source_commit": None}),
+    )
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     monkeypatch.setattr(
         "splendor.state.source_registry.captured_source_commit",
@@ -518,7 +530,79 @@ def test_cli_source_refresh_preserves_positive_commit_capture_intent(
         for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
         if path != manifest_path
     ]
+    assert refreshed_records[0].source_commit_capture is True
     assert refreshed_records[0].source_commit == "new"
+
+
+def test_cli_source_refresh_uses_config_default_for_legacy_commit_capture_intent(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    manifest_payload = load_source_record(manifest_path).model_dump(mode="json")
+    manifest_payload.pop("source_commit_capture")
+    manifest_payload["source_commit"] = None
+    manifest_path.write_text(
+        json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "splendor.state.source_registry.captured_source_commit",
+        lambda *_args, **_kwargs: "legacy-new",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 0
+    refreshed_records = [
+        load_source_record(path)
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if path != manifest_path
+    ]
+    assert refreshed_records[0].source_commit_capture is None
+    assert refreshed_records[0].source_commit == "legacy-new"
+
+
+def test_cli_source_refresh_preserves_legacy_positive_commit_capture_intent(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.sources.capture_source_commit = False
+    write_config(tmp_path, config)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    manifest_payload = load_source_record(manifest_path).model_dump(mode="json")
+    manifest_payload.pop("source_commit_capture")
+    manifest_payload["source_commit"] = "legacy-old"
+    manifest_path.write_text(
+        json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "splendor.state.source_registry.captured_source_commit",
+        lambda *_args, **_kwargs: "legacy-new",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 0
+    refreshed_records = [
+        load_source_record(path)
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if path != manifest_path
+    ]
+    assert refreshed_records[0].source_commit_capture is True
+    assert refreshed_records[0].source_commit == "legacy-new"
 
 
 def test_cli_source_refresh_supports_original_path_legacy_manifest(tmp_path: Path, capsys) -> None:

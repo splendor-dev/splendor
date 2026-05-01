@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M12-P1.1`
-- Current planned slice: `M12-P2`
-- Current PR sub-slice: `M12-P2.1`
+- Previous completed PR sub-slice: `M12-P2.1`
+- Current planned slice: `M13-P1`
+- Current PR sub-slice: `M13-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M13-P1`
-- Next planned PR sub-slice: `M13-P1.1`
+- Next planned slice: `M13-P2`
+- Next planned PR sub-slice: `M13-P2.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop

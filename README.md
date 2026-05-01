@@ -159,12 +159,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M12-P1.1`
-- Current planned slice: `M12-P2`
-- Current PR sub-slice: `M12-P2.1`
+- Previous completed PR sub-slice: `M12-P2.1`
+- Current planned slice: `M13-P1`
+- Current PR sub-slice: `M13-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M13-P1`
-- Next planned PR sub-slice: `M13-P1.1`
+- Next planned slice: `M13-P2`
+- Next planned PR sub-slice: `M13-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
