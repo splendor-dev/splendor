@@ -123,9 +123,11 @@ Implemented today:
 - `splendor task|milestone|decision|question ...`
 - `splendor repo scan`
 - `splendor repo refresh`
+- `splendor add-topic "Title"` with optional `--tags`, `--source-refs`, and `--template`
 - `splendor wiki status`
 - `splendor wiki suggest <source-id>`
 - `splendor wiki compile <source-id>` as a non-mutating review-gated contract description
+- `splendor wiki rebuild-index`
 - `splendor brief [goal]`
 - `splendor serve` for a read-only local browse/search/status/planning/runtime UI
 - read-only web `/status`, `/sources/<source-id>`, `/planning`, `/runs`, and `/queue` views
@@ -134,7 +136,6 @@ Implemented today:
 Not implemented yet:
 
 - mutating review-gated `splendor wiki compile`
-- topic scaffolding, templates, and index rebuild
 - OCR and image extraction flows
 - mutating web UI actions such as add-source forms
 - changed-files-driven refresh suggestions
@@ -151,12 +152,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M10-P2.1`
-- Current planned slice: `M11-P1`
-- Current PR sub-slice: `M11-P1.1`
+- Previous completed PR sub-slice: `M11-P1.1`
+- Current planned slice: `M11-P2`
+- Current PR sub-slice: `M11-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M11-P2`
-- Next planned PR sub-slice: `M11-P2.1`
+- Next planned slice: `M11-P3`
+- Next planned PR sub-slice: `M11-P3.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -192,7 +193,8 @@ UI without adding mutating web actions.
 ingest repair. `M10-P2.1` is implemented: it adds configurable queue retry/backoff policy,
 explicit dead-letter records, and stale-lease recovery.
 
-The current PR sub-slice is `M11-P1.1`, which adds deterministic bulk source registration,
-explicit source refresh through the existing ingest queue, and readable source lookup by title or
-path without changing canonical source IDs. After `M11-P1`, the next Milestone 11 work moves to
-topic scaffolding, templates, and index rebuild.
+`M11-P1.1` is implemented: it adds deterministic bulk source registration, explicit source
+refresh through the existing ingest queue, and readable source lookup by title or path without
+changing canonical source IDs. The current PR sub-slice is `M11-P2.1`, which adds CLI-first topic
+scaffolding, deterministic templates, and wiki index rebuild support. After `M11-P2`, the next
+Milestone 11 work moves to query/source lookup and agent-context improvements.

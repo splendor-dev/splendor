@@ -672,6 +672,9 @@ Current implementation:
 - `splendor source refresh <source-id|title|path>` detects changed source content, registers the
   current bytes as a new canonical source version when the checksum changed, and queues ingest via
   the existing queue ledger while preserving active-lease and dead-letter protections.
+- `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
+  with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
+  templates for default synthesis, research synthesis, and issue tracking.
 - `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
   `splendor wiki suggest <source-id>` command.
 - `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
@@ -684,6 +687,9 @@ Current implementation:
   optional JSON output.
 - `splendor wiki compile <source-id>` exposes the review-gated compile-loop contract, validates the
   source, and reports that it does not mutate synthesis pages yet.
+- `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
+  including maintained synthesis pages and generated source-summary pages, without mutating the
+  pages themselves.
 - `splendor query` prefers claim-bearing source-summary sections over generated metadata
   boilerplate when selecting snippets, and text output points to `file-answer` when a saved query
   has matches.

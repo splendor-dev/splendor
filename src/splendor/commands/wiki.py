@@ -1,4 +1,4 @@
-"""Read-only wiki maintenance commands."""
+"""Wiki maintenance commands."""
 
 from __future__ import annotations
 
@@ -14,11 +14,13 @@ from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecor
 from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_compat import canonical_source_ref
 from splendor.state.source_registry import load_source_record
-from splendor.utils.wiki import parse_wiki_markdown
+from splendor.utils.fs import write_text_atomic
+from splendor.utils.wiki import parse_wiki_markdown, render_frontmatter
 
 _SYNTHESIS_KINDS = {"architecture", "concept", "entity", "glossary", "topic"}
 _REVIEW_NEEDED_STATES = {"draft", "machine-generated", "contested", "stale"}
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
+_SLUG_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 _SOURCE_TERM_SECTIONS = {"summary", "key facts", "extract"}
 _GENERATED_KEY_FACT_PREFIXES = (
     "- Source ID:",
@@ -44,6 +46,16 @@ _STOPWORDS = {
     "wiki",
     "with",
 }
+_TOPIC_TEMPLATES = {"default", "research-synthesis", "issue-tracker"}
+_INDEX_SECTION_LABELS = {
+    "architecture": "Architecture",
+    "concept": "Concepts",
+    "entity": "Entities",
+    "glossary": "Glossary",
+    "topic": "Topics",
+    "source-summary": "Sources",
+}
+_INDEX_KIND_ORDER = ("architecture", "concept", "entity", "glossary", "topic", "source-summary")
 
 
 @dataclass(frozen=True)
@@ -121,8 +133,242 @@ class WikiCompileContract:
     next_steps: list[str]
 
 
+@dataclass(frozen=True)
+class TopicScaffoldResult:
+    title: str
+    page_id: str
+    path: str
+    tags: list[str]
+    source_refs: list[str]
+    template: str
+
+
+@dataclass(frozen=True)
+class WikiIndexEntry:
+    kind: str
+    title: str
+    page_id: str
+    path: str
+    status: str
+    review_state: str
+
+
+@dataclass(frozen=True)
+class WikiIndexRebuildResult:
+    path: str
+    page_count: int
+    sections: dict[str, int]
+
+
 def _relative(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
+
+
+def _require_initialized_wiki(root: Path, layout) -> None:
+    missing = [
+        _relative(root, path) for path in (layout.index_file, layout.log_file) if not path.exists()
+    ]
+    if missing:
+        joined = ", ".join(missing)
+        msg = f"Workspace is missing required wiki files: {joined}. Run `splendor init`."
+        raise ValueError(msg)
+
+
+def _validated_source_refs(layout, source_refs: list[str]) -> list[str]:
+    validated_refs = _dedupe_preserve_order(source_refs)
+    for source_ref in validated_refs:
+        manifest_path = layout.source_records_dir / f"{source_ref}.json"
+        if not manifest_path.exists():
+            msg = f"Unknown source ref for topic page: {source_ref}"
+            raise ValueError(msg)
+        load_source_record(manifest_path)
+    return validated_refs
+
+
+def _slugify_title(title: str) -> str:
+    slug = "-".join(_SLUG_TOKEN_PATTERN.findall(title.lower()))
+    if not slug:
+        msg = f"Could not derive a topic slug from title: {title!r}"
+        raise ValueError(msg)
+    return slug
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
+
+
+def _render_source_ref_lines(source_refs: list[str]) -> str:
+    if not source_refs:
+        return "- Add source refs as this topic is synthesized.\n"
+    return "".join(f"- `{source_ref}`\n" for source_ref in source_refs)
+
+
+def _render_topic_body(frontmatter: KnowledgePageFrontmatter, *, template: str) -> str:
+    source_ref_lines = _render_source_ref_lines(frontmatter.source_refs)
+    if template == "research-synthesis":
+        body = (
+            "## Summary\n\n"
+            "Draft the cross-source synthesis here.\n\n"
+            "## Source-Backed Findings\n\n"
+            "- Finding: TBD\n"
+            "  - Sources: TBD\n\n"
+            "## Open Questions\n\n"
+            "- TBD\n\n"
+            "## Source References\n\n"
+            f"{source_ref_lines}"
+        )
+    elif template == "issue-tracker":
+        body = (
+            "## Summary\n\n"
+            "Track related symptoms, root causes, and resolution status here.\n\n"
+            "## Issues\n\n"
+            "| Issue | Severity | Symptoms | Root Cause | Status | Source Refs |\n"
+            "| --- | --- | --- | --- | --- | --- |\n"
+            "| TBD | TBD | TBD | TBD | open | TBD |\n\n"
+            "## Source References\n\n"
+            f"{source_ref_lines}"
+        )
+    else:
+        body = (
+            "## Summary\n\n"
+            "Draft the maintained topic synthesis here.\n\n"
+            "## Notes\n\n"
+            "- TBD\n\n"
+            "## Source References\n\n"
+            f"{source_ref_lines}"
+        )
+    return f"---\n{render_frontmatter(frontmatter)}\n---\n\n# {frontmatter.title}\n\n{body}"
+
+
+def add_topic_page(
+    root: Path,
+    title: str,
+    *,
+    tags: list[str] | None = None,
+    source_refs: list[str] | None = None,
+    template: str = "default",
+) -> TopicScaffoldResult:
+    if template not in _TOPIC_TEMPLATES:
+        msg = f"Unknown topic template: {template}"
+        raise ValueError(msg)
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    _require_initialized_wiki(root, layout)
+    validated_source_refs = _validated_source_refs(layout, source_refs or [])
+    slug = _slugify_title(title)
+    page_id = f"topic-{slug}"
+    page_path = layout.wiki_dir / "topics" / f"{slug}.md"
+    page_ref = _relative(root, page_path)
+    if page_path.exists():
+        msg = f"Topic page already exists: {page_ref}"
+        raise FileExistsError(msg)
+
+    pages, invalid_pages = _load_wiki_pages(root, layout)
+    if invalid_pages:
+        msg = f"Cannot add topic with invalid wiki pages present: {invalid_pages[0].path}"
+        raise ValueError(msg)
+    duplicate_path = next(
+        (page.path for page in pages if page.frontmatter.page_id == page_id),
+        None,
+    )
+    if duplicate_path is not None:
+        msg = f"Topic page_id already exists in {duplicate_path}: {page_id}"
+        raise FileExistsError(msg)
+
+    frontmatter = KnowledgePageFrontmatter(
+        kind="topic",
+        title=title,
+        page_id=page_id,
+        status="active",
+        review_state="draft",
+        source_refs=validated_source_refs,
+        tags=_dedupe_preserve_order(tags or []),
+        confidence=0.0,
+    )
+    page_content = _render_topic_body(frontmatter, template=template)
+    write_text_atomic(page_path, page_content)
+    try:
+        parse_wiki_markdown(page_path)
+        rebuild_wiki_index(root)
+    except Exception:
+        page_path.unlink(missing_ok=True)
+        raise
+
+    return TopicScaffoldResult(
+        title=title,
+        page_id=page_id,
+        path=page_ref,
+        tags=frontmatter.tags,
+        source_refs=frontmatter.source_refs,
+        template=template,
+    )
+
+
+def rebuild_wiki_index(root: Path) -> WikiIndexRebuildResult:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    pages, invalid_pages = _load_wiki_pages(root, layout)
+    if invalid_pages:
+        msg = f"Cannot rebuild index with invalid wiki pages present: {invalid_pages[0].path}"
+        raise ValueError(msg)
+
+    entries = [
+        WikiIndexEntry(
+            kind=page.frontmatter.kind,
+            title=page.frontmatter.title,
+            page_id=page.frontmatter.page_id,
+            path=page.path,
+            status=page.frontmatter.status,
+            review_state=page.frontmatter.review_state,
+        )
+        for page in pages
+    ]
+    entries.sort(key=lambda entry: (entry.kind, entry.title.casefold(), entry.path))
+    content = _render_rebuilt_index(entries)
+    write_text_atomic(layout.index_file, content)
+    section_counts = Counter(entry.kind for entry in entries)
+    return WikiIndexRebuildResult(
+        path=_relative(root, layout.index_file),
+        page_count=len(entries),
+        sections={kind: section_counts[kind] for kind in _INDEX_KIND_ORDER if section_counts[kind]},
+    )
+
+
+def _render_rebuilt_index(entries: list[WikiIndexEntry]) -> str:
+    lines = [
+        "# Splendor Wiki Index",
+        "",
+        "This wiki is maintained by Splendor.",
+        "",
+        "## Navigation",
+        "",
+        "- `wiki/sources/` for deterministic source summary pages.",
+        "- `wiki/topics/` for maintained topic synthesis pages.",
+        "- `planning/` for milestones, tasks, decisions, and questions.",
+        "- `state/` for machine-readable queue, run, and manifest records.",
+    ]
+    for kind in _INDEX_KIND_ORDER:
+        section_entries = [entry for entry in entries if entry.kind == kind]
+        if not section_entries:
+            continue
+        lines.extend(["", f"## {_INDEX_SECTION_LABELS[kind]}", ""])
+        lines.extend(_index_bullet(entry) for entry in section_entries)
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _index_bullet(entry: WikiIndexEntry) -> str:
+    link = entry.path.removeprefix("wiki/")
+    return (
+        f"- [{entry.title}]({link}) (`{entry.page_id}`) "
+        f"status={entry.status} review={entry.review_state}"
+    )
 
 
 def load_sources(layout) -> list[SourceRecord]:
@@ -459,4 +705,12 @@ def render_wiki_suggest_json(result: WikiSuggestResult) -> str:
 
 
 def render_wiki_compile_contract_json(result: WikiCompileContract) -> str:
+    return json.dumps(asdict(result), indent=2)
+
+
+def render_topic_scaffold_json(result: TopicScaffoldResult) -> str:
+    return json.dumps(asdict(result), indent=2)
+
+
+def render_wiki_index_rebuild_json(result: WikiIndexRebuildResult) -> str:
     return json.dumps(asdict(result), indent=2)

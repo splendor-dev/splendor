@@ -6,8 +6,10 @@ import yaml
 from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
+from splendor.commands.wiki import add_topic_page, rebuild_wiki_index
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport
 from splendor.state.source_registry import load_source_record
+from splendor.utils.wiki import parse_wiki_markdown
 
 
 def write_wiki_page(
@@ -34,6 +36,179 @@ def write_wiki_page(
     path.parent.mkdir(parents=True, exist_ok=True)
     frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
     path.write_text(f"---\n{frontmatter_text}\n---\n\n{body}", encoding="utf-8")
+
+
+def test_add_topic_scaffolds_valid_frontmatter_and_rebuilds_index(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source_a = tmp_path / "source-a.md"
+    source_b = tmp_path / "source-b.md"
+    source_a.write_text("# Source A\n", encoding="utf-8")
+    source_b.write_text("# Source B\n", encoding="utf-8")
+    added_a = add_source(tmp_path, source_a)
+    added_b = add_source(tmp_path, source_b)
+
+    result = add_topic_page(
+        tmp_path,
+        "Preprocessing Pipeline",
+        tags=["preprocessing", "audio", "preprocessing"],
+        source_refs=[added_a.source_id, added_b.source_id, added_a.source_id],
+        template="research-synthesis",
+    )
+
+    assert result.path == "wiki/topics/preprocessing-pipeline.md"
+    assert result.page_id == "topic-preprocessing-pipeline"
+    assert result.tags == ["preprocessing", "audio"]
+    assert result.source_refs == [added_a.source_id, added_b.source_id]
+    page = parse_wiki_markdown(tmp_path / result.path)
+    assert page.frontmatter.kind == "topic"
+    assert page.frontmatter.title == "Preprocessing Pipeline"
+    assert page.frontmatter.page_id == "topic-preprocessing-pipeline"
+    assert page.frontmatter.status == "active"
+    assert page.frontmatter.review_state == "draft"
+    assert page.frontmatter.source_refs == [added_a.source_id, added_b.source_id]
+    assert "## Source-Backed Findings" in page.body
+    index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+    assert (
+        "- [Preprocessing Pipeline](topics/preprocessing-pipeline.md) "
+        "(`topic-preprocessing-pipeline`) status=active review=draft"
+    ) in index
+
+
+def test_add_topic_cli_supports_issue_tracker_template_and_json(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "quality.md"
+    source.write_text("# Quality\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "add-topic",
+            "Audio Quality Issues",
+            "--tags",
+            "audio,quality",
+            "--source-refs",
+            added.source_id,
+            "--template",
+            "issue-tracker",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["path"] == "wiki/topics/audio-quality-issues.md"
+    assert payload["page_id"] == "topic-audio-quality-issues"
+    assert payload["source_refs"] == [added.source_id]
+    assert payload["template"] == "issue-tracker"
+    page = parse_wiki_markdown(tmp_path / payload["path"])
+    assert "| Issue | Severity | Symptoms | Root Cause | Status | Source Refs |" in page.body
+
+
+def test_add_topic_rejects_duplicate_slug_without_mutating_index(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    add_topic_page(tmp_path, "Preprocessing Pipeline")
+    index_before = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "add-topic", "Preprocessing Pipeline"])
+
+    assert exit_code == 1
+    assert "Error: Topic page already exists: wiki/topics/preprocessing-pipeline.md" in (
+        capsys.readouterr().out
+    )
+    assert (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8") == index_before
+
+
+def test_add_topic_rejects_unknown_source_ref_without_mutating_wiki(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    index_before = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "add-topic",
+            "Bogus Ref",
+            "--source-refs",
+            "src-missing",
+        ]
+    )
+
+    assert exit_code == 1
+    assert "Error: Unknown source ref for topic page: src-missing" in capsys.readouterr().out
+    assert not (tmp_path / "wiki" / "topics" / "bogus-ref.md").exists()
+    assert (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8") == index_before
+
+
+def test_add_topic_rejects_uninitialized_workspace_without_partial_writes(
+    tmp_path: Path, capsys
+) -> None:
+    exit_code = main(["--root", str(tmp_path), "add-topic", "No Init"])
+
+    assert exit_code == 1
+    assert (
+        "Error: Workspace is missing required wiki files: "
+        "wiki/index.md, wiki/log.md. Run `splendor init`."
+    ) in capsys.readouterr().out
+    assert not (tmp_path / "wiki" / "index.md").exists()
+    assert not (tmp_path / "wiki" / "topics" / "no-init.md").exists()
+
+
+def test_rebuild_wiki_index_includes_pages_in_deterministic_sections(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "zeta.md",
+        kind="topic",
+        title="Zeta Topic",
+        page_id="topic-zeta",
+        review_state="draft",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "architecture" / "alpha.md",
+        kind="architecture",
+        title="Alpha Architecture",
+        page_id="architecture-alpha",
+        review_state="machine-generated",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "sources" / "src-a.md",
+        kind="source-summary",
+        title="Source A",
+        page_id="source-src-a",
+        review_state="machine-generated",
+        source_refs=["src-a"],
+    )
+    (tmp_path / "wiki" / "index.md").write_text("# Drifted\n", encoding="utf-8")
+
+    result = rebuild_wiki_index(tmp_path)
+    first_index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+    second_result = rebuild_wiki_index(tmp_path)
+    second_index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+
+    assert result.page_count == 3
+    assert result.sections == {"architecture": 1, "topic": 1, "source-summary": 1}
+    assert second_result == result
+    assert second_index == first_index
+    assert first_index.index("## Architecture") < first_index.index("## Topics")
+    assert first_index.index("## Topics") < first_index.index("## Sources")
+    assert "[Alpha Architecture](architecture/alpha.md)" in first_index
+    assert "[Zeta Topic](topics/zeta.md)" in first_index
+    assert "[Source A](sources/src-a.md)" in first_index
+
+
+def test_wiki_rebuild_index_cli_reports_invalid_frontmatter(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    bad_page = tmp_path / "wiki" / "topics" / "bad.md"
+    bad_page.write_text("---\nkind: topic\nbogus: true\n---\n\n# Bad\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "rebuild-index"])
+
+    assert exit_code == 1
+    assert "Error: Cannot rebuild index with invalid wiki pages present: wiki/topics/bad.md" in (
+        capsys.readouterr().out
+    )
 
 
 def test_add_source_queues_pending_ingest_for_cli_handoff(tmp_path: Path, capsys) -> None:
