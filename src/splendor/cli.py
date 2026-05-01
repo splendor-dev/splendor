@@ -44,6 +44,7 @@ from splendor.commands.queue import (
 from splendor.commands.repo_refresh import refresh_repo, render_repo_refresh_json
 from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
 from splendor.commands.source import (
+    SourceLookupResult,
     list_sources,
     lookup_sources,
     refresh_source,
@@ -859,7 +860,7 @@ def _print_queue_item_detail(item: QueueItemSnapshot) -> None:
         print("Next: splendor ingest --pending")
 
 
-def _print_source_lookup_results(results) -> None:
+def _print_source_lookup_results(results: list[SourceLookupResult]) -> None:
     print(f"Sources: {len(results)}")
     if not results:
         print("No matching sources.")

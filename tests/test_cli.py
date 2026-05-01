@@ -257,6 +257,22 @@ def test_cli_source_list_reports_registered_sources(tmp_path: Path, capsys) -> N
     assert "ref=brief.md" in out
 
 
+def test_cli_source_list_json_reports_registered_sources(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "list", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [source["source_id"] for source in payload["sources"]] == [source_id]
+    assert payload["sources"][0]["source_ref"] == "brief.md"
+
+
 def test_cli_source_lookup_json_reports_source_payload(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -377,6 +393,34 @@ def test_cli_source_refresh_preserves_no_commit_capture_intent(
     exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
 
     assert exit_code == 0
+
+
+def test_cli_source_refresh_preserves_positive_commit_capture_intent(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    manifest = load_source_record(manifest_path)
+    write_source_record(manifest_path, manifest.model_copy(update={"source_commit": "old"}))
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "splendor.state.source_registry.captured_source_commit",
+        lambda *_args, **_kwargs: "new",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 0
+    refreshed_records = [
+        load_source_record(path)
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if path != manifest_path
+    ]
+    assert refreshed_records[0].source_commit == "new"
 
 
 def test_cli_source_refresh_supports_original_path_legacy_manifest(tmp_path: Path, capsys) -> None:
