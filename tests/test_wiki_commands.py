@@ -719,12 +719,16 @@ def test_brief_json_output_is_available_without_goal(tmp_path: Path, capsys) -> 
 def test_brief_agent_context_json_packages_handoff_state(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "briefing.md"
+    unrelated_source = tmp_path / "unrelated.md"
     source.write_text(
         "# Briefing\n\nAgent context should include source-backed handoff state.",
         encoding="utf-8",
     )
+    unrelated_source.write_text("# Unrelated\n\nRecent but irrelevant source.", encoding="utf-8")
     added = add_source(tmp_path, source)
+    unrelated = add_source(tmp_path, unrelated_source)
     main(["--root", str(tmp_path), "ingest", added.source_id])
+    main(["--root", str(tmp_path), "ingest", unrelated.source_id])
     write_wiki_page(
         tmp_path / "wiki" / "topics" / "agent-context.md",
         kind="topic",
@@ -764,11 +768,12 @@ def test_brief_agent_context_json_packages_handoff_state(tmp_path: Path, capsys)
     payload = json.loads(capsys.readouterr().out)
     assert payload["agent_context"] is True
     assert payload["goal"] == "agent context"
-    assert payload["wiki_status"]["source_total"] == 1
+    assert payload["wiki_status"]["source_total"] == 2
     assert payload["source_refs"] == [added.source_id]
+    assert unrelated.source_id not in payload["source_refs"]
     assert any(match["path"] == "wiki/topics/agent-context.md" for match in payload["matches"])
     assert payload["active_planning"][0]["record_id"] == "task-agent-context"
-    assert payload["recent_runs"][0]["source_ids"] == [added.source_id]
+    assert any(run["source_ids"] == [added.source_id] for run in payload["recent_runs"])
     assert payload["next_actions"]
 
 

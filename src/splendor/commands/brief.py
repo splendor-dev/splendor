@@ -344,6 +344,4 @@ def _agent_context_source_refs(brief: ProjectBrief) -> list[str]:
     refs: set[str] = set()
     for match in brief.matches:
         refs.update(match.source_refs)
-    for source in brief.recent_sources:
-        refs.add(source.source_id)
     return sorted(refs)
