@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from splendor import __version__
 from splendor.config import load_config
-from splendor.ingest_dispatch import dispatch_source_content
+from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, dispatch_source_content
 from splendor.layout import resolve_layout
 from splendor.schemas import (
     KnowledgePageFrontmatter,
@@ -49,6 +50,7 @@ from splendor.utils.contradictions import (
     snapshot_from_rendered_page,
 )
 from splendor.utils.fs import write_text_atomic
+from splendor.utils.hashing import sha256_file
 from splendor.utils.provenance import dedupe_provenance_links, make_provenance_link
 from splendor.utils.time import parse_aware_timestamp_or_none, utc_now_iso
 from splendor.utils.wiki import (
@@ -162,7 +164,10 @@ def _rendered_extract(text: str, mode: SummaryMode) -> str | None:
 def _build_summary(source: SourceRecord, source_text: str) -> str:
     path_fragment = canonical_source_ref(source)
     content_summary = _build_content_summary(source_text)
-    if source.source_type in {"md", "txt", "pdf"} and content_summary is not None:
+    if (
+        source.source_type in {"md", "txt", "pdf", *IMAGE_SOURCE_TYPES}
+        and content_summary is not None
+    ):
         return f"{content_summary} registered from `{path_fragment}`."
     return (
         f"This page records deterministic ingestion output for source `{source.source_id}`, "
@@ -259,6 +264,26 @@ def _content_origin_kind(storage_mode: str) -> str:
     return "workspace_path"
 
 
+def _workspace_relative_ref_or_none(root: Path, path_ref: str | None) -> str | None:
+    if path_ref is None:
+        return None
+    path = Path(path_ref)
+    if path.is_absolute():
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            return None
+    if ".." in path.parts:
+        return None
+    return path.as_posix()
+
+
+def _input_artifact_note(path_ref: str | None, checksum: str | None) -> str | None:
+    if path_ref is None or checksum is None:
+        return None
+    return f"OCR sidecar: {path_ref} sha256={checksum}"
+
+
 def _best_available_source_ref(source: SourceRecord) -> str:
     if effective_storage_mode(source) == "none":
         return canonical_source_ref(source)
@@ -291,6 +316,7 @@ def _page_provenance_links(
     run_id: str,
     manifest_ref: str,
     resolved_ref: str,
+    input_artifact_ref: str | None = None,
 ) -> list[ProvenanceLink]:
     return dedupe_provenance_links(
         [
@@ -301,6 +327,11 @@ def _page_provenance_links(
             ),
             make_provenance_link(run_id=run_id, role="generated-from"),
             make_provenance_link(path_ref=resolved_ref, role="input"),
+            *(
+                [make_provenance_link(path_ref=input_artifact_ref, role="input")]
+                if input_artifact_ref is not None
+                else []
+            ),
         ]
     )
 
@@ -332,11 +363,35 @@ def _run_input_provenance_links(
     source_id: str,
     manifest_ref: str,
     resolved_ref: str,
+    input_artifact_ref: str | None = None,
+    input_artifact_note: str | None = None,
 ) -> list[ProvenanceLink]:
     return dedupe_provenance_links(
         [
             make_provenance_link(source_id=source_id, path_ref=manifest_ref, role="input"),
             make_provenance_link(source_id=source_id, path_ref=resolved_ref, role="input"),
+            *(
+                [
+                    make_provenance_link(
+                        source_id=source_id,
+                        path_ref=input_artifact_ref,
+                        role="input",
+                    )
+                ]
+                if input_artifact_ref is not None
+                else []
+            ),
+            *(
+                [
+                    make_provenance_link(
+                        source_id=source_id,
+                        role="input",
+                        note=input_artifact_note,
+                    )
+                ]
+                if input_artifact_note is not None
+                else []
+            ),
         ]
     )
 
@@ -350,6 +405,8 @@ def _run_success_provenance_links(
     page_ref: str,
     run_id: str,
     derived_artifacts: list[str],
+    input_artifact_ref: str | None = None,
+    input_artifact_note: str | None = None,
 ) -> list[ProvenanceLink]:
     return dedupe_provenance_links(
         [
@@ -357,6 +414,8 @@ def _run_success_provenance_links(
                 source_id=source_id,
                 manifest_ref=manifest_ref,
                 resolved_ref=resolved_ref,
+                input_artifact_ref=input_artifact_ref,
+                input_artifact_note=input_artifact_note,
             ),
             make_provenance_link(page_id=page_id, path_ref=page_ref, role="generated-page"),
             make_provenance_link(run_id=run_id, page_id=page_id, role="output"),
@@ -433,11 +492,66 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
             return False
 
     run = load_run_record(run_path)
+    if not _ocr_metadata_is_current(root, layout, source):
+        return False
     return run.status == "succeeded" and run.pipeline_version == __version__
 
 
 def is_ingest_current(root: Path, layout, source: SourceRecord) -> bool:
     return _is_no_op(root, layout, source)
+
+
+def _ocr_metadata_is_current(root: Path, layout, source: SourceRecord) -> bool:
+    metadata_refs = _ocr_metadata_artifact_refs(root, layout, source)
+    if metadata_refs is None:
+        return False
+    if not metadata_refs:
+        return True
+
+    for metadata_ref in metadata_refs:
+        try:
+            metadata_path = resolve_workspace_path(root, metadata_ref, context="OCR metadata")
+        except ValueError:
+            return False
+        if not metadata_path.is_file():
+            return False
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        sidecar_ref = metadata.get("sidecar_ref")
+        sidecar_checksum = metadata.get("sidecar_checksum")
+        if not isinstance(sidecar_ref, str) or not isinstance(sidecar_checksum, str):
+            return False
+        sidecar_path = Path(sidecar_ref).expanduser()
+        if not sidecar_path.is_absolute():
+            try:
+                sidecar_path = resolve_workspace_path(root, sidecar_ref, context="OCR sidecar")
+            except ValueError:
+                return False
+        if not sidecar_path.is_file():
+            return False
+        if sha256_file(sidecar_path) != sidecar_checksum:
+            return False
+    return True
+
+
+def _ocr_metadata_artifact_refs(root: Path, layout, source: SourceRecord) -> list[str] | None:
+    metadata_root = layout.derived_metadata_dir.resolve()
+    metadata_refs: list[str] = []
+    for artifact_ref in source.derived_artifacts:
+        if not artifact_ref.endswith(".ocr.json"):
+            continue
+        try:
+            artifact_path = resolve_workspace_path(root, artifact_ref, context="OCR metadata")
+        except ValueError:
+            return None
+        try:
+            artifact_path.resolve().relative_to(metadata_root)
+        except ValueError:
+            continue
+        metadata_refs.append(artifact_ref)
+    return metadata_refs
 
 
 def _validate_workspace_files(layout) -> None:
@@ -758,14 +872,52 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         )
         write_run_record(run_path, run)
 
-        dispatched_content = dispatch_source_content(source, resolved_source, layout=layout)
+        dispatched_content = dispatch_source_content(
+            source,
+            resolved_source,
+            layout=layout,
+            config=config,
+        )
         source_text = dispatched_content.text
         derived_artifact_ref = (
             _relative_to_root(root, dispatched_content.derived_artifact_path)
             if dispatched_content.derived_artifact_path is not None
             else None
         )
-        derived_artifacts = [derived_artifact_ref] if derived_artifact_ref is not None else []
+        metadata_artifact_ref = (
+            _relative_to_root(root, dispatched_content.metadata_artifact_path)
+            if dispatched_content.metadata_artifact_path is not None
+            else None
+        )
+        derived_artifacts = [
+            artifact_ref
+            for artifact_ref in [derived_artifact_ref, metadata_artifact_ref]
+            if artifact_ref is not None
+        ]
+        input_artifact_ref = _workspace_relative_ref_or_none(
+            root, dispatched_content.input_artifact_ref
+        )
+        input_artifact_note = _input_artifact_note(
+            dispatched_content.input_artifact_ref,
+            dispatched_content.input_artifact_checksum,
+        )
+        run = run.model_copy(
+            update={
+                "input_refs": [
+                    _relative_to_root(root, manifest_path),
+                    resolved_source.resolved_ref,
+                    *([input_artifact_ref] if input_artifact_ref is not None else []),
+                ],
+                "provenance_links": _run_input_provenance_links(
+                    source_id=source.source_id,
+                    manifest_ref=_relative_to_root(root, manifest_path),
+                    resolved_ref=resolved_source.resolved_ref,
+                    input_artifact_ref=input_artifact_ref,
+                    input_artifact_note=input_artifact_note,
+                ),
+            }
+        )
+        write_run_record(run_path, run)
 
         extract_mode = _summary_mode_for(config, source)
         page_path = _page_path_for(layout.wiki_sources_dir, source.source_id)
@@ -788,6 +940,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 run_id=run_id,
                 manifest_ref=_relative_to_root(root, manifest_path),
                 resolved_ref=resolved_source.resolved_ref,
+                input_artifact_ref=input_artifact_ref,
             ),
         )
         source_section = "\n".join(
@@ -798,7 +951,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 f"- Source file: `{resolved_source.resolved_ref}`",
             ]
             + (
-                [f"- Parsed artifact: `{derived_artifact_ref}`"]
+                [f"- {dispatched_content.derived_artifact_label}: `{derived_artifact_ref}`"]
                 if derived_artifact_ref is not None
                 else []
             )
@@ -816,8 +969,18 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             f"Manifest: `{_relative_to_root(root, manifest_path)}`",
             f"{resolved_source.content_origin_label}: `{resolved_source.resolved_ref}`",
             *(
-                [f"Parsed artifact: `{derived_artifact_ref}`"]
+                [f"{dispatched_content.derived_artifact_label}: `{derived_artifact_ref}`"]
                 if derived_artifact_ref is not None
+                else []
+            ),
+            *(
+                [f"OCR metadata artifact: `{metadata_artifact_ref}`"]
+                if metadata_artifact_ref is not None
+                else []
+            ),
+            *(
+                [f"OCR sidecar: `{dispatched_content.input_artifact_ref}`"]
+                if dispatched_content.input_artifact_ref is not None
                 else []
             ),
             f"Run ID: `{run_id}`",
@@ -918,6 +1081,8 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                     page_ref=page_relpath,
                     run_id=run_id,
                     derived_artifacts=derived_artifacts,
+                    input_artifact_ref=input_artifact_ref,
+                    input_artifact_note=input_artifact_note,
                 ),
             }
         )
@@ -953,6 +1118,17 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                         ]
                         if dispatched_content.derived_artifact_path is not None
                         and dispatched_content.derived_artifact_content is not None
+                        else []
+                    ),
+                    *(
+                        [
+                            (
+                                dispatched_content.metadata_artifact_path,
+                                dispatched_content.metadata_artifact_content,
+                            )
+                        ]
+                        if dispatched_content.metadata_artifact_path is not None
+                        and dispatched_content.metadata_artifact_content is not None
                         else []
                     ),
                     *contradiction_review.page_updates,

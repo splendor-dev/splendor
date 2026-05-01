@@ -42,6 +42,9 @@ class SourcesConfig(BaseModel):
     capture_source_commit: bool = True
     summarize_in_repo_extracts_as: SummaryMode = "excerpt"
     summarize_external_extracts_as: SummaryMode = "full"
+    ocr_enabled: bool = False
+    ocr_provider: str = "sidecar-text"
+    ocr_sidecar_suffix: str = ".ocr.txt"
 
 
 class ContradictionsReviewConfig(BaseModel):

@@ -9,8 +9,15 @@ from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_question, create_task
 from splendor.commands.query import run_query
+from splendor.config import load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter
 from splendor.state.query_snapshot import load_query_snapshot
+
+
+def enable_sidecar_ocr(root: Path) -> None:
+    config = load_config(root)
+    config.sources.ocr_enabled = True
+    write_config(root, config)
 
 
 def write_wiki_page(
@@ -144,6 +151,23 @@ def test_run_query_finds_extracted_pdf_source_summary_text(tmp_path: Path) -> No
     assert result.matches[0].kind == "source-summary"
     assert result.matches[0].source_refs == [added.source_id]
     assert "Extracted PDF dispatch evidence" in result.matches[0].snippet
+
+
+def test_run_query_finds_extracted_ocr_source_summary_text(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    Path(f"{source}.ocr.txt").write_text("Extracted OCR diagram evidence\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    ingest_source(tmp_path, added.source_id)
+
+    result = run_query(tmp_path, "diagram evidence", source_id=added.source_id)
+
+    assert result.match_count == 1
+    assert result.matches[0].kind == "source-summary"
+    assert result.matches[0].source_refs == [added.source_id]
+    assert "Extracted OCR diagram evidence" in result.matches[0].snippet
 
 
 def test_run_query_rejects_unknown_source_filter(tmp_path: Path) -> None:

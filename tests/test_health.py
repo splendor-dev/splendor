@@ -45,6 +45,24 @@ def test_run_health_checks_reports_missing_source_derived_artifact(tmp_path: Pat
     assert result.issues[0].path == added.manifest_path.relative_to(tmp_path).as_posix()
 
 
+def test_run_health_checks_accepts_ocr_derived_artifact_links(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    added = add_source(tmp_path, source)
+    artifact = tmp_path / "derived" / "ocr" / f"{added.source_id}.txt"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("Extracted OCR text\n", encoding="utf-8")
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={"derived_artifacts": [artifact.relative_to(tmp_path).as_posix()]}
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    result = _run_health(tmp_path)
+
+    assert result.issues == []
+
+
 def test_run_health_checks_reports_invalid_queue_and_run_records(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     (tmp_path / "state" / "queue" / "ingest-bad.json").write_text("{bad json}\n", encoding="utf-8")

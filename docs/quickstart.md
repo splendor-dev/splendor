@@ -100,8 +100,16 @@ uv run splendor --root /tmp/demo-repo add-source /tmp/demo-repo/research-note.pd
 
 During ingest, Splendor extracts PDF text locally, writes the parsed text artifact under
 `derived/parsed/`, links that artifact from the source manifest, and uses the extracted text for the
-generated source-summary page. Scanned or image-only PDFs fail with a deterministic message because
-OCR/image extraction is a later workflow.
+generated source-summary page.
+
+Image files and image-only PDFs require explicit OCR configuration. The current lightweight local
+provider is `sidecar-text`: set `sources.ocr_enabled: true`, keep
+`sources.ocr_provider: sidecar-text`, and place UTF-8 sidecar text next to the resolved source file
+using the configured suffix, default `.ocr.txt` (for example `diagram.png.ocr.txt`). Successful OCR
+ingest writes extracted text under `derived/ocr/`, writes sidecar checksum metadata under
+`derived/metadata/`, and links both artifacts from the source manifest. When OCR is not configured,
+the sidecar is missing, or extraction fails, ingest reports a deterministic one-line error and
+leaves text-native/PDF-text ingest behavior unchanged.
 
 ## 4. Ingest the source
 

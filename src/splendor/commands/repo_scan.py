@@ -8,14 +8,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from splendor.config import load_config
-from splendor.ingest_dispatch import SUPPORTED_SOURCE_TYPES
+from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, SUPPORTED_SOURCE_TYPES
 from splendor.layout import resolve_layout
 from splendor.schemas.types import SourceClass
 from splendor.state.source_registry import register_source
 
 _CONFIG_EXTENSIONS = {"json", "yaml", "yml"}
 _DOCUMENTATION_EXTENSIONS = {"md", "pdf", "txt"}
-_CODE_EXTENSIONS = SUPPORTED_SOURCE_TYPES - _CONFIG_EXTENSIONS - _DOCUMENTATION_EXTENSIONS
+_CODE_EXTENSIONS = (
+    SUPPORTED_SOURCE_TYPES - _CONFIG_EXTENSIONS - _DOCUMENTATION_EXTENSIONS - IMAGE_SOURCE_TYPES
+)
 _IGNORED_TOP_LEVEL_DIRS = {
     ".git",
     ".pytest_cache",

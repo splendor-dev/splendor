@@ -7,6 +7,7 @@ from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.wiki import add_topic_page, rebuild_wiki_index
+from splendor.config import load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport
 from splendor.state.source_registry import load_source_record
 from splendor.utils.wiki import parse_wiki_markdown
@@ -718,6 +719,9 @@ def test_brief_json_output_is_available_without_goal(tmp_path: Path, capsys) -> 
 
 def test_brief_agent_context_json_packages_handoff_state(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    write_config(tmp_path, config)
     source = tmp_path / "briefing.md"
     unrelated_source = tmp_path / "unrelated.md"
     source.write_text(
