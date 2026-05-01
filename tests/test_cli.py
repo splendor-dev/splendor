@@ -62,6 +62,33 @@ def test_cli_add_source_capture_source_commit_flags_are_tri_state() -> None:
     assert no_capture_flag.capture_source_commit is False
 
 
+def test_cli_add_topic_parser_accepts_template_tags_source_refs_and_json() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "add-topic",
+            "Preprocessing Pipeline",
+            "--tags",
+            "preprocessing,audio",
+            "--tags",
+            "filter",
+            "--source-refs",
+            "src-a,src-b",
+            "--template",
+            "research-synthesis",
+            "--json",
+        ]
+    )
+
+    assert args.command == "add-topic"
+    assert args.title == "Preprocessing Pipeline"
+    assert args.tags == ["preprocessing,audio", "filter"]
+    assert args.source_refs == ["src-a,src-b"]
+    assert args.template == "research-synthesis"
+    assert args.json_output is True
+
+
 def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     parser = build_parser()
 
@@ -94,6 +121,16 @@ def test_cli_repo_refresh_parser_accepts_json_flag() -> None:
 
     assert args.command == "repo"
     assert args.repo_command == "refresh"
+    assert args.json_output is True
+
+
+def test_cli_wiki_rebuild_index_parser_accepts_json_flag() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["wiki", "rebuild-index", "--json"])
+
+    assert args.command == "wiki"
+    assert args.wiki_command == "rebuild-index"
     assert args.json_output is True
 
 

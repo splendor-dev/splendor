@@ -52,9 +52,13 @@ from splendor.commands.source import (
     render_source_refresh_json,
 )
 from splendor.commands.wiki import (
+    add_topic_page,
     build_wiki_status,
     describe_wiki_compile_contract,
+    rebuild_wiki_index,
+    render_topic_scaffold_json,
     render_wiki_compile_contract_json,
+    render_wiki_index_rebuild_json,
     render_wiki_status_json,
     render_wiki_suggest_json,
     suggest_source_pages,
@@ -136,6 +140,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_source_parser.set_defaults(capture_source_commit=None)
     add_source_parser.set_defaults(handler=handle_add_source)
+
+    add_topic_parser = subparsers.add_parser("add-topic", help="Scaffold a maintained topic page")
+    add_topic_parser.add_argument("title", help="Topic title")
+    add_topic_parser.add_argument(
+        "--tags",
+        action="append",
+        default=[],
+        help="Comma-separated or repeated topic tags.",
+    )
+    add_topic_parser.add_argument(
+        "--source-refs",
+        action="append",
+        default=[],
+        help="Comma-separated or repeated source IDs to reference.",
+    )
+    add_topic_parser.add_argument(
+        "--template",
+        choices=("default", "research-synthesis", "issue-tracker"),
+        default="default",
+        help="Deterministic markdown scaffold to use.",
+    )
+    add_topic_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    add_topic_parser.set_defaults(handler=handle_add_topic)
 
     source_parser = subparsers.add_parser("source", help="Inspect and refresh source records")
     source_subparsers = source_parser.add_subparsers(dest="source_command", required=True)
@@ -258,6 +290,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     wiki_compile_parser.set_defaults(handler=handle_wiki_compile)
+    wiki_rebuild_index_parser = wiki_subparsers.add_parser(
+        "rebuild-index", help="Regenerate wiki/index.md from wiki page frontmatter"
+    )
+    wiki_rebuild_index_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    wiki_rebuild_index_parser.set_defaults(handler=handle_wiki_rebuild_index)
 
     materialize_parser = subparsers.add_parser(
         "materialize-source", help="Create or refresh a source storage artifact"
@@ -641,6 +683,42 @@ def handle_add_source(args: argparse.Namespace) -> int:
     return 0
 
 
+def _split_repeated_csv(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for part in value.split(","):
+            normalized = part.strip()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(normalized)
+    return result
+
+
+def handle_add_topic(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = add_topic_page(
+            root,
+            args.title,
+            tags=_split_repeated_csv(args.tags),
+            source_refs=_split_repeated_csv(args.source_refs),
+            template=args.template,
+        )
+    except (FileExistsError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_topic_scaffold_json(result))
+        return 0
+
+    print(f"Created topic: {result.path}")
+    print(f"Page ID: {result.page_id}")
+    print(f"Template: {result.template}")
+    print("Updated index: wiki/index.md")
+    return 0
+
+
 def handle_source_list(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
@@ -979,6 +1057,27 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
     print("Next steps:")
     for item in result.next_steps:
         print(f"- {item}")
+    return 0
+
+
+def handle_wiki_rebuild_index(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = rebuild_wiki_index(root)
+    except ValueError as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_wiki_index_rebuild_json(result))
+        return 0
+
+    print(f"Rebuilt index: {result.path}")
+    print(f"Pages indexed: {result.page_count}")
+    if result.sections:
+        print(
+            "Sections: "
+            + " ".join(f"{section}={count}" for section, count in result.sections.items())
+        )
     return 0
 
 

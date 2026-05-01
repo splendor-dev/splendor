@@ -118,6 +118,21 @@ uv run splendor --root /tmp/demo-repo wiki status
 uv run splendor --root /tmp/demo-repo wiki suggest <source-id>
 ```
 
+To start a maintained synthesis page without hand-writing the schema-bound frontmatter, scaffold a
+topic and rebuild the index from current wiki page metadata:
+
+```bash
+uv run splendor --root /tmp/demo-repo add-topic "Preprocessing Pipeline" \
+  --tags preprocessing,audio \
+  --source-refs <source-id> \
+  --template research-synthesis
+uv run splendor --root /tmp/demo-repo wiki rebuild-index
+```
+
+`add-topic` writes `wiki/topics/<slug>.md`, validates the frontmatter contract, and refreshes
+`wiki/index.md`. `wiki rebuild-index` is idempotent and reads existing wiki page frontmatter; it
+does not rewrite generated source-summary pages.
+
 When a tracked source file changes, refresh it by ID, title, or path. Refresh detects changed
 content, registers the current content as a new canonical source version when needed, and queues
 ingest through the same ledger used by `add-source`:

@@ -202,6 +202,13 @@ Minimal frontmatter contract for wiki pages:
 
 Current runtime behavior:
 
+- `splendor add-topic "Title"` writes maintained topic pages under `wiki/topics/<slug>.md` with
+  `kind: topic`, `page_id: topic-<slug>`, `status: active`, `review_state: draft`, optional tags,
+  and optional source refs
+- `splendor add-topic --template default|research-synthesis|issue-tracker` uses deterministic
+  markdown scaffolds; templates do not generate source-summary content or LLM-authored synthesis
+- `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter and
+  does not mutate generated source-summary pages
 - source-summary pages written by `splendor ingest` now use `review_state: machine-generated`
 - those pages persist `last_generated_at`
 - those pages persist structured provenance links back to the source manifest, ingest run, and
