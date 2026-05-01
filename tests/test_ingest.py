@@ -396,6 +396,48 @@ def test_ingest_source_image_fails_when_configured_ocr_sidecar_missing(tmp_path:
     )
 
 
+def test_ingest_source_image_fails_when_ocr_sidecar_is_invalid_utf8(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    Path(f"{source}.ocr.txt").write_bytes(b"\xff\xfe\xfa")
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="^OCR sidecar text is not valid UTF-8"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.derived_artifacts == []
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert queue_record.last_error == "OCR sidecar text is not valid UTF-8: diagram.png.ocr.txt"
+
+
+def test_ingest_source_image_fails_when_ocr_sidecar_is_empty(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    Path(f"{source}.ocr.txt").write_text("  \n\t\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="^OCR sidecar text is empty for diagram.png"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.derived_artifacts == []
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert (
+        queue_record.last_error == "OCR sidecar text is empty for diagram.png: diagram.png.ocr.txt"
+    )
+
+
 def test_ingest_source_image_only_pdf_can_use_configured_ocr_sidecar(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     enable_sidecar_ocr(tmp_path)

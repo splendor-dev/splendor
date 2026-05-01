@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,7 +43,7 @@ class SourcesConfig(BaseModel):
     summarize_in_repo_extracts_as: SummaryMode = "excerpt"
     summarize_external_extracts_as: SummaryMode = "full"
     ocr_enabled: bool = False
-    ocr_provider: Literal["sidecar-text"] = "sidecar-text"
+    ocr_provider: str = "sidecar-text"
     ocr_sidecar_suffix: str = ".ocr.txt"
 
 
