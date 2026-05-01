@@ -40,6 +40,7 @@ Current implementation fields:
 - `storage_mode`
 - `storage_path`
 - `materialized_at`
+- `source_commit_capture`
 - `source_commit`
 - `source_class`
 - `source_labels`
@@ -117,6 +118,11 @@ Implemented fields:
   - Symlink-backed sources use `raw/sources/<source_id>/<filename>`.
 - `materialized_at`
   - Timestamp indicating when `storage_path` was created or last refreshed.
+- `source_commit_capture`
+  - Nullable persisted intent for git provenance capture:
+    - `true` means commit capture was explicitly requested for registration and refresh
+    - `false` means commit capture was explicitly disabled
+    - `null` means use the workspace `sources.capture_source_commit` default
 - `source_commit`
   - Optional git commit SHA captured for clean tracked workspace files.
 - `source_class`
@@ -147,7 +153,8 @@ Implemented fields:
   generated `wiki/sources/src-...md` pages.
 - `splendor source refresh <source-id|title|path>` resolves the tracked workspace or external path,
   compares current bytes to the manifest checksum, registers changed content as a new canonical
-  source version, and queues ingest through the same queue handoff used by `add-source`.
+  source version, preserves `source_commit_capture` intent, and queues ingest through the same queue
+  handoff used by `add-source`.
 - Refresh uses the queue ledger directly, so active leases remain protected and dead-lettered jobs
   still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
 - Text-bearing PDF sources are routed through source-type dispatch during ingest. The source
@@ -186,7 +193,8 @@ Splendor currently supports both:
 
 1. legacy manifests that only have `path` and are treated as copied-source records at read time
 2. new manifests that write `source_ref`, `source_ref_kind`, `storage_mode`, `storage_path`,
-   `materialized_at`, `source_commit`, and optional repo-scan classification fields
+   `materialized_at`, `source_commit_capture`, `source_commit`, and optional repo-scan
+   classification fields
 
 In this release:
 

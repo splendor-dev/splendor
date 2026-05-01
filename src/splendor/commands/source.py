@@ -85,7 +85,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
             root,
             current_path,
             storage_mode=requested.storage_mode,
-            capture_source_commit=requested.source_commit is not None,
+            capture_source_commit=requested.source_commit_capture,
             source_class=requested.source_class,
             source_labels=requested.source_labels,
             discovered_by=requested.discovered_by,

@@ -543,6 +543,7 @@ def register_source(
             stored_path.relative_to(root).as_posix() if stored_path is not None else None
         ),
         materialized_at=(added_at if stored_path is not None else None),
+        source_commit_capture=capture_source_commit,
         source_commit=source_commit,
         source_class=source_class,
         source_labels=sorted(source_labels or []),

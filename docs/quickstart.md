@@ -76,6 +76,9 @@ The command prints:
 
 For in-repo files, the current default storage mode is `none`, which means Splendor tracks the
 workspace file directly instead of copying it into `raw/sources/`.
+Commit provenance capture is also explicit in the manifest: `source_commit_capture: true` preserves
+an explicit `--capture-source-commit` request, `false` preserves `--no-capture-source-commit`, and
+`null` means future refreshes use `sources.capture_source_commit` from `splendor.yaml`.
 
 To register a batch, use a glob or direct directory scan. Both forms process files in deterministic
 path order and create pending ingest jobs for newly registered sources:
@@ -154,7 +157,9 @@ does not rewrite generated source-summary pages.
 
 When a tracked source file changes, refresh it by ID, title, or path. Refresh detects changed
 content, registers the current content as a new canonical source version when needed, and queues
-ingest through the same ledger used by `add-source`:
+ingest through the same ledger used by `add-source`. It carries the manifest's
+`source_commit_capture` intent forward, so a source that was explicitly opted in or out of commit
+capture keeps that behavior even if the previous version had no `source_commit` value:
 
 ```bash
 uv run splendor --root /tmp/demo-repo source refresh product-note.md

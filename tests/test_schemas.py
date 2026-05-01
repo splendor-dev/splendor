@@ -25,6 +25,7 @@ def test_source_record_validation_accepts_valid_payload() -> None:
     )
 
     assert record.kind == "source"
+    assert record.source_commit_capture is None
 
 
 def test_source_record_validation_accepts_valid_expanded_payload() -> None:
@@ -41,6 +42,7 @@ def test_source_record_validation_accepts_valid_expanded_payload() -> None:
         storage_mode="none",
         storage_path=None,
         materialized_at="2026-04-10T15:01:00+00:00",
+        source_commit_capture=True,
         source_commit="abc123",
         source_class="documentation",
         source_labels=["agent-instructions"],
@@ -60,6 +62,7 @@ def test_source_record_validation_accepts_valid_expanded_payload() -> None:
 
     assert record.source_ref == "docs/spec.md"
     assert record.storage_mode == "none"
+    assert record.source_commit_capture is True
     assert record.source_class == "documentation"
     assert record.source_labels == ["agent-instructions"]
     assert record.discovered_by == "repo_scan"

@@ -48,6 +48,7 @@ class SourceRecord(StrictRecord):
     storage_mode: StorageMode | None = None
     storage_path: str | None = None
     materialized_at: str | None = None
+    source_commit_capture: bool | None = None
     source_commit: str | None = None
     source_class: SourceClass | None = None
     source_labels: list[str] = Field(default_factory=list)

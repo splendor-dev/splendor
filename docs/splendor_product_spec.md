@@ -352,6 +352,7 @@ Suggested fields:
 - `last_run_id`
 - `review_state`
 - `materialized_at` (optional)
+- `source_commit_capture` (optional nullable)
 - `source_commit` (optional)
 
 Field meanings:
@@ -372,6 +373,10 @@ Field meanings:
   - Optional path to the materialized artifact under `raw/sources/` when one exists.
   - Pointer-backed sources use `raw/sources/<source_id>/pointer.json`.
   - Symlink-backed sources use `raw/sources/<source_id>/<filename>`.
+- `source_commit_capture`
+  - Optional nullable capture intent persisted separately from `source_commit`. `true` preserves an
+    explicit capture request across refreshes, `false` preserves an explicit opt-out, and `null`
+    means refresh uses the workspace `sources.capture_source_commit` default.
 - `source_commit`
   - Optional git commit SHA captured for clean tracked workspace files when the project wants
     stronger repo-native provenance.
@@ -1077,7 +1082,9 @@ Likely configuration domains:
 - GitHub integration toggles
 - policy rules
 
-Current OCR-related source settings:
+Current source settings:
+- `sources.capture_source_commit`: default git commit capture policy for workspace sources when a
+  source manifest has `source_commit_capture: null`, default `true`
 - `sources.ocr_enabled`: opt-in OCR/image extraction toggle, default `false`
 - `sources.ocr_provider`: OCR provider name, currently `sidecar-text`
 - `sources.ocr_sidecar_suffix`: sidecar suffix appended to the resolved source path, default
