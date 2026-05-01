@@ -756,7 +756,8 @@ source-summary/query path as text-native sources.
 `M12-P2.1` is in progress: it adds explicitly configured image/OCR dispatch using a deterministic
 sidecar-text provider. OCR-derived text is stored separately under `derived/ocr/`, linked from
 source manifests through `derived_artifacts`, and used by the same generated source-summary/query
-path when extraction succeeds. Unconfigured or unextractable OCR/image sources fail
+path when extraction succeeds. Sidecar checksum metadata is stored under `derived/metadata/` so
+no-op ingest can detect OCR input drift. Unconfigured or unextractable OCR/image sources fail
 deterministically without destabilizing text-native or text-bearing PDF ingest.
 
 ---

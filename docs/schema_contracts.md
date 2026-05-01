@@ -155,14 +155,16 @@ Implemented fields:
   text-native sources, while extracted text artifacts are recorded in `derived_artifacts`.
 - Image sources and image-only PDFs use the same source registration and resolver contract. OCR is
   optional and explicitly configured; successful OCR-derived text is recorded in
-  `derived_artifacts` without changing the canonical source identity.
+  `derived_artifacts` without changing the canonical source identity. Sidecar OCR inputs are
+  tracked through metadata artifacts so no-op ingest can detect sidecar checksum drift.
 
 ### Derived artifacts
 
 `derived_artifacts` stores repo-relative paths to repairable machine-generated artifacts derived
 from the source. Current runtime support writes parsed text from text-bearing PDFs to
-`derived/parsed/<source-id>.txt` and configured OCR text to `derived/ocr/<source-id>.txt`; lint and
-health validate that listed artifacts are repo-relative, remain under `derived/`, and exist on disk.
+`derived/parsed/<source-id>.txt`, configured OCR text to `derived/ocr/<source-id>.txt`, and OCR
+sidecar metadata to `derived/metadata/<source-id>.ocr.json`; lint and health validate that listed
+artifacts are repo-relative, remain under `derived/`, and exist on disk.
 
 ### Recommended default policy
 

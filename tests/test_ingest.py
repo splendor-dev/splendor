@@ -344,19 +344,27 @@ def test_ingest_source_image_writes_ocr_artifact_and_links_manifest(tmp_path: Pa
     assert "Parsed artifact:" not in body
 
     ocr_artifact = tmp_path / "derived" / "ocr" / f"{added.source_id}.txt"
+    metadata_artifact = tmp_path / "derived" / "metadata" / f"{added.source_id}.ocr.json"
     assert ocr_artifact.read_text(encoding="utf-8") == (
         "# Diagram Notes\n\nOCR claim from image source.\n"
     )
+    metadata = json.loads(metadata_artifact.read_text(encoding="utf-8"))
+    assert metadata["kind"] == "ocr_metadata"
+    assert metadata["sidecar_ref"] == "diagram.png.ocr.txt"
+    assert metadata["sidecar_checksum"]
 
     source_record = load_source_record(added.manifest_path)
     artifact_ref = ocr_artifact.relative_to(tmp_path).as_posix()
+    metadata_ref = metadata_artifact.relative_to(tmp_path).as_posix()
     assert source_record.source_ref == "diagram.png"
     assert source_record.storage_mode == "none"
-    assert source_record.derived_artifacts == [artifact_ref]
+    assert source_record.derived_artifacts == sorted([artifact_ref, metadata_ref])
     assert any(link.path_ref == artifact_ref for link in source_record.provenance_links)
 
     run_record = load_run_record(result.run_path)
+    assert "diagram.png.ocr.txt" in run_record.input_refs
     assert artifact_ref in run_record.output_refs
+    assert metadata_ref in run_record.output_refs
     assert any(
         link.path_ref == artifact_ref
         and link.source_id == added.source_id
@@ -409,6 +417,67 @@ def test_ingest_source_image_only_pdf_can_use_configured_ocr_sidecar(tmp_path: P
     assert "OCR text from scanned PDF." in body
     assert (tmp_path / "derived" / "ocr" / f"{added.source_id}.txt").is_file()
     assert not (tmp_path / "derived" / "parsed" / f"{added.source_id}.txt").exists()
+
+
+def test_ingest_source_ocr_sidecar_change_forces_reingest(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    source = tmp_path / "diagram.png"
+    sidecar = Path(f"{source}.ocr.txt")
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    sidecar.write_text("Initial OCR text.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    first = ingest_source(tmp_path, added.source_id)
+    sidecar.write_text("Updated OCR text.\n", encoding="utf-8")
+    second = ingest_source(tmp_path, added.source_id)
+
+    assert first.no_op is False
+    assert second.no_op is False
+    assert first.run_id != second.run_id
+    ocr_artifact = tmp_path / "derived" / "ocr" / f"{added.source_id}.txt"
+    assert ocr_artifact.read_text(encoding="utf-8") == "Updated OCR text.\n"
+    metadata_artifact = tmp_path / "derived" / "metadata" / f"{added.source_id}.ocr.json"
+    metadata = json.loads(metadata_artifact.read_text(encoding="utf-8"))
+    assert metadata["sidecar_ref"] == "diagram.png.ocr.txt"
+
+
+def test_ingest_source_external_image_uses_original_sidecar_for_copied_source(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    external_dir = tmp_path.parent / f"{tmp_path.name}-external-ocr"
+    external_dir.mkdir()
+    source = external_dir / "diagram.png"
+    sidecar = Path(f"{source}.ocr.txt")
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    sidecar.write_text("External OCR text.\n", encoding="utf-8")
+
+    try:
+        added = add_source(tmp_path, source)
+        result = ingest_source(tmp_path, added.source_id)
+    finally:
+        source.unlink(missing_ok=True)
+        sidecar.unlink(missing_ok=True)
+        external_dir.rmdir()
+
+    assert result.page_path is not None
+    ocr_artifact = tmp_path / "derived" / "ocr" / f"{added.source_id}.txt"
+    assert ocr_artifact.read_text(encoding="utf-8") == "External OCR text.\n"
+    metadata_artifact = tmp_path / "derived" / "metadata" / f"{added.source_id}.ocr.json"
+    metadata = json.loads(metadata_artifact.read_text(encoding="utf-8"))
+    assert metadata["sidecar_ref"] == str(sidecar.resolve())
+
+    run_record = load_run_record(result.run_path)
+    assert str(sidecar.resolve()) not in run_record.input_refs
+    assert any(
+        link.role == "input"
+        and link.path_ref is None
+        and link.note is not None
+        and str(sidecar.resolve()) in link.note
+        for link in run_record.provenance_links
+    )
 
 
 def test_ingest_source_malformed_pdf_uses_stable_error(tmp_path: Path) -> None:

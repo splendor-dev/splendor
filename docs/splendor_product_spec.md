@@ -632,7 +632,9 @@ Current implementation:
   `derived/parsed/<source-id>.txt` and linked from the source manifest via `derived_artifacts`
 - image sources and image-only PDFs may use explicitly configured OCR through the deterministic
   `sidecar-text` provider, with extracted text written separately to
-  `derived/ocr/<source-id>.txt` and linked from the source manifest via `derived_artifacts`
+  `derived/ocr/<source-id>.txt`, sidecar checksum metadata written to
+  `derived/metadata/<source-id>.ocr.json`, and both artifacts linked from the source manifest via
+  `derived_artifacts`
 - projects may set either class to `none`, `excerpt`, or `full` through
   `sources.summarize_in_repo_extracts_as` and `sources.summarize_external_extracts_as`
 - when the mode is `none`, the `## Extract` section is omitted entirely
@@ -685,7 +687,7 @@ Current implementation:
 - PDF ingest first uses deterministic local extraction for text-bearing PDFs. Image-only PDFs and
   image sources only enter OCR when `sources.ocr_enabled` is true; the current local provider reads
   adjacent sidecar text files named with `sources.ocr_sidecar_suffix` and writes normalized output
-  under `derived/ocr/`.
+  under `derived/ocr/` plus sidecar checksum metadata under `derived/metadata/`.
 - `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
   ingested, or points back to `wiki status` for batch follow-up.
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
@@ -722,9 +724,11 @@ For harder formats, ingestion may optionally invoke:
 These outputs should be stored as **derived artifacts**, not mixed directly into raw source files.
 Current OCR support is explicitly configured and local: `sources.ocr_enabled: true` with
 `sources.ocr_provider: sidecar-text` reads UTF-8 sidecar text next to the resolved source artifact
-using `sources.ocr_sidecar_suffix` and records the resulting artifact under `derived/ocr/`.
-Unconfigured, missing-sidecar, invalid UTF-8, and empty OCR text cases fail with deterministic
-one-line ingest errors.
+using `sources.ocr_sidecar_suffix`, records the resulting artifact under `derived/ocr/`, and records
+sidecar ref/checksum metadata under `derived/metadata/` so sidecar changes invalidate no-op ingest.
+For copied external sources, sidecar lookup first checks next to the stored source artifact and then
+next to the original local source path. Unconfigured, missing-sidecar, invalid UTF-8, and empty OCR
+text cases fail with deterministic one-line ingest errors.
 
 ## 15. Idempotency and Atomicity
 

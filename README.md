@@ -144,8 +144,8 @@ Not implemented yet:
 Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
 `derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
 Image sources and image-only PDFs can use explicitly configured sidecar-text OCR; extracted OCR text
-is written under `derived/ocr/`, linked from the source manifest, and kept separate from parsed PDF
-artifacts.
+is written under `derived/ocr/` with sidecar checksum metadata under `derived/metadata/`, linked from
+the source manifest, and kept separate from parsed PDF artifacts.
 
 ## Documentation
 

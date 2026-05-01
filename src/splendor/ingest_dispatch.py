@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from pypdf import PdfReader
 from splendor.layout import ResolvedLayout
 from splendor.schemas import SourceRecord
 from splendor.state.source_resolver import ResolvedSource
+from splendor.utils.hashing import sha256_file
 
 TEXT_SOURCE_TYPES = {
     "md",
@@ -40,6 +42,11 @@ class DispatchedSourceContent:
     derived_artifact_path: Path | None = None
     derived_artifact_content: str | None = None
     derived_artifact_label: str = "Parsed artifact"
+    metadata_artifact_path: Path | None = None
+    metadata_artifact_content: str | None = None
+    input_artifact_path: Path | None = None
+    input_artifact_ref: str | None = None
+    input_artifact_checksum: str | None = None
 
 
 def dispatch_source_content(
@@ -117,10 +124,12 @@ def _extract_ocr_source(
         msg = f"OCR provider is not supported: {config.sources.ocr_provider}"
         raise ValueError(msg)
 
-    sidecar_path = _ocr_sidecar_path(
-        resolved_source.resolved_path,
+    sidecar_path = _resolve_ocr_sidecar_path(
+        source,
+        resolved_source,
         sidecar_suffix=config.sources.ocr_sidecar_suffix,
     )
+    sidecar_ref = _path_ref_for_sidecar(layout.root, sidecar_path)
     if not sidecar_path.is_file():
         msg = f"OCR sidecar text is missing for {resolved_source.resolved_ref}: {sidecar_path.name}"
         raise ValueError(msg)
@@ -136,17 +145,74 @@ def _extract_ocr_source(
         msg = f"OCR sidecar text is empty for {resolved_source.resolved_ref}: {sidecar_path.name}"
         raise ValueError(msg)
 
+    sidecar_checksum = sha256_file(sidecar_path)
+    metadata_content = _ocr_metadata_content(
+        source=source,
+        resolved_source=resolved_source,
+        sidecar_ref=sidecar_ref,
+        sidecar_checksum=sidecar_checksum,
+        provider=config.sources.ocr_provider,
+        sidecar_suffix=config.sources.ocr_sidecar_suffix,
+    )
     return DispatchedSourceContent(
         text=extracted_text,
         derived_artifact_path=layout.derived_ocr_dir / f"{source.source_id}.txt",
         derived_artifact_content=f"{extracted_text}\n",
         derived_artifact_label="OCR artifact",
+        metadata_artifact_path=layout.derived_metadata_dir / f"{source.source_id}.ocr.json",
+        metadata_artifact_content=metadata_content,
+        input_artifact_path=sidecar_path,
+        input_artifact_ref=sidecar_ref,
+        input_artifact_checksum=sidecar_checksum,
     )
-
-
-def _ocr_sidecar_path(path: Path, *, sidecar_suffix: str) -> Path:
-    return Path(f"{path}{sidecar_suffix}")
 
 
 def _normalize_ocr_text(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def _resolve_ocr_sidecar_path(
+    source: SourceRecord,
+    resolved_source: ResolvedSource,
+    *,
+    sidecar_suffix: str,
+) -> Path:
+    candidates = [Path(f"{resolved_source.resolved_path}{sidecar_suffix}")]
+    if source.source_ref_kind == "external_path" and source.source_ref:
+        source_ref_path = Path(source.source_ref).expanduser()
+        if source_ref_path.is_absolute():
+            candidates.append(Path(f"{source_ref_path}{sidecar_suffix}"))
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+def _path_ref_for_sidecar(root: Path, sidecar_path: Path) -> str:
+    resolved = sidecar_path.expanduser().resolve()
+    try:
+        return resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def _ocr_metadata_content(
+    *,
+    source: SourceRecord,
+    resolved_source: ResolvedSource,
+    sidecar_ref: str,
+    sidecar_checksum: str,
+    provider: str,
+    sidecar_suffix: str,
+) -> str:
+    payload = {
+        "kind": "ocr_metadata",
+        "source_id": source.source_id,
+        "provider": provider,
+        "sidecar_suffix": sidecar_suffix,
+        "sidecar_ref": sidecar_ref,
+        "sidecar_checksum": sidecar_checksum,
+        "resolved_source_ref": resolved_source.resolved_ref,
+    }
+    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
