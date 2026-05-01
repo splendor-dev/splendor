@@ -150,6 +150,16 @@ Implemented fields:
   source version, and queues ingest through the same queue handoff used by `add-source`.
 - Refresh uses the queue ledger directly, so active leases remain protected and dead-lettered jobs
   still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
+- Text-bearing PDF sources are routed through source-type dispatch during ingest. The source
+  manifest keeps the same `source_ref`, `source_ref_kind`, and `storage_mode` contract as
+  text-native sources, while extracted text artifacts are recorded in `derived_artifacts`.
+
+### Derived artifacts
+
+`derived_artifacts` stores repo-relative paths to repairable machine-generated artifacts derived
+from the source. Current runtime support writes parsed text from text-bearing PDFs to
+`derived/parsed/<source-id>.txt`; lint and health validate that listed artifacts are repo-relative,
+remain under `derived/`, and exist on disk. OCR/image-derived artifacts are intentionally deferred.
 
 ### Recommended default policy
 

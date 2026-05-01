@@ -3,7 +3,9 @@ from pathlib import Path
 
 import yaml
 
+from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
+from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_question, create_task
 from splendor.commands.query import run_query
@@ -127,6 +129,21 @@ def test_run_query_filters_by_source_ref_and_allows_filter_only_lookup(tmp_path:
     assert result.filters.source_id == added.source_id
     assert result.match_count == 1
     assert result.matches[0].path == "wiki/topics/briefing.md"
+
+
+def test_run_query_finds_extracted_pdf_source_summary_text(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "dispatch.pdf"
+    write_text_pdf(source, ["Extracted PDF dispatch evidence"])
+    added = add_source(tmp_path, source)
+    ingest_source(tmp_path, added.source_id)
+
+    result = run_query(tmp_path, "dispatch evidence", source_id=added.source_id)
+
+    assert result.match_count == 1
+    assert result.matches[0].kind == "source-summary"
+    assert result.matches[0].source_refs == [added.source_id]
+    assert "Extracted PDF dispatch evidence" in result.matches[0].snippet
 
 
 def test_run_query_rejects_unknown_source_filter(tmp_path: Path) -> None:

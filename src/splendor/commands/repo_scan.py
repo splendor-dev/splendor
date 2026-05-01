@@ -7,14 +7,15 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from splendor.commands.ingest import SUPPORTED_SOURCE_TYPES
 from splendor.config import load_config
+from splendor.ingest_dispatch import SUPPORTED_SOURCE_TYPES
 from splendor.layout import resolve_layout
 from splendor.schemas.types import SourceClass
 from splendor.state.source_registry import register_source
 
-_CODE_EXTENSIONS = SUPPORTED_SOURCE_TYPES - {"json", "md", "txt", "yaml", "yml"}
 _CONFIG_EXTENSIONS = {"json", "yaml", "yml"}
+_DOCUMENTATION_EXTENSIONS = {"md", "pdf", "txt"}
+_CODE_EXTENSIONS = SUPPORTED_SOURCE_TYPES - _CONFIG_EXTENSIONS - _DOCUMENTATION_EXTENSIONS
 _IGNORED_TOP_LEVEL_DIRS = {
     ".git",
     ".pytest_cache",
@@ -173,7 +174,7 @@ def _ignored_top_level_dirs(root: Path, layout) -> set[str]:
 
 def _classify_path(path: Path, relative_path: str) -> SourceClass:
     suffix = path.suffix.lstrip(".")
-    if suffix in {"md", "txt"}:
+    if suffix in _DOCUMENTATION_EXTENSIONS:
         return "documentation"
     if suffix in _CONFIG_EXTENSIONS or relative_path.startswith(".github/workflows/"):
         return "configuration"

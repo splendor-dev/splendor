@@ -231,6 +231,22 @@ def test_run_lint_checks_reports_invalid_source_manifest(tmp_path: Path) -> None
     assert str(tmp_path) not in result.issues[0].message
 
 
+def test_run_lint_checks_reports_missing_source_derived_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={"derived_artifacts": ["derived/parsed/missing.txt"]}
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    result = _run_lint(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["missing-source-derived-artifact"]
+    assert result.issues[0].path == added.manifest_path.relative_to(tmp_path).as_posix()
+
+
 def test_run_lint_checks_reports_missing_wiki_refs_and_related_pages(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     _write_wiki_page(

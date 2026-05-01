@@ -4,8 +4,10 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pypdf import PdfWriter
 
 import splendor.utils.contradictions as contradictions_module
+from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import (
     drain_pending_ingest_jobs,
@@ -209,6 +211,103 @@ def test_ingest_source_rejects_unsupported_type(tmp_path: Path) -> None:
     assert run_record.page_ids == []
     assert run_record.output_refs == []
     assert not (tmp_path / "wiki" / "sources" / f"{added.source_id}.md").exists()
+
+
+def test_ingest_source_pdf_writes_parsed_artifact_and_links_manifest(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "dispatch.pdf"
+    write_text_pdf(
+        source,
+        [
+            "Splendor PDF dispatch claim",
+            "Text-bearing PDF extraction works.",
+        ],
+    )
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    frontmatter, body = parse_frontmatter(result.page_path)
+    assert frontmatter.tags == ["source-summary", "pdf"]
+    assert "Parsed artifact: `derived/parsed/" in body
+    assert "Splendor PDF dispatch claim" in body
+    assert "Text-bearing PDF extraction works." in body
+
+    parsed_artifact = tmp_path / "derived" / "parsed" / f"{added.source_id}.txt"
+    assert parsed_artifact.read_text(encoding="utf-8") == (
+        "Splendor PDF dispatch claim\nText-bearing PDF extraction works.\n"
+    )
+
+    source_record = load_source_record(added.manifest_path)
+    artifact_ref = parsed_artifact.relative_to(tmp_path).as_posix()
+    assert source_record.source_ref == "dispatch.pdf"
+    assert source_record.storage_mode == "none"
+    assert source_record.derived_artifacts == [artifact_ref]
+    assert any(link.path_ref == artifact_ref for link in source_record.provenance_links)
+
+    run_record = load_run_record(result.run_path)
+    assert artifact_ref in run_record.output_refs
+    assert any(
+        link.path_ref == artifact_ref
+        and link.source_id == added.source_id
+        and link.run_id == result.run_id
+        and link.role == "output"
+        for link in run_record.provenance_links
+    )
+
+
+def test_ingest_source_pdf_recreates_missing_parsed_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "dispatch.pdf"
+    write_text_pdf(source, ["Splendor PDF dispatch claim"])
+    added = add_source(tmp_path, source)
+
+    first = ingest_source(tmp_path, added.source_id)
+    parsed_artifact = tmp_path / "derived" / "parsed" / f"{added.source_id}.txt"
+    parsed_artifact.unlink()
+
+    second = ingest_source(tmp_path, added.source_id)
+
+    assert first.no_op is False
+    assert second.no_op is False
+    assert parsed_artifact.read_text(encoding="utf-8") == "Splendor PDF dispatch claim\n"
+
+
+def test_ingest_source_pdf_without_text_fails_without_ocr(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "scan.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with source.open("wb") as handle:
+        writer.write(handle)
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="OCR/image extraction is not supported"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.derived_artifacts == []
+    assert not (tmp_path / "derived" / "parsed" / f"{added.source_id}.txt").exists()
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert "OCR/image extraction is not supported" in (queue_record.last_error or "")
+
+
+def test_ingest_source_malformed_pdf_uses_stable_error(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "broken.pdf"
+    source.write_bytes(b"%PDF-1.4\nnot a valid pdf\n")
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="^PDF text extraction failed for broken.pdf$"):
+        ingest_source(tmp_path, added.source_id)
+
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.last_error == "PDF text extraction failed for broken.pdf"
 
 
 def test_ingest_source_rejects_invalid_utf8_text(tmp_path: Path) -> None:

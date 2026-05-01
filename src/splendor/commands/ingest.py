@@ -10,6 +10,7 @@ from pathlib import Path
 
 from splendor import __version__
 from splendor.config import load_config
+from splendor.ingest_dispatch import dispatch_source_content
 from splendor.layout import resolve_layout
 from splendor.schemas import (
     KnowledgePageFrontmatter,
@@ -58,25 +59,6 @@ from splendor.utils.wiki import (
     update_index_content,
 )
 
-SUPPORTED_SOURCE_TYPES = {
-    "md",
-    "txt",
-    "json",
-    "yaml",
-    "yml",
-    "py",
-    "js",
-    "ts",
-    "tsx",
-    "rs",
-    "go",
-    "java",
-    "c",
-    "cpp",
-    "h",
-    "hpp",
-    "sh",
-}
 _MARKDOWN_HEADING_PATTERN = re.compile(r"^(?P<level>#{1,6})\s+(?P<title>.+?)\s*#*\s*$")
 _CLAIM_SECTION_HEADINGS = {
     "core claims",
@@ -180,7 +162,7 @@ def _rendered_extract(text: str, mode: SummaryMode) -> str | None:
 def _build_summary(source: SourceRecord, source_text: str) -> str:
     path_fragment = canonical_source_ref(source)
     content_summary = _build_content_summary(source_text)
-    if source.source_type in {"md", "txt"} and content_summary is not None:
+    if source.source_type in {"md", "txt", "pdf"} and content_summary is not None:
         return f"{content_summary} registered from `{path_fragment}`."
     return (
         f"This page records deterministic ingestion output for source `{source.source_id}`, "
@@ -329,6 +311,7 @@ def _source_provenance_links(
     run_id: str,
     page_id: str,
     page_ref: str,
+    derived_artifacts: list[str],
     existing_links: list[ProvenanceLink],
 ) -> list[ProvenanceLink]:
     return dedupe_provenance_links(
@@ -336,6 +319,10 @@ def _source_provenance_links(
             *existing_links,
             make_provenance_link(page_id=page_id, path_ref=page_ref, role="generated-page"),
             make_provenance_link(run_id=run_id, source_id=source_id, role="output"),
+            *[
+                make_provenance_link(source_id=source_id, path_ref=artifact, role="output")
+                for artifact in derived_artifacts
+            ],
         ]
     )
 
@@ -362,6 +349,7 @@ def _run_success_provenance_links(
     page_id: str,
     page_ref: str,
     run_id: str,
+    derived_artifacts: list[str],
 ) -> list[ProvenanceLink]:
     return dedupe_provenance_links(
         [
@@ -372,6 +360,15 @@ def _run_success_provenance_links(
             ),
             make_provenance_link(page_id=page_id, path_ref=page_ref, role="generated-page"),
             make_provenance_link(run_id=run_id, page_id=page_id, role="output"),
+            *[
+                make_provenance_link(
+                    run_id=run_id,
+                    source_id=source_id,
+                    path_ref=artifact,
+                    role="output",
+                )
+                for artifact in derived_artifacts
+            ],
         ]
     )
 
@@ -426,6 +423,14 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     run_path = layout.runs_dir / f"{source.last_run_id}.json"
     if not run_path.exists():
         return False
+
+    for artifact_ref in source.derived_artifacts:
+        try:
+            artifact_path = resolve_workspace_path(root, artifact_ref, context="Derived artifact")
+        except ValueError:
+            return False
+        if not artifact_path.is_file():
+            return False
 
     run = load_run_record(run_path)
     return run.status == "succeeded" and run.pipeline_version == __version__
@@ -578,6 +583,7 @@ def _commit_success(
         wiki_payload.page_path,
         layout.index_file,
         layout.log_file,
+        *[path for path, _content in wiki_payload.extra_writes],
     ]
     previous_content: dict[Path, str | None] = {}
     for path in tracked_paths:
@@ -752,15 +758,14 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         )
         write_run_record(run_path, run)
 
-        if source.source_type not in SUPPORTED_SOURCE_TYPES:
-            msg = f"Unsupported source type for ingestion: {source.source_type}"
-            raise ValueError(msg)
-
-        try:
-            source_text = resolved_source.resolved_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError as exc:
-            msg = f"Source file is not valid UTF-8 text: {resolved_source.resolved_path}"
-            raise ValueError(msg) from exc
+        dispatched_content = dispatch_source_content(source, resolved_source, layout=layout)
+        source_text = dispatched_content.text
+        derived_artifact_ref = (
+            _relative_to_root(root, dispatched_content.derived_artifact_path)
+            if dispatched_content.derived_artifact_path is not None
+            else None
+        )
+        derived_artifacts = [derived_artifact_ref] if derived_artifact_ref is not None else []
 
         extract_mode = _summary_mode_for(config, source)
         page_path = _page_path_for(layout.wiki_sources_dir, source.source_id)
@@ -792,6 +797,11 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 f"- Registered path: `{registered_path}`",
                 f"- Source file: `{resolved_source.resolved_ref}`",
             ]
+            + (
+                [f"- Parsed artifact: `{derived_artifact_ref}`"]
+                if derived_artifact_ref is not None
+                else []
+            )
         )
         key_facts = [
             f"Source ID: `{source.source_id}`",
@@ -805,6 +815,11 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         provenance_lines = [
             f"Manifest: `{_relative_to_root(root, manifest_path)}`",
             f"{resolved_source.content_origin_label}: `{resolved_source.resolved_ref}`",
+            *(
+                [f"Parsed artifact: `{derived_artifact_ref}`"]
+                if derived_artifact_ref is not None
+                else []
+            ),
             f"Run ID: `{run_id}`",
             f"Pipeline version: `{__version__}`",
         ]
@@ -861,11 +876,13 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 "last_run_id": run_id,
                 "generated_by_run_ids": sorted(set([*source.generated_by_run_ids, run_id])),
                 "linked_pages": sorted(set([*source.linked_pages, page_relpath])),
+                "derived_artifacts": sorted(set([*source.derived_artifacts, *derived_artifacts])),
                 "provenance_links": _source_provenance_links(
                     source_id=source.source_id,
                     run_id=run_id,
                     page_id=source.source_id,
                     page_ref=page_relpath,
+                    derived_artifacts=derived_artifacts,
                     existing_links=source.provenance_links,
                 ),
             }
@@ -878,6 +895,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                     page_relpath,
                     _relative_to_root(root, layout.index_file),
                     _relative_to_root(root, layout.log_file),
+                    *derived_artifacts,
                     *[
                         _relative_to_root(root, path)
                         for path, _content in contradiction_review.page_updates
@@ -899,6 +917,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                     page_id=source.source_id,
                     page_ref=page_relpath,
                     run_id=run_id,
+                    derived_artifacts=derived_artifacts,
                 ),
             }
         )
@@ -925,6 +944,17 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 index_content=index_content,
                 log_content=log_content,
                 extra_writes=[
+                    *(
+                        [
+                            (
+                                dispatched_content.derived_artifact_path,
+                                dispatched_content.derived_artifact_content,
+                            )
+                        ]
+                        if dispatched_content.derived_artifact_path is not None
+                        and dispatched_content.derived_artifact_content is not None
+                        else []
+                    ),
                     *contradiction_review.page_updates,
                     *[
                         (update.task_path, update.content)

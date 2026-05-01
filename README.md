@@ -102,7 +102,7 @@ The companion-repo guidance and sample agent instructions live in
 
 - A hosted service
 - A full web UI product beyond the local read-only inspection shell
-- An OCR or rich-media ingestion pipeline in the current MVP
+- An OCR or image-ingestion pipeline in the current MVP
 - A mandatory GitHub-only workflow
 
 ## Current MVP Surface
@@ -141,6 +141,10 @@ Not implemented yet:
 - mutating web UI actions such as add-source forms
 - changed-files-driven refresh suggestions
 
+Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
+`derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
+Scanned/image-only PDFs still fail deterministically until the later OCR slice.
+
 ## Documentation
 
 - [docs/quickstart.md](docs/quickstart.md)
@@ -153,12 +157,12 @@ Not implemented yet:
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M11-P2.1`
-- Current planned slice: `M11-P3`
-- Current PR sub-slice: `M11-P3.1`
+- Previous completed PR sub-slice: `M11-P3.1`
+- Current planned slice: `M12-P1`
+- Current PR sub-slice: `M12-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M12-P1`
-- Next planned PR sub-slice: `M12-P1.1`
+- Next planned slice: `M12-P2`
+- Next planned PR sub-slice: `M12-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -197,6 +201,6 @@ explicit dead-letter records, and stale-lease recovery.
 `M11-P1.1` is implemented: it adds deterministic bulk source registration, explicit source
 refresh through the existing ingest queue, and readable source lookup by title or path without
 changing canonical source IDs. `M11-P2.1` is implemented: it adds CLI-first topic scaffolding,
-deterministic templates, and wiki index rebuild support. The current PR sub-slice is `M11-P3.1`,
-which adds query filters for tags/source refs and a compact agent-context handoff mode before the
-roadmap moves to richer source handling in `M12-P1`.
+deterministic templates, and wiki index rebuild support. `M11-P3.1` is implemented: it adds query
+filters for tags/source refs and a compact agent-context handoff mode. The current PR sub-slice is
+`M12-P1.1`, which adds rich-source dispatch and the first deterministic text-bearing PDF path.

@@ -628,6 +628,8 @@ Current implementation:
 
 - workspace-backed in-repo text sources default to `excerpt`
 - copied or external text sources default to `full`
+- text-bearing PDF sources are parsed through source-type dispatch, with extracted text written to
+  `derived/parsed/<source-id>.txt` and linked from the source manifest via `derived_artifacts`
 - projects may set either class to `none`, `excerpt`, or `full` through
   `sources.summarize_in_repo_extracts_as` and `sources.summarize_external_extracts_as`
 - when the mode is `none`, the `## Extract` section is omitted entirely
@@ -677,6 +679,8 @@ Current implementation:
   templates for default synthesis, research synthesis, and issue tracking.
 - `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
   `splendor wiki suggest <source-id>` command.
+- PDF ingest is limited to deterministic local extraction for text-bearing PDFs. Image-only or
+  otherwise unextractable PDFs fail with a deterministic error and do not invoke OCR.
 - `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
   ingested, or points back to `wiki status` for batch follow-up.
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
@@ -698,7 +702,6 @@ Current implementation:
   slice.
 
 Later optional support:
-- PDF
 - image-based sources
 - OCR-derived flows
 - audio/transcript flows

@@ -393,6 +393,8 @@ def _run_reference_integrity_checks(
     for manifest in inventory.source_manifests:
         if manifest.record is None:
             continue
+        checked_count += len(manifest.record.derived_artifacts)
+        issues.extend(_derived_artifact_issues(root, layout, manifest))
         checked_count += len(manifest.record.linked_pages)
         issues.extend(_linked_page_issues(root, manifest, wiki_by_path))
         checked_count += len(manifest.record.provenance_links)
@@ -413,6 +415,53 @@ def _run_reference_integrity_checks(
     issues.extend(planning_state_issues)
 
     return _LintCheckResult(checked_count=checked_count, issues=issues)
+
+
+def _derived_artifact_issues(
+    root: Path, layout: ResolvedLayout, manifest: _SourceInventory
+) -> list[MaintenanceIssue]:
+    if manifest.record is None:
+        return []
+    issues: list[MaintenanceIssue] = []
+    manifest_relpath = workspace_relative_path(root, manifest.manifest_path)
+    for artifact_ref in manifest.record.derived_artifacts:
+        try:
+            artifact_path = resolve_workspace_path(root, artifact_ref, context="Derived artifact")
+        except ValueError as exc:
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-source-derived-artifact",
+                    message=str(exc),
+                    path=manifest_relpath,
+                    record_id=manifest.record.source_id,
+                    check_name="source-derived-artifacts",
+                )
+            )
+            continue
+        try:
+            artifact_path.relative_to(layout.derived_dir.resolve())
+        except ValueError:
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-source-derived-artifact",
+                    message=f"Source derived artifact is outside derived/: {artifact_ref}",
+                    path=manifest_relpath,
+                    record_id=manifest.record.source_id,
+                    check_name="source-derived-artifacts",
+                )
+            )
+            continue
+        if not artifact_path.is_file():
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-source-derived-artifact",
+                    message=f"Source derived artifact does not exist: {artifact_ref}",
+                    path=manifest_relpath,
+                    record_id=manifest.record.source_id,
+                    check_name="source-derived-artifacts",
+                )
+            )
+    return issues
 
 
 def _planning_state_issues(root: Path) -> tuple[int, list[MaintenanceIssue]]:

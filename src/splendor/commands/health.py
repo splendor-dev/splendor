@@ -130,6 +130,43 @@ def _load_source_records(
                 check_name="source-storage",
             )
             continue
+        for artifact_ref in source.derived_artifacts:
+            try:
+                artifact_path = resolve_workspace_path(
+                    root, artifact_ref, context="Source derived artifact"
+                )
+            except ValueError as exc:
+                _append_issue(
+                    issues,
+                    code="invalid-source-derived-artifact",
+                    message=str(exc),
+                    path=manifest_relpath,
+                    record_id=source_id,
+                    check_name="source-derived-artifacts",
+                )
+                continue
+            try:
+                artifact_path.relative_to(layout.derived_dir.resolve())
+            except ValueError:
+                _append_issue(
+                    issues,
+                    code="invalid-source-derived-artifact",
+                    message=f"Source derived artifact is outside derived/: {artifact_ref}",
+                    path=manifest_relpath,
+                    record_id=source_id,
+                    check_name="source-derived-artifacts",
+                )
+                continue
+            if not artifact_path.is_file():
+                _append_issue(
+                    issues,
+                    code="missing-source-derived-artifact",
+                    message=f"Source derived artifact does not exist: {artifact_ref}",
+                    path=manifest_relpath,
+                    record_id=source_id,
+                    check_name="source-derived-artifacts",
+                )
+                continue
         records[source_id] = (manifest_path, source)
 
     return records, invalid_ids, checked_count
