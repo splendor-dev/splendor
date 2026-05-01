@@ -164,6 +164,27 @@ def _relative(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
+def _require_initialized_wiki(root: Path, layout) -> None:
+    missing = [
+        _relative(root, path) for path in (layout.index_file, layout.log_file) if not path.exists()
+    ]
+    if missing:
+        joined = ", ".join(missing)
+        msg = f"Workspace is missing required wiki files: {joined}. Run `splendor init`."
+        raise ValueError(msg)
+
+
+def _validated_source_refs(layout, source_refs: list[str]) -> list[str]:
+    validated_refs = _dedupe_preserve_order(source_refs)
+    for source_ref in validated_refs:
+        manifest_path = layout.source_records_dir / f"{source_ref}.json"
+        if not manifest_path.exists():
+            msg = f"Unknown source ref for topic page: {source_ref}"
+            raise ValueError(msg)
+        load_source_record(manifest_path)
+    return validated_refs
+
+
 def _slugify_title(title: str) -> str:
     slug = "-".join(_SLUG_TOKEN_PATTERN.findall(title.lower()))
     if not slug:
@@ -239,6 +260,8 @@ def add_topic_page(
         raise ValueError(msg)
     config = load_config(root)
     layout = resolve_layout(root, config)
+    _require_initialized_wiki(root, layout)
+    validated_source_refs = _validated_source_refs(layout, source_refs or [])
     slug = _slugify_title(title)
     page_id = f"topic-{slug}"
     page_path = layout.wiki_dir / "topics" / f"{slug}.md"
@@ -265,7 +288,7 @@ def add_topic_page(
         page_id=page_id,
         status="active",
         review_state="draft",
-        source_refs=_dedupe_preserve_order(source_refs or []),
+        source_refs=validated_source_refs,
         tags=_dedupe_preserve_order(tags or []),
         confidence=0.0,
     )
