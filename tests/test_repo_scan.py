@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
@@ -23,6 +24,7 @@ def test_repo_scan_registers_and_classifies_supported_workspace_files(tmp_path: 
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
     (docs_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    write_text_pdf(docs_dir / "research.pdf", ["Research PDF"])
     src_dir = tmp_path / "src"
     src_dir.mkdir()
     (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
@@ -35,12 +37,12 @@ def test_repo_scan_registers_and_classifies_supported_workspace_files(tmp_path: 
 
     result = scan_repo(tmp_path)
 
-    assert result.scanned == 6
-    assert result.registered == 6
+    assert result.scanned == 7
+    assert result.registered == 7
     assert result.already_registered == 0
     assert result.class_counts == {
         "code": 2,
-        "documentation": 3,
+        "documentation": 4,
         "configuration": 1,
         "other": 0,
     }
@@ -48,6 +50,7 @@ def test_repo_scan_registers_and_classifies_supported_workspace_files(tmp_path: 
     assert touched["AGENTS.md"].source_labels == ["agent-instructions"]
     assert touched["README.md"].source_class == "documentation"
     assert touched["docs/guide.md"].source_class == "documentation"
+    assert touched["docs/research.pdf"].source_class == "documentation"
     assert touched["src/main.py"].source_class == "code"
     assert touched["tests/test_main.py"].source_labels == ["test"]
     assert touched[".github/workflows/ci.yml"].source_class == "configuration"

@@ -361,7 +361,12 @@ def _run_success_provenance_links(
             make_provenance_link(page_id=page_id, path_ref=page_ref, role="generated-page"),
             make_provenance_link(run_id=run_id, page_id=page_id, role="output"),
             *[
-                make_provenance_link(source_id=source_id, path_ref=artifact, role="output")
+                make_provenance_link(
+                    run_id=run_id,
+                    source_id=source_id,
+                    path_ref=artifact,
+                    role="output",
+                )
                 for artifact in derived_artifacts
             ],
         ]
@@ -418,6 +423,14 @@ def _is_no_op(root: Path, layout, source: SourceRecord) -> bool:
     run_path = layout.runs_dir / f"{source.last_run_id}.json"
     if not run_path.exists():
         return False
+
+    for artifact_ref in source.derived_artifacts:
+        try:
+            artifact_path = resolve_workspace_path(root, artifact_ref, context="Derived artifact")
+        except ValueError:
+            return False
+        if not artifact_path.is_file():
+            return False
 
     run = load_run_record(run_path)
     return run.status == "succeeded" and run.pipeline_version == __version__

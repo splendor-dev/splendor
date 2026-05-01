@@ -73,7 +73,7 @@ def _extract_pdf_source(
         reader = PdfReader(str(resolved_source.resolved_path))
         page_texts = [page.extract_text() or "" for page in reader.pages]
     except Exception as exc:
-        msg = f"PDF text extraction failed for {resolved_source.resolved_ref}: {exc}"
+        msg = f"PDF text extraction failed for {resolved_source.resolved_ref}"
         raise ValueError(msg) from exc
 
     extracted_text = _normalize_pdf_text(page_texts)

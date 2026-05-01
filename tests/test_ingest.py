@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 import yaml
-from pypdf import PdfReader, PdfWriter
-from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+from pypdf import PdfWriter
 
 import splendor.utils.contradictions as contradictions_module
+from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import (
     drain_pending_ingest_jobs,
@@ -67,35 +67,6 @@ def rewrite_symlink(root: Path, source_id: str, target: Path) -> Path:
     symlink_path.parent.mkdir(parents=True, exist_ok=True)
     symlink_path.symlink_to(target)
     return symlink_path
-
-
-def write_text_pdf(path: Path, lines: list[str]) -> None:
-    writer = PdfWriter()
-    page = writer.add_blank_page(width=612, height=792)
-    font = DictionaryObject(
-        {
-            NameObject("/Type"): NameObject("/Font"),
-            NameObject("/Subtype"): NameObject("/Type1"),
-            NameObject("/BaseFont"): NameObject("/Helvetica"),
-        }
-    )
-    font_ref = writer._add_object(font)
-    page[NameObject("/Resources")] = DictionaryObject(
-        {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})}
-    )
-    text_ops = ["BT", "/F1 12 Tf", "72 720 Td"]
-    for index, line in enumerate(lines):
-        if index > 0:
-            text_ops.append("0 -18 Td")
-        escaped = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-        text_ops.append(f"({escaped}) Tj")
-    text_ops.append("ET")
-    stream = DecodedStreamObject()
-    stream.set_data(("\n".join(text_ops) + "\n").encode("utf-8"))
-    page[NameObject("/Contents")] = writer._add_object(stream)
-    with path.open("wb") as handle:
-        writer.write(handle)
-    assert PdfReader(str(path)).pages[0].extract_text()
 
 
 def test_ingest_source_happy_path(tmp_path: Path) -> None:
@@ -277,7 +248,30 @@ def test_ingest_source_pdf_writes_parsed_artifact_and_links_manifest(tmp_path: P
 
     run_record = load_run_record(result.run_path)
     assert artifact_ref in run_record.output_refs
-    assert any(link.path_ref == artifact_ref for link in run_record.provenance_links)
+    assert any(
+        link.path_ref == artifact_ref
+        and link.source_id == added.source_id
+        and link.run_id == result.run_id
+        and link.role == "output"
+        for link in run_record.provenance_links
+    )
+
+
+def test_ingest_source_pdf_recreates_missing_parsed_artifact(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "dispatch.pdf"
+    write_text_pdf(source, ["Splendor PDF dispatch claim"])
+    added = add_source(tmp_path, source)
+
+    first = ingest_source(tmp_path, added.source_id)
+    parsed_artifact = tmp_path / "derived" / "parsed" / f"{added.source_id}.txt"
+    parsed_artifact.unlink()
+
+    second = ingest_source(tmp_path, added.source_id)
+
+    assert first.no_op is False
+    assert second.no_op is False
+    assert parsed_artifact.read_text(encoding="utf-8") == "Splendor PDF dispatch claim\n"
 
 
 def test_ingest_source_pdf_without_text_fails_without_ocr(tmp_path: Path) -> None:
@@ -300,6 +294,20 @@ def test_ingest_source_pdf_without_text_fails_without_ocr(tmp_path: Path) -> Non
     queue_record = load_queue_item(queue_path)
     assert queue_record.status == "failed"
     assert "OCR/image extraction is not supported" in (queue_record.last_error or "")
+
+
+def test_ingest_source_malformed_pdf_uses_stable_error(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "broken.pdf"
+    source.write_bytes(b"%PDF-1.4\nnot a valid pdf\n")
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="^PDF text extraction failed for broken.pdf$"):
+        ingest_source(tmp_path, added.source_id)
+
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.last_error == "PDF text extraction failed for broken.pdf"
 
 
 def test_ingest_source_rejects_invalid_utf8_text(tmp_path: Path) -> None:

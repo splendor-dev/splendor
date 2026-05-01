@@ -2,9 +2,8 @@ import json
 from pathlib import Path
 
 import yaml
-from pypdf import PdfWriter
-from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
+from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
@@ -12,28 +11,6 @@ from splendor.commands.planning import create_question, create_task
 from splendor.commands.query import run_query
 from splendor.schemas import KnowledgePageFrontmatter
 from splendor.state.query_snapshot import load_query_snapshot
-
-
-def write_text_pdf(path: Path, text: str) -> None:
-    writer = PdfWriter()
-    page = writer.add_blank_page(width=612, height=792)
-    font = DictionaryObject(
-        {
-            NameObject("/Type"): NameObject("/Font"),
-            NameObject("/Subtype"): NameObject("/Type1"),
-            NameObject("/BaseFont"): NameObject("/Helvetica"),
-        }
-    )
-    font_ref = writer._add_object(font)
-    page[NameObject("/Resources")] = DictionaryObject(
-        {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})}
-    )
-    stream = DecodedStreamObject()
-    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-    stream.set_data(f"BT\n/F1 12 Tf\n72 720 Td\n({escaped}) Tj\nET\n".encode())
-    page[NameObject("/Contents")] = writer._add_object(stream)
-    with path.open("wb") as handle:
-        writer.write(handle)
 
 
 def write_wiki_page(
@@ -157,7 +134,7 @@ def test_run_query_filters_by_source_ref_and_allows_filter_only_lookup(tmp_path:
 def test_run_query_finds_extracted_pdf_source_summary_text(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "dispatch.pdf"
-    write_text_pdf(source, "Extracted PDF dispatch evidence")
+    write_text_pdf(source, ["Extracted PDF dispatch evidence"])
     added = add_source(tmp_path, source)
     ingest_source(tmp_path, added.source_id)
 
