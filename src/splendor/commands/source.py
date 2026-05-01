@@ -68,13 +68,9 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     if not candidates:
         msg = f"Unknown source: {source_query}"
         raise FileNotFoundError(msg)
-    if len(candidates) > 1:
-        ids = ", ".join(candidate.source.source_id for candidate in candidates[:5])
-        suffix = "" if len(candidates) <= 5 else ", ..."
-        msg = f"Source lookup is ambiguous for {source_query!r}: {ids}{suffix}"
-        raise ValueError(msg)
+    requested_match = _select_refresh_candidate(source_query, candidates)
 
-    requested = candidates[0].source
+    requested = requested_match.source
     current_path = _refreshable_source_path(root, requested)
     current_checksum = sha256_file(current_path)
     changed = current_checksum != requested.checksum
@@ -91,7 +87,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     else:
         refreshed = RegisteredSource(
             record=requested,
-            manifest_path=candidates[0].manifest_path,
+            manifest_path=requested_match.manifest_path,
             stored_path=None,
             storage_mode=effective_storage_mode(requested),
             source_ref=canonical_source_ref(requested),
@@ -119,6 +115,29 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
         queue_path=queue_path,
         message="queued ingest",
     )
+
+
+def _select_refresh_candidate(
+    source_query: str, candidates: list[SourceLookupResult]
+) -> SourceLookupResult:
+    if len(candidates) == 1:
+        return candidates[0]
+
+    candidates_by_ref: dict[str, list[SourceLookupResult]] = {}
+    for candidate in candidates:
+        candidates_by_ref.setdefault(canonical_source_ref(candidate.source), []).append(candidate)
+
+    if len(candidates_by_ref) == 1:
+        return max(candidates, key=_latest_source_sort_key)
+
+    ids = ", ".join(candidate.source.source_id for candidate in candidates[:5])
+    suffix = "" if len(candidates) <= 5 else ", ..."
+    msg = f"Source lookup is ambiguous for {source_query!r}: {ids}{suffix}"
+    raise ValueError(msg)
+
+
+def _latest_source_sort_key(result: SourceLookupResult) -> tuple[str, str]:
+    return (result.source.added_at, result.source.source_id)
 
 
 def render_source_lookup_json(root: Path, results: list[SourceLookupResult]) -> str:

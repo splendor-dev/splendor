@@ -265,6 +265,23 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
     assert (tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").exists()
 
 
+def test_cli_source_refresh_by_path_uses_latest_matching_source_ref(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "ambiguous" not in out
+    assert "No source content change detected" in out
+
+
 def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -307,6 +324,58 @@ def test_cli_source_refresh_preserves_dead_letter_protection(tmp_path: Path, cap
     out = capsys.readouterr().out
     assert "dead-lettered" in out
     assert "splendor queue retry" in out
+
+
+def test_cli_bulk_add_source_queues_successes_before_later_registration_failure(
+    tmp_path: Path, capsys
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    workspace_source = repo_root / "brief.md"
+    external_source = external_dir / "outside.md"
+    workspace_source.write_text("# Brief\n", encoding="utf-8")
+    external_source.write_text("# Outside\n", encoding="utf-8")
+
+    main(["--root", str(repo_root), "init"])
+    capsys.readouterr()
+    exit_code = main(
+        [
+            "--root",
+            str(repo_root),
+            "add-source",
+            "--storage-mode",
+            "none",
+            str(workspace_source),
+            "--glob",
+            str(external_source),
+        ]
+    )
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "Registration failures: 1" in out
+    assert "Queued ingest jobs: 1" in out
+    source_id = next((repo_root / "state" / "manifests" / "sources").glob("*.json")).stem
+    assert (repo_root / "state" / "queue" / f"ingest-{source_id}.json").exists()
+
+
+def test_cli_bulk_add_source_returns_nonzero_when_queue_handoff_fails(
+    tmp_path: Path, capsys
+) -> None:
+    first = tmp_path / "first.md"
+    second = tmp_path / "second.md"
+    first.write_text("# First\n", encoding="utf-8")
+    second.write_text("# Second\n", encoding="utf-8")
+
+    exit_code = main(["--root", str(tmp_path), "add-source", "--glob", "*.md"])
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "Queue warnings: 2" in out
+    assert "Next: splendor init" in out
+    assert "Then: splendor ingest --pending" in out
 
 
 def test_cli_add_source_expands_user_paths(tmp_path: Path, capsys, monkeypatch) -> None:

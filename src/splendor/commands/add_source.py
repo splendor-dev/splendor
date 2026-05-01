@@ -41,10 +41,11 @@ def expand_source_paths(
         candidates.append(source_path)
 
     for pattern in glob_patterns or []:
-        if Path(pattern).is_absolute():
-            matches = [Path(match) for match in glob(pattern, recursive=True)]
+        expanded_pattern = str(Path(pattern).expanduser())
+        if Path(expanded_pattern).is_absolute():
+            matches = [Path(match) for match in glob(expanded_pattern, recursive=True)]
         else:
-            matches = list(root.glob(pattern))
+            matches = list(root.glob(expanded_pattern))
         candidates.extend(match for match in matches if match.is_file())
 
     for directory in directories or []:
@@ -90,21 +91,3 @@ def add_source(
         source_ref=registered.source_ref,
         already_registered=registered.already_registered,
     )
-
-
-def add_sources(
-    root: Path,
-    source_paths: list[Path],
-    *,
-    storage_mode: StorageMode | None = None,
-    capture_source_commit: bool | None = None,
-) -> list[AddSourceResult]:
-    return [
-        add_source(
-            root,
-            source_path,
-            storage_mode=storage_mode,
-            capture_source_commit=capture_source_commit,
-        )
-        for source_path in source_paths
-    ]

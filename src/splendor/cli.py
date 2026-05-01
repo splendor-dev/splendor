@@ -8,7 +8,7 @@ import shlex
 from pathlib import Path
 
 from splendor import __version__
-from splendor.commands.add_source import add_sources, expand_source_paths
+from splendor.commands.add_source import add_source, expand_source_paths
 from splendor.commands.brief import build_project_brief, render_project_brief_json
 from splendor.commands.file_answer import (
     default_answer_page_id,
@@ -550,21 +550,29 @@ def handle_add_source(args: argparse.Namespace) -> int:
         if not source_paths:
             print("Error: add-source requires a path, --glob match, or --dir with files")
             return 1
-        results = add_sources(
-            root,
-            source_paths,
-            storage_mode=args.storage_mode,
-            capture_source_commit=args.capture_source_commit,
-        )
     except (FileNotFoundError, IsADirectoryError, NotADirectoryError, ValueError) as exc:
         return _print_error(exc)
 
-    if len(results) > 1:
-        print(f"Registered sources: {sum(not result.already_registered for result in results)}")
-        print(f"Already registered: {sum(result.already_registered for result in results)}")
-        queued = 0
+    if len(source_paths) > 1:
+        results = []
+        registration_errors = 0
         queue_warnings = 0
-        for result in results:
+        missing_init_warning = False
+        queued = 0
+        for source_path in source_paths:
+            try:
+                result = add_source(
+                    root,
+                    source_path,
+                    storage_mode=args.storage_mode,
+                    capture_source_commit=args.capture_source_commit,
+                )
+            except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
+                registration_errors += 1
+                print(f"- {source_path}: registration failed: {_error_message(exc)}")
+                continue
+
+            results.append(result)
             action = "already registered" if result.already_registered else "registered"
             print(f"- {result.source_id} ({action}) {result.source_ref}")
             if result.already_registered:
@@ -573,21 +581,38 @@ def handle_add_source(args: argparse.Namespace) -> int:
                 enqueue_ingest_job(root, result.source_id)
             except (FileNotFoundError, RuntimeError, ValueError) as exc:
                 queue_warnings += 1
+                missing_init_warning = missing_init_warning or _is_missing_workspace_wiki_error(exc)
                 print(
                     f"  Warning: source registered but ingest was not queued: {_error_message(exc)}"
                 )
                 continue
             queued += 1
+
+        print(f"Registered sources: {sum(not result.already_registered for result in results)}")
+        print(f"Already registered: {sum(result.already_registered for result in results)}")
+        print(f"Registration failures: {registration_errors}")
         print(f"Queued ingest jobs: {queued}")
-        if queue_warnings:
-            print("Next: inspect warnings, then run splendor ingest --pending")
+        print(f"Queue warnings: {queue_warnings}")
+        if missing_init_warning:
+            print("Next: splendor init")
+            print("Then: splendor ingest --pending")
+        elif queue_warnings:
+            print("Next: splendor queue inspect")
         elif queued:
             print("Next: splendor ingest --pending")
         else:
             print("Next: splendor source lookup")
-        return 0
+        return 1 if registration_errors or queue_warnings else 0
 
-    result = results[0]
+    try:
+        result = add_source(
+            root,
+            source_paths[0],
+            storage_mode=args.storage_mode,
+            capture_source_commit=args.capture_source_commit,
+        )
+    except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
+        return _print_error(exc)
     action = "Already registered" if result.already_registered else "Registered"
     print(f"{action} source {result.source_id}")
     print(f"Manifest: {result.manifest_path}")
