@@ -11,6 +11,7 @@ import splendor.cli as cli_module
 from splendor import __version__
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
+from splendor.commands.source import refresh_source
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
@@ -345,6 +346,41 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
     refreshed_id = [path.stem for path in manifests if path.stem != original_id][0]
     assert f"Registered refreshed source {refreshed_id}" in out
     assert (tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").exists()
+
+
+def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert f"Matched existing source version {original_id}" in out
+    assert f"Registered refreshed source {original_id}" not in out
+
+
+def test_source_refresh_noop_returns_existing_materialized_path(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "--storage-mode", "copy", str(source)])
+    capsys.readouterr()
+
+    result = refresh_source(tmp_path, "brief.md")
+
+    assert result.changed is False
+    assert result.refreshed.stored_path == (
+        tmp_path / "raw" / "sources" / result.refreshed.record.source_id / "brief.md"
+    )
+    assert result.refreshed.stored_path.exists()
 
 
 def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -> None:

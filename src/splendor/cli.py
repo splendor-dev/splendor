@@ -680,7 +680,10 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
     if result.changed:
         print(f"Detected changed source content for {result.requested.source_id}")
         if result.refreshed.record.source_id != result.requested.source_id:
-            print(f"Registered refreshed source {result.refreshed.record.source_id}")
+            if result.refreshed.already_registered:
+                print(f"Matched existing source version {result.refreshed.record.source_id}")
+            else:
+                print(f"Registered refreshed source {result.refreshed.record.source_id}")
     else:
         print(f"No source content change detected for {result.requested.source_id}")
     print(f"Source ref: {result.refreshed.source_ref}")

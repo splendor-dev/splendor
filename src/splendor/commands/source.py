@@ -12,11 +12,16 @@ from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import ingest_job_id
-from splendor.state.source_compat import canonical_source_ref, effective_storage_mode
+from splendor.state.source_compat import (
+    canonical_source_ref,
+    effective_materialized_path,
+    effective_storage_mode,
+)
 from splendor.state.source_registry import (
     RegisteredSource,
     load_source_record,
     register_source,
+    resolve_manifest_storage_path,
 )
 from splendor.utils.hashing import sha256_file
 
@@ -89,7 +94,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
         refreshed = RegisteredSource(
             record=requested,
             manifest_path=requested_match.manifest_path,
-            stored_path=None,
+            stored_path=_existing_materialized_path(root, requested),
             storage_mode=effective_storage_mode(requested),
             source_ref=canonical_source_ref(requested),
             copied=False,
@@ -139,6 +144,13 @@ def _select_refresh_candidate(
 
 def _latest_source_sort_key(result: SourceLookupResult) -> tuple[str, str]:
     return (result.source.added_at, result.source.source_id)
+
+
+def _existing_materialized_path(root: Path, source: SourceRecord) -> Path | None:
+    stored_path_value = effective_materialized_path(source)
+    if stored_path_value is None:
+        return None
+    return resolve_manifest_storage_path(root, stored_path_value)
 
 
 def render_source_lookup_json(root: Path, results: list[SourceLookupResult]) -> str:
