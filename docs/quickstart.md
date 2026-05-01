@@ -92,6 +92,17 @@ records or generated `wiki/sources/src-...md` pages:
 uv run splendor --root /tmp/demo-repo source lookup product-note
 ```
 
+Text-bearing PDFs can be registered the same way as markdown or plain-text files:
+
+```bash
+uv run splendor --root /tmp/demo-repo add-source /tmp/demo-repo/research-note.pdf
+```
+
+During ingest, Splendor extracts PDF text locally, writes the parsed text artifact under
+`derived/parsed/`, links that artifact from the source manifest, and uses the extracted text for the
+generated source-summary page. Scanned or image-only PDFs fail with a deterministic message because
+OCR/image extraction is a later workflow.
+
 ## 4. Ingest the source
 
 Drain the pending ingest queue:

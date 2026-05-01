@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M11-P2.1`
-- Current planned slice: `M11-P3`
-- Current PR sub-slice: `M11-P3.1`
+- Previous completed PR sub-slice: `M11-P3.1`
+- Current planned slice: `M12-P1`
+- Current PR sub-slice: `M12-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M12-P1`
-- Next planned PR sub-slice: `M12-P1.1`
+- Next planned slice: `M12-P2`
+- Next planned PR sub-slice: `M12-P2.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
@@ -699,7 +699,7 @@ project knowledge bases.
 and `add-source --dir`, explicit source refresh via the existing ingest queue, and readable source
 lookup by title/path without changing canonical source IDs. `M11-P2.1` is implemented: it adds
 CLI-first topic scaffolding, deterministic topic templates, and a frontmatter-driven wiki index
-rebuild. `M11-P3.1` is in progress: it adds tag/source query filters and compact agent-context
+rebuild. `M11-P3.1` is implemented: it adds tag/source query filters and compact agent-context
 handoff output before the roadmap moves to rich-source dispatch in `M12-P1`.
 
 ---
@@ -744,6 +744,15 @@ feed the same source-impact and compile/update workflow used for markdown and te
 
 ### Current PR sub-slices
 - `M12-P1.1` Rich-source dispatch and PDF path
+- `M12-P2.1` OCR/image ingest path
+
+### Milestone 12 status
+
+`M12-P1.1` is in progress: it introduces source-type dispatch for ingestion and routes
+text-bearing PDFs through deterministic local extraction. Parsed PDF text is stored under
+`derived/parsed/`, linked from source manifests through `derived_artifacts`, and used by the same
+source-summary/query path as text-native sources. OCR and image-only PDFs remain deferred to
+`M12-P2.1`.
 
 ---
 

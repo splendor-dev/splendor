@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 import splendor.utils.contradictions as contradictions_module
 from splendor.commands.add_source import add_source
@@ -65,6 +67,35 @@ def rewrite_symlink(root: Path, source_id: str, target: Path) -> Path:
     symlink_path.parent.mkdir(parents=True, exist_ok=True)
     symlink_path.symlink_to(target)
     return symlink_path
+
+
+def write_text_pdf(path: Path, lines: list[str]) -> None:
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    font_ref = writer._add_object(font)
+    page[NameObject("/Resources")] = DictionaryObject(
+        {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})}
+    )
+    text_ops = ["BT", "/F1 12 Tf", "72 720 Td"]
+    for index, line in enumerate(lines):
+        if index > 0:
+            text_ops.append("0 -18 Td")
+        escaped = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        text_ops.append(f"({escaped}) Tj")
+    text_ops.append("ET")
+    stream = DecodedStreamObject()
+    stream.set_data(("\n".join(text_ops) + "\n").encode("utf-8"))
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    with path.open("wb") as handle:
+        writer.write(handle)
+    assert PdfReader(str(path)).pages[0].extract_text()
 
 
 def test_ingest_source_happy_path(tmp_path: Path) -> None:
@@ -209,6 +240,66 @@ def test_ingest_source_rejects_unsupported_type(tmp_path: Path) -> None:
     assert run_record.page_ids == []
     assert run_record.output_refs == []
     assert not (tmp_path / "wiki" / "sources" / f"{added.source_id}.md").exists()
+
+
+def test_ingest_source_pdf_writes_parsed_artifact_and_links_manifest(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "dispatch.pdf"
+    write_text_pdf(
+        source,
+        [
+            "Splendor PDF dispatch claim",
+            "Text-bearing PDF extraction works.",
+        ],
+    )
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    frontmatter, body = parse_frontmatter(result.page_path)
+    assert frontmatter.tags == ["source-summary", "pdf"]
+    assert "Parsed artifact: `derived/parsed/" in body
+    assert "Splendor PDF dispatch claim" in body
+    assert "Text-bearing PDF extraction works." in body
+
+    parsed_artifact = tmp_path / "derived" / "parsed" / f"{added.source_id}.txt"
+    assert parsed_artifact.read_text(encoding="utf-8") == (
+        "Splendor PDF dispatch claim\nText-bearing PDF extraction works.\n"
+    )
+
+    source_record = load_source_record(added.manifest_path)
+    artifact_ref = parsed_artifact.relative_to(tmp_path).as_posix()
+    assert source_record.source_ref == "dispatch.pdf"
+    assert source_record.storage_mode == "none"
+    assert source_record.derived_artifacts == [artifact_ref]
+    assert any(link.path_ref == artifact_ref for link in source_record.provenance_links)
+
+    run_record = load_run_record(result.run_path)
+    assert artifact_ref in run_record.output_refs
+    assert any(link.path_ref == artifact_ref for link in run_record.provenance_links)
+
+
+def test_ingest_source_pdf_without_text_fails_without_ocr(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "scan.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with source.open("wb") as handle:
+        writer.write(handle)
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="OCR/image extraction is not supported"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.derived_artifacts == []
+    assert not (tmp_path / "derived" / "parsed" / f"{added.source_id}.txt").exists()
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert "OCR/image extraction is not supported" in (queue_record.last_error or "")
 
 
 def test_ingest_source_rejects_invalid_utf8_text(tmp_path: Path) -> None:
