@@ -610,6 +610,87 @@ def test_invalid_failed_next_attempt_is_treated_as_due(tmp_path: Path) -> None:
     assert load_queue_item(queue_path).status == "done"
 
 
+def test_failed_ingest_with_empty_backoff_is_immediately_due(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.queue.retry_backoff_seconds = []
+    write_config(tmp_path, config)
+    source = tmp_path / "broken.md"
+    source.write_bytes(b"\xff\xfe\xfa")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+
+    with pytest.raises(ValueError):
+        run_ingest_job(tmp_path, queue_path)
+
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert queue_record.next_attempt_at is not None
+    result = drain_pending_ingest_jobs(tmp_path)
+    assert result.failed == 1
+
+
+def test_drain_pending_reports_dead_letter_and_done_as_skipped(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    dead_source = tmp_path / "dead.md"
+    dead_source.write_text("# Dead\n\nhello world\n", encoding="utf-8")
+    dead_added = add_source(tmp_path, dead_source)
+    dead_queue_path = enqueue_ingest_job(tmp_path, dead_added.source_id)
+    write_queue_item(
+        dead_queue_path,
+        load_queue_item(dead_queue_path).model_copy(
+            update={"status": "dead_letter", "last_error": "broken"}
+        ),
+    )
+    done_source = tmp_path / "done.md"
+    done_source.write_text("# Done\n\nhello world\n", encoding="utf-8")
+    done_added = add_source(tmp_path, done_source)
+    done_queue_path = enqueue_ingest_job(tmp_path, done_added.source_id)
+    write_queue_item(
+        done_queue_path,
+        load_queue_item(done_queue_path).model_copy(update={"status": "done"}),
+    )
+
+    result = drain_pending_ingest_jobs(tmp_path)
+
+    assert result.processed == 0
+    assert result.skipped == 2
+    messages = {item.source_id: item.message for item in result.items}
+    assert messages[dead_added.source_id] == "status=dead_letter"
+    assert messages[done_added.source_id] == "status=done"
+
+
+def test_run_ingest_job_rejects_future_backoff_and_terminal_records(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(
+            update={
+                "status": "failed",
+                "last_error": "temporary",
+                "next_attempt_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="retry is not due"):
+        run_ingest_job(tmp_path, queue_path)
+
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(
+            update={"status": "dead_letter", "last_error": "broken", "next_attempt_at": None}
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Queue item is not runnable"):
+        run_ingest_job(tmp_path, queue_path)
+
+
 def test_drain_pending_ingest_jobs_continues_after_failure(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     ok_source = tmp_path / "brief.md"

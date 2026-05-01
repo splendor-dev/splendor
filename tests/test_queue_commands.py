@@ -346,6 +346,92 @@ def test_cli_queue_inspect_prioritizes_runnable_next_action(tmp_path: Path, caps
     assert "Next: splendor ingest --pending" in out
 
 
+def test_cli_queue_inspect_reports_dead_letter_next_action(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "dead.md"
+    source.write_text("# Dead\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(
+            update={"status": "dead_letter", "last_error": "broken"}
+        ),
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "inspect"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Next: splendor queue retry <job-id> or splendor repair ingest <source-id>" in out
+
+
+def test_cli_queue_inspect_reports_backoff_next_action(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "backoff.md"
+    source.write_text("# Backoff\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(
+            update={
+                "status": "failed",
+                "last_error": "temporary",
+                "next_attempt_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            }
+        ),
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "inspect"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Next: wait for retry backoff or run splendor queue retry <job-id>" in out
+
+
+def test_cli_queue_inspect_single_job_dead_letter_and_backoff_next_actions(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    dead_source = tmp_path / "dead.md"
+    dead_source.write_text("# Dead\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(dead_source)])
+    dead_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    dead_job_id = f"ingest-{dead_id}"
+    dead_queue_path = tmp_path / "state" / "queue" / f"{dead_job_id}.json"
+    write_queue_item(
+        dead_queue_path,
+        load_queue_item(dead_queue_path).model_copy(
+            update={"status": "dead_letter", "last_error": "broken"}
+        ),
+    )
+    capsys.readouterr()
+
+    assert main(["--root", str(tmp_path), "queue", "inspect", dead_job_id]) == 0
+    out = capsys.readouterr().out
+    assert f"Next: splendor queue retry {dead_job_id} or splendor repair ingest {dead_id}" in out
+
+    write_queue_item(
+        dead_queue_path,
+        load_queue_item(dead_queue_path).model_copy(
+            update={
+                "status": "failed",
+                "last_error": "temporary",
+                "next_attempt_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            }
+        ),
+    )
+
+    assert main(["--root", str(tmp_path), "queue", "inspect", dead_job_id]) == 0
+    out = capsys.readouterr().out
+    assert f"Next: wait for retry backoff or run splendor queue retry {dead_job_id}" in out
+
+
 def test_queue_inspect_handles_z_and_invalid_timestamps(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     z_source = tmp_path / "z.md"

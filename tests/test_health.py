@@ -519,6 +519,44 @@ def test_run_health_checks_reports_invalid_queue_runtime_details(tmp_path: Path)
     assert [issue.code for issue in result.issues] == ["invalid-queue-lease-state"]
 
 
+def test_run_health_checks_reports_invalid_queue_next_attempt_state(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    invalid_queue = QueueItemRecord.model_validate_json(queue_path.read_text(encoding="utf-8"))
+    invalid_queue = invalid_queue.model_copy(
+        update={"status": "pending", "next_attempt_at": "2026-04-20T09:00:00+00:00"}
+    )
+    write_queue_item(queue_path, invalid_queue)
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["invalid-queue-next-attempt-state"]
+
+
+def test_run_health_checks_reports_invalid_queue_next_attempt_timestamp(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    invalid_queue = QueueItemRecord.model_validate_json(queue_path.read_text(encoding="utf-8"))
+    invalid_queue = invalid_queue.model_copy(
+        update={"status": "failed", "last_error": "temporary", "next_attempt_at": "bad-time"}
+    )
+    write_queue_item(queue_path, invalid_queue)
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["invalid-queue-next-attempt"]
+
+
 def test_run_health_checks_reports_invalid_leased_queue_shape(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
