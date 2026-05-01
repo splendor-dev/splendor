@@ -630,6 +630,9 @@ Current implementation:
 - copied or external text sources default to `full`
 - text-bearing PDF sources are parsed through source-type dispatch, with extracted text written to
   `derived/parsed/<source-id>.txt` and linked from the source manifest via `derived_artifacts`
+- image sources and image-only PDFs may use explicitly configured OCR through the deterministic
+  `sidecar-text` provider, with extracted text written separately to
+  `derived/ocr/<source-id>.txt` and linked from the source manifest via `derived_artifacts`
 - projects may set either class to `none`, `excerpt`, or `full` through
   `sources.summarize_in_repo_extracts_as` and `sources.summarize_external_extracts_as`
 - when the mode is `none`, the `## Extract` section is omitted entirely
@@ -679,8 +682,10 @@ Current implementation:
   templates for default synthesis, research synthesis, and issue tracking.
 - `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
   `splendor wiki suggest <source-id>` command.
-- PDF ingest is limited to deterministic local extraction for text-bearing PDFs. Image-only or
-  otherwise unextractable PDFs fail with a deterministic error and do not invoke OCR.
+- PDF ingest first uses deterministic local extraction for text-bearing PDFs. Image-only PDFs and
+  image sources only enter OCR when `sources.ocr_enabled` is true; the current local provider reads
+  adjacent sidecar text files named with `sources.ocr_sidecar_suffix` and writes normalized output
+  under `derived/ocr/`.
 - `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
   ingested, or points back to `wiki status` for batch follow-up.
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
@@ -702,8 +707,8 @@ Current implementation:
   slice.
 
 Later optional support:
-- image-based sources
-- OCR-derived flows
+- additional OCR providers
+- image captioning or metadata extraction
 - audio/transcript flows
 
 ## 14.7 OCR/LLM-assisted extraction
@@ -715,6 +720,11 @@ For harder formats, ingestion may optionally invoke:
 - summary generation
 
 These outputs should be stored as **derived artifacts**, not mixed directly into raw source files.
+Current OCR support is explicitly configured and local: `sources.ocr_enabled: true` with
+`sources.ocr_provider: sidecar-text` reads UTF-8 sidecar text next to the resolved source artifact
+using `sources.ocr_sidecar_suffix` and records the resulting artifact under `derived/ocr/`.
+Unconfigured, missing-sidecar, invalid UTF-8, and empty OCR text cases fail with deterministic
+one-line ingest errors.
 
 ## 15. Idempotency and Atomicity
 
@@ -1062,6 +1072,12 @@ Likely configuration domains:
 - planning schema conventions
 - GitHub integration toggles
 - policy rules
+
+Current OCR-related source settings:
+- `sources.ocr_enabled`: opt-in OCR/image extraction toggle, default `false`
+- `sources.ocr_provider`: OCR provider name, currently `sidecar-text`
+- `sources.ocr_sidecar_suffix`: sidecar suffix appended to the resolved source path, default
+  `.ocr.txt`
 
 ## 28. Minimum Opinionated Core
 

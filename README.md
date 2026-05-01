@@ -137,13 +137,15 @@ Implemented today:
 Not implemented yet:
 
 - mutating review-gated `splendor wiki compile`
-- OCR and image extraction flows
+- heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
 - changed-files-driven refresh suggestions
 
 Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
 `derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
-Scanned/image-only PDFs still fail deterministically until the later OCR slice.
+Image sources and image-only PDFs can use explicitly configured sidecar-text OCR; extracted OCR text
+is written under `derived/ocr/`, linked from the source manifest, and kept separate from parsed PDF
+artifacts.
 
 ## Documentation
 
@@ -157,12 +159,12 @@ Scanned/image-only PDFs still fail deterministically until the later OCR slice.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M11-P3.1`
-- Current planned slice: `M12-P1`
-- Current PR sub-slice: `M12-P1.1`
+- Previous completed PR sub-slice: `M12-P1.1`
+- Current planned slice: `M12-P2`
+- Current PR sub-slice: `M12-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M12-P2`
-- Next planned PR sub-slice: `M12-P2.1`
+- Next planned slice: `M13-P1`
+- Next planned PR sub-slice: `M13-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel

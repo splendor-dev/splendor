@@ -153,13 +153,16 @@ Implemented fields:
 - Text-bearing PDF sources are routed through source-type dispatch during ingest. The source
   manifest keeps the same `source_ref`, `source_ref_kind`, and `storage_mode` contract as
   text-native sources, while extracted text artifacts are recorded in `derived_artifacts`.
+- Image sources and image-only PDFs use the same source registration and resolver contract. OCR is
+  optional and explicitly configured; successful OCR-derived text is recorded in
+  `derived_artifacts` without changing the canonical source identity.
 
 ### Derived artifacts
 
 `derived_artifacts` stores repo-relative paths to repairable machine-generated artifacts derived
 from the source. Current runtime support writes parsed text from text-bearing PDFs to
-`derived/parsed/<source-id>.txt`; lint and health validate that listed artifacts are repo-relative,
-remain under `derived/`, and exist on disk. OCR/image-derived artifacts are intentionally deferred.
+`derived/parsed/<source-id>.txt` and configured OCR text to `derived/ocr/<source-id>.txt`; lint and
+health validate that listed artifacts are repo-relative, remain under `derived/`, and exist on disk.
 
 ### Recommended default policy
 

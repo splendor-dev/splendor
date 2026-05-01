@@ -10,7 +10,7 @@ from pathlib import Path
 
 from splendor import __version__
 from splendor.config import load_config
-from splendor.ingest_dispatch import dispatch_source_content
+from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, dispatch_source_content
 from splendor.layout import resolve_layout
 from splendor.schemas import (
     KnowledgePageFrontmatter,
@@ -162,7 +162,10 @@ def _rendered_extract(text: str, mode: SummaryMode) -> str | None:
 def _build_summary(source: SourceRecord, source_text: str) -> str:
     path_fragment = canonical_source_ref(source)
     content_summary = _build_content_summary(source_text)
-    if source.source_type in {"md", "txt", "pdf"} and content_summary is not None:
+    if (
+        source.source_type in {"md", "txt", "pdf", *IMAGE_SOURCE_TYPES}
+        and content_summary is not None
+    ):
         return f"{content_summary} registered from `{path_fragment}`."
     return (
         f"This page records deterministic ingestion output for source `{source.source_id}`, "
@@ -758,7 +761,12 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         )
         write_run_record(run_path, run)
 
-        dispatched_content = dispatch_source_content(source, resolved_source, layout=layout)
+        dispatched_content = dispatch_source_content(
+            source,
+            resolved_source,
+            layout=layout,
+            config=config,
+        )
         source_text = dispatched_content.text
         derived_artifact_ref = (
             _relative_to_root(root, dispatched_content.derived_artifact_path)
@@ -798,7 +806,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 f"- Source file: `{resolved_source.resolved_ref}`",
             ]
             + (
-                [f"- Parsed artifact: `{derived_artifact_ref}`"]
+                [f"- {dispatched_content.derived_artifact_label}: `{derived_artifact_ref}`"]
                 if derived_artifact_ref is not None
                 else []
             )
@@ -816,7 +824,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             f"Manifest: `{_relative_to_root(root, manifest_path)}`",
             f"{resolved_source.content_origin_label}: `{resolved_source.resolved_ref}`",
             *(
-                [f"Parsed artifact: `{derived_artifact_ref}`"]
+                [f"{dispatched_content.derived_artifact_label}: `{derived_artifact_ref}`"]
                 if derived_artifact_ref is not None
                 else []
             ),

@@ -46,6 +46,14 @@ def update_summary_modes(
     write_config(root, config)
 
 
+def enable_sidecar_ocr(root: Path, *, suffix: str = ".ocr.txt") -> None:
+    config = load_config(root)
+    config.sources.ocr_enabled = True
+    config.sources.ocr_provider = "sidecar-text"
+    config.sources.ocr_sidecar_suffix = suffix
+    write_config(root, config)
+
+
 def rewrite_pointer(
     root: Path,
     source_id: str,
@@ -283,7 +291,7 @@ def test_ingest_source_pdf_without_text_fails_without_ocr(tmp_path: Path) -> Non
         writer.write(handle)
     added = add_source(tmp_path, source)
 
-    with pytest.raises(ValueError, match="OCR/image extraction is not supported"):
+    with pytest.raises(ValueError, match="OCR/image extraction is not configured"):
         ingest_source(tmp_path, added.source_id)
 
     source_record = load_source_record(added.manifest_path)
@@ -293,7 +301,114 @@ def test_ingest_source_pdf_without_text_fails_without_ocr(tmp_path: Path) -> Non
     queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
     queue_record = load_queue_item(queue_path)
     assert queue_record.status == "failed"
-    assert "OCR/image extraction is not supported" in (queue_record.last_error or "")
+    assert "OCR/image extraction is not configured" in (queue_record.last_error or "")
+
+
+def test_ingest_source_image_requires_configured_ocr(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="^OCR/image extraction is not configured: diagram.png$"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.derived_artifacts == []
+    assert not (tmp_path / "derived" / "ocr" / f"{added.source_id}.txt").exists()
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert queue_record.last_error == "OCR/image extraction is not configured: diagram.png"
+
+
+def test_ingest_source_image_writes_ocr_artifact_and_links_manifest(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    Path(f"{source}.ocr.txt").write_text(
+        "# Diagram Notes\n\nOCR claim from image source.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    frontmatter, body = parse_frontmatter(result.page_path)
+    assert frontmatter.tags == ["source-summary", "png"]
+    assert "OCR artifact: `derived/ocr/" in body
+    assert "OCR claim from image source." in body
+    assert "Parsed artifact:" not in body
+
+    ocr_artifact = tmp_path / "derived" / "ocr" / f"{added.source_id}.txt"
+    assert ocr_artifact.read_text(encoding="utf-8") == (
+        "# Diagram Notes\n\nOCR claim from image source.\n"
+    )
+
+    source_record = load_source_record(added.manifest_path)
+    artifact_ref = ocr_artifact.relative_to(tmp_path).as_posix()
+    assert source_record.source_ref == "diagram.png"
+    assert source_record.storage_mode == "none"
+    assert source_record.derived_artifacts == [artifact_ref]
+    assert any(link.path_ref == artifact_ref for link in source_record.provenance_links)
+
+    run_record = load_run_record(result.run_path)
+    assert artifact_ref in run_record.output_refs
+    assert any(
+        link.path_ref == artifact_ref
+        and link.source_id == added.source_id
+        and link.run_id == result.run_id
+        and link.role == "output"
+        for link in run_record.provenance_links
+    )
+
+
+def test_ingest_source_image_fails_when_configured_ocr_sidecar_missing(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    added = add_source(tmp_path, source)
+
+    with pytest.raises(ValueError, match="^OCR sidecar text is missing for diagram.png"):
+        ingest_source(tmp_path, added.source_id)
+
+    source_record = load_source_record(added.manifest_path)
+    assert source_record.status == "failed"
+    assert source_record.derived_artifacts == []
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
+    queue_record = load_queue_item(queue_path)
+    assert queue_record.status == "failed"
+    assert (
+        queue_record.last_error
+        == "OCR sidecar text is missing for diagram.png: diagram.png.ocr.txt"
+    )
+
+
+def test_ingest_source_image_only_pdf_can_use_configured_ocr_sidecar(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    enable_sidecar_ocr(tmp_path)
+    source = tmp_path / "scan.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with source.open("wb") as handle:
+        writer.write(handle)
+    Path(f"{source}.ocr.txt").write_text("OCR text from scanned PDF.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    frontmatter, body = parse_frontmatter(result.page_path)
+    assert frontmatter.tags == ["source-summary", "pdf"]
+    assert "OCR artifact: `derived/ocr/" in body
+    assert "Parsed artifact:" not in body
+    assert "OCR text from scanned PDF." in body
+    assert (tmp_path / "derived" / "ocr" / f"{added.source_id}.txt").is_file()
+    assert not (tmp_path / "derived" / "parsed" / f"{added.source_id}.txt").exists()
 
 
 def test_ingest_source_malformed_pdf_uses_stable_error(tmp_path: Path) -> None:

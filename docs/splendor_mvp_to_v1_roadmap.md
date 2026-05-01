@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M11-P3.1`
-- Current planned slice: `M12-P1`
-- Current PR sub-slice: `M12-P1.1`
+- Previous completed PR sub-slice: `M12-P1.1`
+- Current planned slice: `M12-P2`
+- Current PR sub-slice: `M12-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M12-P2`
-- Next planned PR sub-slice: `M12-P2.1`
+- Next planned slice: `M13-P1`
+- Next planned PR sub-slice: `M13-P1.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
@@ -748,11 +748,16 @@ feed the same source-impact and compile/update workflow used for markdown and te
 
 ### Milestone 12 status
 
-`M12-P1.1` is in progress: it introduces source-type dispatch for ingestion and routes
+`M12-P1.1` is implemented: it introduced source-type dispatch for ingestion and routes
 text-bearing PDFs through deterministic local extraction. Parsed PDF text is stored under
 `derived/parsed/`, linked from source manifests through `derived_artifacts`, and used by the same
-source-summary/query path as text-native sources. OCR and image-only PDFs remain deferred to
-`M12-P2.1`.
+source-summary/query path as text-native sources.
+
+`M12-P2.1` is in progress: it adds explicitly configured image/OCR dispatch using a deterministic
+sidecar-text provider. OCR-derived text is stored separately under `derived/ocr/`, linked from
+source manifests through `derived_artifacts`, and used by the same generated source-summary/query
+path when extraction succeeds. Unconfigured or unextractable OCR/image sources fail
+deterministically without destabilizing text-native or text-bearing PDF ingest.
 
 ---
 
