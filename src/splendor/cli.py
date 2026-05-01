@@ -70,6 +70,7 @@ from splendor.schemas import (
 )
 from splendor.schemas.types import STORAGE_MODES
 from splendor.state.query_snapshot import last_query_path_for, write_query_snapshot
+from splendor.state.source_compat import canonical_source_ref
 from splendor.utils.provenance import summarize_provenance_links
 from splendor.utils.time import utc_now_iso
 
@@ -867,7 +868,7 @@ def _print_source_lookup_results(results) -> None:
         source = result.source
         print(
             f"- {source.source_id} [{source.status}] {source.title} "
-            f"ref={source.source_ref or source.path}"
+            f"ref={canonical_source_ref(source)}"
         )
         print(f"  Manifest: {result.manifest_path}")
     print("Next: splendor source refresh <source-id|title|path>")

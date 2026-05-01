@@ -80,6 +80,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
             root,
             current_path,
             storage_mode=requested.storage_mode,
+            capture_source_commit=requested.source_commit is not None,
             source_class=requested.source_class,
             source_labels=requested.source_labels,
             discovered_by=requested.discovered_by,
@@ -174,11 +175,12 @@ def _lookup_sort_key(result: SourceLookupResult) -> tuple[str, str, str]:
 
 
 def _matches_source(source: SourceRecord, needle: str) -> bool:
+    legacy_path = source.path if source.source_ref is None and source.storage_path is None else ""
     haystacks = [
         source.source_id,
         source.title,
         canonical_source_ref(source),
-        source.path,
+        legacy_path,
         source.original_path or "",
     ]
     return any(needle in value.casefold() for value in haystacks)
@@ -189,9 +191,15 @@ def _refreshable_source_path(root: Path, source: SourceRecord) -> Path:
         return resolve_workspace_path(root, source.source_ref, context="Workspace source")
     if source.source_ref_kind == "external_path" and source.source_ref:
         return Path(source.source_ref).expanduser().resolve()
+    if source.source_ref is None and source.original_path:
+        legacy_path = Path(source.original_path).expanduser()
+        if legacy_path.is_absolute():
+            return legacy_path.resolve()
+        return resolve_workspace_path(root, source.original_path, context="Legacy workspace source")
     msg = (
-        "Only workspace-backed and external-path sources can be refreshed by canonical source "
-        f"reference: {source.source_id}"
+        "Only workspace-backed, external-path, and original_path-backed legacy sources can be "
+        f"refreshed by canonical source reference: {source.source_id}. Re-register the source "
+        "with `splendor add-source <path>` to create a refreshable source_ref."
     )
     raise ValueError(msg)
 
