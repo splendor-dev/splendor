@@ -308,3 +308,40 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
         },
         indent=2,
     )
+
+
+def render_agent_context_json(brief: ProjectBrief) -> str:
+    return json.dumps(
+        {
+            "agent_context": True,
+            "goal": brief.goal,
+            "query_summary": brief.query_summary,
+            "wiki_status": {
+                "source_total": brief.status.source_total,
+                "page_total": brief.status.page_total,
+                "queue_status_counts": brief.status.queue_status_counts,
+                "review_needed_pages": brief.status.review_needed_pages,
+                "machine_generated_pages": brief.status.machine_generated_pages,
+                "contested_pages": brief.status.contested_pages,
+                "stale_pages": brief.status.stale_pages,
+                "sources_missing_synthesis": brief.status.sources_missing_synthesis,
+            },
+            "matches": [asdict(match) for match in brief.matches],
+            "source_refs": _agent_context_source_refs(brief),
+            "active_planning": [asdict(item) for item in brief.planning_items],
+            "recent_sources": [asdict(source) for source in brief.recent_sources],
+            "recent_runs": [asdict(run) for run in brief.recent_runs],
+            "latest_reports": [asdict(report) for report in brief.latest_reports],
+            "last_query": asdict(brief.last_query) if brief.last_query else None,
+            "warnings": [asdict(warning) for warning in brief.warnings],
+            "next_actions": brief.next_actions,
+        },
+        indent=2,
+    )
+
+
+def _agent_context_source_refs(brief: ProjectBrief) -> list[str]:
+    refs: set[str] = set()
+    for match in brief.matches:
+        refs.update(match.source_refs)
+    return sorted(refs)

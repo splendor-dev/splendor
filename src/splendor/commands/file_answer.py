@@ -8,7 +8,7 @@ from pathlib import Path
 from splendor.commands.planning import UpdateQuestionAnswerResult
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import KnowledgePageFrontmatter, QueryMatchSnapshot
+from splendor.schemas import KnowledgePageFrontmatter, QueryFilterSnapshot, QueryMatchSnapshot
 from splendor.state.query_snapshot import last_query_path_for, load_query_snapshot
 from splendor.utils.fs import ensure_directory
 from splendor.utils.planning import slugify, validate_record_id
@@ -63,6 +63,7 @@ def file_answer_from_last_query(
         page_id=answer_page_id,
         page_ref=page_ref,
         query=snapshot.query,
+        filters=snapshot.filters,
         summary=snapshot.summary,
         matches=snapshot.matches,
     )
@@ -72,9 +73,10 @@ def file_answer_from_last_query(
         bullet=f"- [{title}](topics/{page_path.name}) (`{answer_page_id}`)",
     )
     question_fragment = f" for question `{linked_question_id}`" if linked_question_id else ""
+    query_label = _query_context_label(snapshot.query, snapshot.filters)
     log_content = append_log_entry(
         layout.log_file.read_text(encoding="utf-8"),
-        f"- Filed answer `{answer_page_id}` from query `{snapshot.query}`{question_fragment}.",
+        f"- Filed answer `{answer_page_id}` from query `{query_label}`{question_fragment}.",
     )
     ensure_directory(page_path.parent)
     apply_wiki_updates(
@@ -101,6 +103,7 @@ def _render_answer_page(
     page_id: str,
     page_ref: str,
     query: str,
+    filters: QueryFilterSnapshot,
     summary: str,
     matches: list[QueryMatchSnapshot],
 ) -> str:
@@ -120,7 +123,7 @@ def _render_answer_page(
         f"---\n{render_frontmatter(frontmatter)}\n---\n\n"
         f"# {title}\n\n"
         "## Query\n\n"
-        f"{query}\n\n"
+        f"{_render_query_context(query, filters)}\n\n"
         "## Summary\n\n"
         f"{summary}\n\n"
         "## Ranked Matches\n\n"
@@ -128,6 +131,26 @@ def _render_answer_page(
         "## Provenance\n\n"
         f"{_render_provenance(matches, page_ref=page_ref)}\n"
     )
+
+
+def _render_query_context(query: str, filters: QueryFilterSnapshot) -> str:
+    lines = [f"Query: {query or '-'}"]
+    if filters.tags:
+        lines.append(f"Tags: {', '.join(filters.tags)}")
+    if filters.source_id is not None:
+        lines.append(f"Source ID: {filters.source_id}")
+    return "\n".join(lines)
+
+
+def _query_context_label(query: str, filters: QueryFilterSnapshot) -> str:
+    if query:
+        return query
+    parts: list[str] = []
+    if filters.tags:
+        parts.append("tags " + ", ".join(filters.tags))
+    if filters.source_id is not None:
+        parts.append(f"source {filters.source_id}")
+    return "; ".join(parts) or "-"
 
 
 def _dedupe_refs(matches: list[QueryMatchSnapshot]) -> list[str]:

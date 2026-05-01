@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M11-P1.1`
-- Current planned slice: `M11-P2`
-- Current PR sub-slice: `M11-P2.1`
+- Previous completed PR sub-slice: `M11-P2.1`
+- Current planned slice: `M11-P3`
+- Current PR sub-slice: `M11-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M11-P3`
-- Next planned PR sub-slice: `M11-P3.1`
+- Next planned slice: `M12-P1`
+- Next planned PR sub-slice: `M12-P1.1`
 
 `M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
 place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
@@ -697,9 +697,10 @@ project knowledge bases.
 
 `M11-P1.1` is implemented: it adds deterministic bulk registration through `add-source --glob`
 and `add-source --dir`, explicit source refresh via the existing ingest queue, and readable source
-lookup by title/path without changing canonical source IDs. `M11-P2.1` is in progress: it adds
+lookup by title/path without changing canonical source IDs. `M11-P2.1` is implemented: it adds
 CLI-first topic scaffolding, deterministic topic templates, and a frontmatter-driven wiki index
-rebuild. Broader query/source lookup and agent-context work remains planned for `M11-P3.1`.
+rebuild. `M11-P3.1` is in progress: it adds tag/source query filters and compact agent-context
+handoff output before the roadmap moves to rich-source dispatch in `M12-P1`.
 
 ---
 
@@ -740,6 +741,9 @@ feed the same source-impact and compile/update workflow used for markdown and te
 ### Planned PR slices
 - `M12-P1` Rich-source dispatch and PDF path
 - `M12-P2` OCR/image ingest path
+
+### Current PR sub-slices
+- `M12-P1.1` Rich-source dispatch and PDF path
 
 ---
 

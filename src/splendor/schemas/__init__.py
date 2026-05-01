@@ -9,7 +9,7 @@ from splendor.schemas.planning import (
     TaskRecord,
 )
 from splendor.schemas.provenance import ProvenanceLink
-from splendor.schemas.query import QueryMatchSnapshot, QuerySnapshot
+from splendor.schemas.query import QueryFilterSnapshot, QueryMatchSnapshot, QuerySnapshot
 from splendor.schemas.runtime import QueueItemRecord, RunRecord
 from splendor.schemas.source import SourceRecord
 from splendor.schemas.source_pointer import SourcePointerArtifact
@@ -37,6 +37,7 @@ __all__ = [
     "PageReviewState",
     "ProvenanceLink",
     "ProvenanceRole",
+    "QueryFilterSnapshot",
     "QueryMatchSnapshot",
     "QuerySnapshot",
     "QuestionRecord",

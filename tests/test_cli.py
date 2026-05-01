@@ -104,6 +104,31 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert refresh.json_output is True
 
 
+def test_cli_query_parser_accepts_filters_and_no_question() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        ["query", "--tag", "preprocessing", "--tag", "audio", "--source", "src-123", "--json"]
+    )
+
+    assert args.command == "query"
+    assert args.question == []
+    assert args.tags == ["preprocessing", "audio"]
+    assert args.source_id == "src-123"
+    assert args.json_output is True
+
+
+def test_cli_brief_parser_accepts_agent_context() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["brief", "--agent-context", "query", "handoff", "--json"])
+
+    assert args.command == "brief"
+    assert args.agent_context is True
+    assert args.goal == ["query", "handoff"]
+    assert args.json_output is True
+
+
 def test_cli_repo_scan_parser_accepts_json_flag() -> None:
     parser = build_parser()
 
@@ -1191,6 +1216,8 @@ def write_queryable_wiki_page(
     title: str,
     page_id: str,
     body: str,
+    source_refs: list[str] | None = None,
+    tags: list[str] | None = None,
     contradictions: list[dict] | None = None,
 ) -> None:
     frontmatter = KnowledgePageFrontmatter(
@@ -1198,7 +1225,9 @@ def write_queryable_wiki_page(
         title=title,
         page_id=page_id,
         status="active",
+        source_refs=source_refs or [],
         confidence=0.8,
+        tags=tags or [],
         contradictions=contradictions or [],
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1251,6 +1280,62 @@ def test_cli_query_command_supports_json_output(tmp_path: Path, capsys) -> None:
     assert payload["matches"][0]["contradiction_count"] == 0
     assert payload["matches"][0]["review_task_ids"] == []
     assert payload["matches"][0]["tags"] == []
+
+
+def test_cli_query_command_json_reports_active_filters(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    source_id = load_source_record(
+        next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    ).source_id
+    write_queryable_wiki_page(
+        tmp_path / "wiki" / "topics" / "preprocessing.md",
+        title="Preprocessing pipeline",
+        page_id="topic-preprocessing-pipeline",
+        source_refs=[source_id],
+        tags=["preprocessing"],
+        body="Preprocessing pipeline notes.",
+    )
+    write_queryable_wiki_page(
+        tmp_path / "wiki" / "topics" / "deployment.md",
+        title="Deployment pipeline",
+        page_id="topic-deployment-pipeline",
+        tags=["deployment"],
+        body="Deployment pipeline notes.",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "query",
+            "--tag",
+            "preprocessing",
+            "--source",
+            source_id,
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["query"] == ""
+    assert payload["filters"] == {"tags": ["preprocessing"], "source_id": source_id}
+    assert payload["match_count"] == 1
+    assert payload["matches"][0]["path"] == "wiki/topics/preprocessing.md"
+
+
+def test_cli_query_command_rejects_unknown_source_filter(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "query", "--source", "src-missing", "brief"])
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Error: Unknown source ID: src-missing\n"
 
 
 def test_cli_query_command_persists_last_query_snapshot(tmp_path: Path, capsys) -> None:

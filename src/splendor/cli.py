@@ -9,7 +9,12 @@ from pathlib import Path
 
 from splendor import __version__
 from splendor.commands.add_source import add_source, expand_source_paths
-from splendor.commands.brief import build_project_brief, render_project_brief_json
+from splendor.commands.brief import (
+    ProjectBrief,
+    build_project_brief,
+    render_agent_context_json,
+    render_project_brief_json,
+)
 from splendor.commands.file_answer import (
     default_answer_page_id,
     file_answer_from_last_query,
@@ -68,6 +73,7 @@ from splendor.layout import resolve_layout
 from splendor.schemas import (
     DecisionRecord,
     MilestoneRecord,
+    QueryFilterSnapshot,
     QueryMatchSnapshot,
     QuerySnapshot,
     QuestionRecord,
@@ -334,7 +340,19 @@ def build_parser() -> argparse.ArgumentParser:
     health_parser.set_defaults(handler=handle_health)
 
     query_parser = subparsers.add_parser("query", help="Query maintained wiki and planning records")
-    query_parser.add_argument("question", nargs="+", help="Question or search phrase.")
+    query_parser.add_argument("question", nargs="*", help="Question or search phrase.")
+    query_parser.add_argument(
+        "--tag",
+        action="append",
+        default=[],
+        dest="tags",
+        help="Restrict wiki results to pages with this tag. May be repeated.",
+    )
+    query_parser.add_argument(
+        "--source",
+        dest="source_id",
+        help="Restrict results to records referencing this source ID.",
+    )
     query_parser.add_argument(
         "--json",
         action="store_true",
@@ -357,6 +375,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="json_output",
         help="Emit machine-readable JSON output.",
+    )
+    brief_parser.add_argument(
+        "--agent-context",
+        action="store_true",
+        help="Emit a compact coding-agent handoff over brief state.",
     )
     brief_parser.set_defaults(handler=handle_brief)
 
@@ -1140,8 +1163,13 @@ def handle_health(args: argparse.Namespace) -> int:
 def handle_query(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
-        result = run_query(root, " ".join(args.question))
-    except ValueError as exc:
+        result = run_query(
+            root,
+            " ".join(args.question),
+            tags=args.tags,
+            source_id=args.source_id,
+        )
+    except (OSError, ValueError) as exc:
         return _print_error(exc)
 
     if not args.no_save:
@@ -1149,6 +1177,10 @@ def handle_query(args: argparse.Namespace) -> int:
             layout = resolve_layout(root, load_config(root))
             snapshot = QuerySnapshot(
                 query=result.query,
+                filters=QueryFilterSnapshot(
+                    tags=result.filters.tags,
+                    source_id=result.filters.source_id,
+                ),
                 summary=result.summary,
                 match_count=result.match_count,
                 created_at=utc_now_iso(),
@@ -1182,6 +1214,10 @@ def handle_query(args: argparse.Namespace) -> int:
     if args.json_output:
         payload = {
             "query": result.query,
+            "filters": {
+                "tags": result.filters.tags,
+                "source_id": result.filters.source_id,
+            },
             "summary": result.summary,
             "match_count": result.match_count,
             "matches": [
@@ -1213,6 +1249,12 @@ def handle_query(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Query: {result.query}")
+    if result.filters.active:
+        print(
+            "Filters: "
+            f"tags={', '.join(result.filters.tags) if result.filters.tags else '-'} "
+            f"source={result.filters.source_id or '-'}"
+        )
     print(f"Summary: {result.summary}")
     print("Matches:")
     for match in result.matches:
@@ -1249,7 +1291,14 @@ def handle_brief(args: argparse.Namespace) -> int:
         return _print_error(exc)
 
     if args.json_output:
-        print(render_project_brief_json(result))
+        if args.agent_context:
+            print(render_agent_context_json(result))
+        else:
+            print(render_project_brief_json(result))
+        return 0
+
+    if args.agent_context:
+        _print_agent_context(result)
         return 0
 
     print("Project brief")
@@ -1297,6 +1346,48 @@ def handle_brief(args: argparse.Namespace) -> int:
     for action in result.next_actions:
         print(f"- {action}")
     return 0
+
+
+def _print_agent_context(result: ProjectBrief) -> None:
+    print("Agent context")
+    print(f"Goal: {result.goal or '-'}")
+    print(
+        "Wiki status: "
+        f"sources={result.status.source_total} "
+        f"pages={result.status.page_total} "
+        f"queue_pending={result.status.queue_status_counts.get('pending', 0)} "
+        f"review_needed={result.status.review_needed_pages}"
+    )
+    if result.matches:
+        print("Relevant matches:")
+        for match in result.matches:
+            source_refs = ", ".join(match.source_refs) if match.source_refs else "-"
+            print(f"- {match.path} [{match.kind}] score={match.score} sources={source_refs}")
+            if match.snippet:
+                print(f"  {match.snippet}")
+    if result.planning_items:
+        print("Active planning:")
+        for item in result.planning_items:
+            print(f"- {item.record_id} [{item.kind}/{item.status}] {item.title}")
+    if result.recent_sources:
+        print("Recent sources:")
+        for source in result.recent_sources:
+            print(f"- {source.source_id} [{source.status}/{source.review_state}] {source.title}")
+    if result.recent_runs:
+        print("Recent runs:")
+        for run in result.recent_runs:
+            finished = run.finished_at or "-"
+            print(f"- {run.run_id} {run.status} finished={finished}")
+    if result.last_query is not None:
+        print(f"Last query: {result.last_query.query} ({result.last_query.match_count} matches)")
+    if result.warnings:
+        print("Warnings:")
+        for warning in result.warnings:
+            subject = warning.path or warning.area
+            print(f"- {subject}: {warning.message}")
+    print("Next actions:")
+    for action in result.next_actions:
+        print(f"- {action}")
 
 
 def handle_serve(args: argparse.Namespace) -> int:

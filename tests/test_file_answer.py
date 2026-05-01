@@ -6,7 +6,12 @@ from splendor.commands.file_answer import default_answer_page_id, file_answer_fr
 from splendor.commands.init import initialize_workspace
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import KnowledgePageFrontmatter, QueryMatchSnapshot, QuerySnapshot
+from splendor.schemas import (
+    KnowledgePageFrontmatter,
+    QueryFilterSnapshot,
+    QueryMatchSnapshot,
+    QuerySnapshot,
+)
 from splendor.state.query_snapshot import last_query_path_for, write_query_snapshot
 from splendor.utils.wiki import render_frontmatter
 
@@ -106,3 +111,41 @@ def test_file_answer_from_last_query_dedupes_source_refs(tmp_path: Path) -> None
 
     page = result.page_path.read_text(encoding="utf-8")
     assert "source_refs:\n- src-1\n- src-2\n- src-3\n" in page
+
+
+def test_file_answer_from_filter_only_query_renders_filter_context(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_query_snapshot(
+        last_query_path_for(layout),
+        QuerySnapshot(
+            query="",
+            filters=QueryFilterSnapshot(tags=["preprocessing"], source_id="src-1"),
+            summary='Found 1 matching records. Best match: "Preprocessing" (wiki/topics/pre.md).',
+            match_count=1,
+            created_at="2026-05-01T10:00:00+00:00",
+            matches=[
+                QueryMatchSnapshot(
+                    rank=1,
+                    score=3,
+                    document_class="wiki",
+                    kind="topic",
+                    record_id="topic-preprocessing",
+                    title="Preprocessing",
+                    path="wiki/topics/pre.md",
+                    status="active",
+                    snippet="Preprocessing evidence.",
+                    source_refs=["src-1"],
+                    generated_by_run_ids=[],
+                    tags=["preprocessing"],
+                )
+            ],
+        ),
+    )
+
+    result = file_answer_from_last_query(tmp_path, title="Preprocessing Answer", page_id=None)
+
+    page = result.page_path.read_text(encoding="utf-8")
+    log = layout.log_file.read_text(encoding="utf-8")
+    assert "## Query\n\nQuery: -\nTags: preprocessing\nSource ID: src-1\n\n" in page
+    assert "from query `tags preprocessing; source src-1`" in log

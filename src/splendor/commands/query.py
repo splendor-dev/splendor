@@ -9,6 +9,7 @@ from pathlib import Path
 from splendor.config import load_config
 from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.schemas import ProvenanceLink
+from splendor.state.source_registry import load_source_record, manifest_path_for
 from splendor.utils.planning import (
     iter_planning_paths,
     parse_planning_document,
@@ -56,6 +57,16 @@ class QueryValidationError(ValueError):
 
 
 @dataclass(frozen=True)
+class QueryFilters:
+    tags: list[str]
+    source_id: str | None = None
+
+    @property
+    def active(self) -> bool:
+        return bool(self.tags or self.source_id)
+
+
+@dataclass(frozen=True)
 class QueryMatch:
     rank: int
     score: int
@@ -79,6 +90,7 @@ class QueryMatch:
 @dataclass(frozen=True)
 class QueryResult:
     query: str
+    filters: QueryFilters
     summary: str
     matches: list[QueryMatch]
 
@@ -117,24 +129,40 @@ class _ScoredDocument:
     snippet: str
 
 
-def run_query(root: Path, question: str) -> QueryResult:
+def run_query(
+    root: Path,
+    question: str,
+    *,
+    tags: list[str] | None = None,
+    source_id: str | None = None,
+) -> QueryResult:
     normalized_query = question.strip()
-    query_tokens = _query_tokens(normalized_query)
-    if not query_tokens:
+    filters = _normalize_filters(root, tags=tags or [], source_id=source_id)
+    query_tokens = _query_tokens(normalized_query) if normalized_query else []
+    if normalized_query and not query_tokens:
+        raise QueryValidationError("Query must contain at least one ASCII letter or number")
+    if not query_tokens and not filters.active:
         raise QueryValidationError("Query must contain at least one ASCII letter or number")
 
     layout = resolve_layout(root, load_config(root))
     documents = [*_iter_wiki_documents(root, layout), *_iter_planning_documents(root, layout)]
     scored_documents: list[_ScoredDocument] = []
     for document in documents:
-        score = _score_document(document, query_tokens)
+        if not _matches_filters(document, filters):
+            continue
+        score = _score_document(document, query_tokens) if query_tokens else _filter_score(document)
         if score <= 0:
             continue
+        snippet = (
+            _best_snippet(document.snippet_source, query_tokens)
+            if query_tokens
+            else _default_snippet(document.snippet_source)
+        )
         scored_documents.append(
             _ScoredDocument(
                 score=score,
                 document=document,
-                snippet=_best_snippet(document.snippet_source, query_tokens),
+                snippet=snippet,
             )
         )
 
@@ -169,8 +197,67 @@ def run_query(root: Path, question: str) -> QueryResult:
             f'Found {len(matches)} matching records. Best match: "{best.title}" ({best.path}).'
         )
     else:
-        summary = f'No matches found for "{normalized_query}".'
-    return QueryResult(query=normalized_query, summary=summary, matches=matches)
+        query_label = normalized_query or _filter_summary(filters)
+        summary = f'No matches found for "{query_label}".'
+    return QueryResult(query=normalized_query, filters=filters, summary=summary, matches=matches)
+
+
+def _normalize_filters(root: Path, *, tags: list[str], source_id: str | None) -> QueryFilters:
+    normalized_tags = _normalize_tags(tags)
+    normalized_source_id = source_id.strip() if source_id is not None else None
+    if normalized_source_id:
+        manifest_path = manifest_path_for(root, normalized_source_id)
+        if not manifest_path.exists():
+            msg = f"Unknown source ID: {normalized_source_id}"
+            raise FileNotFoundError(msg)
+        source = load_source_record(manifest_path)
+        if source.source_id != normalized_source_id:
+            msg = f"Source manifest ID does not match requested source: {normalized_source_id}"
+            raise ValueError(msg)
+    return QueryFilters(tags=normalized_tags, source_id=normalized_source_id)
+
+
+def _normalize_tags(tags: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        value = tag.strip()
+        if not value:
+            continue
+        key = value.casefold()
+        if key in seen:
+            continue
+        normalized.append(value)
+        seen.add(key)
+    return normalized
+
+
+def _matches_filters(document: _QueryDocument, filters: QueryFilters) -> bool:
+    if filters.source_id is not None and filters.source_id not in document.source_refs:
+        return False
+    if filters.tags:
+        document_tags = {tag.casefold() for tag in document.tags}
+        if not all(tag.casefold() in document_tags for tag in filters.tags):
+            return False
+    return True
+
+
+def _filter_score(document: _QueryDocument) -> int:
+    score = 1
+    if document.document_class == "wiki":
+        score += 2
+    if document.kind == "source-summary":
+        score += 1
+    return score
+
+
+def _filter_summary(filters: QueryFilters) -> str:
+    parts: list[str] = []
+    if filters.tags:
+        parts.append("tags " + ", ".join(filters.tags))
+    if filters.source_id is not None:
+        parts.append(f"source {filters.source_id}")
+    return "; ".join(parts) or "filters"
 
 
 def _iter_wiki_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocument]:
@@ -314,6 +401,19 @@ def _best_snippet(text: str, query_tokens: list[str]) -> str:
     if _candidate_score(best, query_tokens) <= 0:
         best = paragraphs[0] if paragraphs else lines[0]
     collapsed = _WHITESPACE_PATTERN.sub(" ", _strip_candidate_heading(best)).strip()
+    if len(collapsed) <= 240:
+        return collapsed
+    return collapsed[:237].rstrip() + "..."
+
+
+def _default_snippet(text: str) -> str:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return ""
+    candidates = _unique_in_order([*_candidate_segments(normalized), *_snippet_lines(normalized)])
+    if not candidates:
+        return ""
+    collapsed = _WHITESPACE_PATTERN.sub(" ", _strip_candidate_heading(candidates[0])).strip()
     if len(collapsed) <= 240:
         return collapsed
     return collapsed[:237].rstrip() + "..."

@@ -8,6 +8,11 @@ from splendor.schemas.common import StrictRecord
 from splendor.schemas.provenance import ProvenanceLink
 
 
+class QueryFilterSnapshot(StrictRecord):
+    tags: list[str] = Field(default_factory=list)
+    source_id: str | None = None
+
+
 class QueryMatchSnapshot(StrictRecord):
     rank: int
     score: int
@@ -30,6 +35,7 @@ class QueryMatchSnapshot(StrictRecord):
 
 class QuerySnapshot(StrictRecord):
     query: str
+    filters: QueryFilterSnapshot = Field(default_factory=QueryFilterSnapshot)
     summary: str
     match_count: int
     created_at: str
