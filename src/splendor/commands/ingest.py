@@ -49,7 +49,7 @@ from splendor.utils.contradictions import (
 )
 from splendor.utils.fs import write_text_atomic
 from splendor.utils.provenance import dedupe_provenance_links, make_provenance_link
-from splendor.utils.time import utc_now_iso
+from splendor.utils.time import parse_aware_timestamp_or_none, utc_now_iso
 from splendor.utils.wiki import (
     WikiUpdatePayload,
     append_log_entry,
@@ -283,19 +283,6 @@ def _best_available_source_ref(source: SourceRecord) -> str:
     return effective_stored_path(source) or canonical_source_ref(source)
 
 
-def _parse_timestamp(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    normalized_value = f"{value[:-1]}+00:00" if value.endswith("Z") else value
-    try:
-        parsed = datetime.fromisoformat(normalized_value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed.astimezone(UTC)
-
-
 def _dead_letter_recovery_message(job_id: str, source_id: str) -> str:
     return (
         f"Queue item is dead-lettered: {job_id}. Run "
@@ -310,7 +297,7 @@ def _lease_expires_at(now: datetime, lease_ttl_seconds: int) -> str:
 def _lease_is_expired(queue_item: QueueItemRecord, now: datetime) -> bool:
     if queue_item.status != "leased":
         return False
-    expires_at = _parse_timestamp(queue_item.lease_expires_at)
+    expires_at = parse_aware_timestamp_or_none(queue_item.lease_expires_at)
     if expires_at is None:
         return True
     return expires_at <= now
@@ -390,7 +377,7 @@ def _run_success_provenance_links(
 
 
 def _next_attempt_is_due(queue_item: QueueItemRecord, now: datetime) -> bool:
-    next_attempt_at = _parse_timestamp(queue_item.next_attempt_at)
+    next_attempt_at = parse_aware_timestamp_or_none(queue_item.next_attempt_at)
     return next_attempt_at is None or next_attempt_at <= now
 
 
@@ -406,7 +393,7 @@ def _is_queue_eligible(queue_item: QueueItemRecord, now: datetime) -> bool:
 
 def _skip_message(queue_item: QueueItemRecord, now: datetime) -> str:
     if queue_item.status == "failed":
-        next_attempt_at = _parse_timestamp(queue_item.next_attempt_at)
+        next_attempt_at = parse_aware_timestamp_or_none(queue_item.next_attempt_at)
         if next_attempt_at is not None and next_attempt_at > now:
             return f"retry after {queue_item.next_attempt_at}"
         return "status=failed"
@@ -415,7 +402,7 @@ def _skip_message(queue_item: QueueItemRecord, now: datetime) -> str:
     if queue_item.status == "done":
         return "status=done"
     if queue_item.status == "leased":
-        expires_at = _parse_timestamp(queue_item.lease_expires_at)
+        expires_at = parse_aware_timestamp_or_none(queue_item.lease_expires_at)
         if expires_at is None:
             return "leased with no expiry"
         if expires_at > now:
@@ -503,8 +490,8 @@ def _mark_attempt_failed(
     manifest_path: Path | None = None,
     source: SourceRecord | None = None,
     run_id: str | None = None,
+    backoff_seconds: list[int],
 ) -> None:
-    config = load_config(root)
     failed_run = run
     if manifest_path is not None and source is not None:
         manifest_ref = _relative_to_root(root, manifest_path)
@@ -532,9 +519,7 @@ def _mark_attempt_failed(
     status = "dead_letter" if queue_item.attempt_count >= queue_item.max_attempts else "failed"
     next_attempt_at = None
     if status == "failed":
-        next_attempt_at = _next_attempt_at_for_failure(
-            queue_item, config.queue.retry_backoff_seconds
-        )
+        next_attempt_at = _next_attempt_at_for_failure(queue_item, backoff_seconds)
     _finalize_queue_record(
         queue_path,
         queue_item,
@@ -969,6 +954,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             manifest_path=manifest_path,
             source=source,
             run_id=run_id,
+            backoff_seconds=config.queue.retry_backoff_seconds,
         )
         raise
     except Exception as exc:
@@ -979,6 +965,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             run_path=run_path,
             run=run,
             error_message=str(exc),
+            backoff_seconds=config.queue.retry_backoff_seconds,
         )
         raise RuntimeError(f"Ingestion failed while committing outputs: {exc}") from exc
 

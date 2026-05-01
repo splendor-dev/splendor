@@ -20,7 +20,7 @@ from splendor.state.runtime import (
     write_queue_item,
 )
 from splendor.state.source_registry import load_source_record, manifest_path_for
-from splendor.utils.time import utc_now_iso
+from splendor.utils.time import parse_aware_timestamp_or_none, utc_now_iso
 
 
 @dataclass(frozen=True)
@@ -278,19 +278,6 @@ def _path_payload(root: Path, path: Path | None) -> str | None:
     return None if path is None else path.relative_to(root).as_posix()
 
 
-def _parse_timestamp(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    normalized_value = f"{value[:-1]}+00:00" if value.endswith("Z") else value
-    try:
-        parsed = datetime.fromisoformat(normalized_value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed.astimezone(UTC)
-
-
 def _operator_state(queue_item: QueueItemRecord) -> str:
     now = datetime.now(UTC).replace(microsecond=0)
     if queue_item.status == "pending":
@@ -300,12 +287,12 @@ def _operator_state(queue_item: QueueItemRecord) -> str:
     if queue_item.status == "dead_letter":
         return "dead_letter"
     if queue_item.status == "leased":
-        expires_at = _parse_timestamp(queue_item.lease_expires_at)
+        expires_at = parse_aware_timestamp_or_none(queue_item.lease_expires_at)
         if expires_at is None or expires_at <= now:
             return "expired_leased"
         return "active_leased"
     if queue_item.status == "failed":
-        next_attempt_at = _parse_timestamp(queue_item.next_attempt_at)
+        next_attempt_at = parse_aware_timestamp_or_none(queue_item.next_attempt_at)
         if next_attempt_at is None or next_attempt_at <= now:
             return "failed_due"
         return "failed_backoff"
