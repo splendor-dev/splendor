@@ -47,7 +47,12 @@ from splendor.commands.queue import (
     retry_queue_job,
 )
 from splendor.commands.repo_refresh import refresh_repo, render_repo_refresh_json
-from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
+from splendor.commands.repo_scan import (
+    apply_repo_scan,
+    render_repo_scan_json,
+    scan_repo,
+    write_repo_scan_report,
+)
 from splendor.commands.source import (
     SourceLookupResult,
     list_sources,
@@ -553,7 +558,35 @@ def build_parser() -> argparse.ArgumentParser:
     repo_parser = subparsers.add_parser("repo", help="Inspect repository-native sources")
     repo_subparsers = repo_parser.add_subparsers(dest="repo_command", required=True)
     repo_scan_parser = repo_subparsers.add_parser(
-        "scan", help="Scan the workspace and register supported in-repo sources"
+        "scan", help="Preview repository source candidates without mutating by default"
+    )
+    repo_scan_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Register previewed candidates as sources. Requires --class or --all.",
+    )
+    repo_scan_parser.add_argument(
+        "--class",
+        action="append",
+        choices=("documentation", "code", "configuration", "other"),
+        dest="class_filters",
+        help="Limit candidates to a source class. Repeat for multiple classes.",
+    )
+    repo_scan_parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_classes",
+        help="Include every supported source class.",
+    )
+    repo_scan_parser.add_argument(
+        "--allow-large-apply",
+        action="store_true",
+        help="Allow --apply when the candidate set is larger than the safety threshold.",
+    )
+    repo_scan_parser.add_argument(
+        "--report",
+        type=Path,
+        help="Write the discovery report JSON to this explicit path.",
     )
     repo_scan_parser.add_argument(
         "--json",
@@ -1405,7 +1438,21 @@ def handle_serve(args: argparse.Namespace) -> int:
 def handle_repo_scan(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
-        result = scan_repo(root)
+        if args.apply:
+            result = apply_repo_scan(
+                root,
+                class_filters=args.class_filters,
+                all_classes=args.all_classes,
+                allow_large_apply=args.allow_large_apply,
+            )
+        else:
+            result = scan_repo(
+                root,
+                class_filters=args.class_filters,
+                all_classes=args.all_classes,
+            )
+        if args.report:
+            result = write_repo_scan_report(result, args.report.resolve())
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
 
@@ -1414,17 +1461,38 @@ def handle_repo_scan(args: argparse.Namespace) -> int:
         return 0
 
     print(
-        "Repo scan summary: "
+        f"Repo scan summary ({result.mode}): "
         f"scanned={result.scanned} "
+        f"candidates={result.candidates} "
         f"registered={result.registered} "
         f"already_registered={result.already_registered} "
         f"unsupported={result.unsupported} "
         f"ignored={result.ignored}"
     )
+    print("Class filters: " + ", ".join(result.class_filters))
     print(
         "Class counts: "
         + " ".join(f"{name}={count}" for name, count in result.class_counts.items())
     )
+    if result.report_path:
+        print(f"Report written: {result.report_path}")
+    if result.mode == "preview":
+        print(
+            "Preview only: no source manifests, wiki pages, derived artifacts, "
+            "queues, or runs written."
+        )
+        if result.candidate_sources:
+            classes = " ".join(f"--class {name}" for name in result.class_filters)
+            print(f"Apply explicitly: splendor repo scan --apply {classes}".rstrip())
+    if result.candidate_sources:
+        print("Candidate sources:")
+        for item in result.candidate_sources:
+            labels = ", ".join(item.source_labels) if item.source_labels else "-"
+            curated = item.source_id if item.already_curated and item.source_id else "-"
+            print(
+                f"- {item.path}: {item.status} "
+                f"(class={item.source_class} labels={labels} source_id={curated})"
+            )
     if result.touched_sources:
         print("Touched sources:")
         for item in result.touched_sources:

@@ -1,10 +1,19 @@
 import json
+import subprocess
 from pathlib import Path
+
+import pytest
+import yaml
 
 from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
-from splendor.commands.repo_scan import render_repo_scan_json, scan_repo
+from splendor.commands.repo_scan import (
+    apply_repo_scan,
+    render_repo_scan_json,
+    scan_repo,
+    write_repo_scan_report,
+)
 from splendor.state.source_registry import load_source_record
 
 
@@ -16,29 +25,35 @@ def _remove_workspace_config(root: Path) -> None:
     (root / "splendor.yaml").unlink(missing_ok=True)
 
 
-def test_repo_scan_registers_and_classifies_supported_workspace_files(tmp_path: Path) -> None:
-    initialize_workspace(tmp_path)
-    _remove_workspace_config(tmp_path)
-    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
-    (tmp_path / "AGENTS.md").write_text("# Agents\n", encoding="utf-8")
-    docs_dir = tmp_path / "docs"
+def _write_mixed_repo(root: Path) -> None:
+    (root / "README.md").write_text("# Readme\n", encoding="utf-8")
+    (root / "AGENTS.md").write_text("# Agents\n", encoding="utf-8")
+    docs_dir = root / "docs"
     docs_dir.mkdir()
     (docs_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
     write_text_pdf(docs_dir / "research.pdf", ["Research PDF"])
-    src_dir = tmp_path / "src"
+    src_dir = root / "src"
     src_dir.mkdir()
     (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
-    tests_dir = tmp_path / "tests"
+    tests_dir = root / "tests"
     tests_dir.mkdir()
     (tests_dir / "test_main.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
-    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir = root / ".github" / "workflows"
     workflows_dir.mkdir(parents=True)
     (workflows_dir / "ci.yml").write_text("name: CI\n", encoding="utf-8")
 
-    result = scan_repo(tmp_path)
 
+def test_repo_scan_previews_and_classifies_supported_workspace_files(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    _write_mixed_repo(tmp_path)
+
+    result = scan_repo(tmp_path, all_classes=True)
+
+    assert result.mode == "preview"
     assert result.scanned == 7
-    assert result.registered == 7
+    assert result.candidates == 7
+    assert result.registered == 0
     assert result.already_registered == 0
     assert result.class_counts == {
         "code": 2,
@@ -46,16 +61,32 @@ def test_repo_scan_registers_and_classifies_supported_workspace_files(tmp_path: 
         "configuration": 1,
         "other": 0,
     }
-    touched = {item.path: item for item in result.touched_sources}
-    assert touched["AGENTS.md"].source_labels == ["agent-instructions"]
-    assert touched["README.md"].source_class == "documentation"
-    assert touched["docs/guide.md"].source_class == "documentation"
-    assert touched["docs/research.pdf"].source_class == "documentation"
-    assert touched["src/main.py"].source_class == "code"
-    assert touched["tests/test_main.py"].source_labels == ["test"]
-    assert touched[".github/workflows/ci.yml"].source_class == "configuration"
-    assert touched[".github/workflows/ci.yml"].source_labels == ["automation"]
+    candidates = {item.path: item for item in result.candidate_sources}
+    assert candidates["AGENTS.md"].source_labels == ["agent-instructions"]
+    assert candidates["README.md"].source_class == "documentation"
+    assert candidates["docs/guide.md"].source_class == "documentation"
+    assert candidates["docs/research.pdf"].source_class == "documentation"
+    assert candidates["src/main.py"].source_class == "code"
+    assert candidates["tests/test_main.py"].source_labels == ["test"]
+    assert candidates[".github/workflows/ci.yml"].source_class == "configuration"
+    assert candidates[".github/workflows/ci.yml"].source_labels == ["automation"]
+    assert _manifest_paths(tmp_path) == []
 
+
+def test_repo_scan_apply_registers_and_classifies_supported_workspace_files(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    _write_mixed_repo(tmp_path)
+
+    result = apply_repo_scan(tmp_path, all_classes=True)
+
+    assert result.mode == "apply"
+    assert result.scanned == 7
+    assert result.candidates == 7
+    assert result.registered == 7
+    assert result.already_registered == 0
     manifest_by_ref = {
         load_source_record(path).source_ref: load_source_record(path)
         for path in _manifest_paths(tmp_path)
@@ -71,7 +102,7 @@ def test_repo_scan_classifies_image_sources_as_other(tmp_path: Path) -> None:
     _remove_workspace_config(tmp_path)
     (tmp_path / "diagram.png").write_bytes(b"\x89PNG\r\n\x1a\n")
 
-    result = scan_repo(tmp_path)
+    result = scan_repo(tmp_path, all_classes=True)
 
     assert result.scanned == 1
     assert result.class_counts == {
@@ -80,8 +111,8 @@ def test_repo_scan_classifies_image_sources_as_other(tmp_path: Path) -> None:
         "configuration": 0,
         "other": 1,
     }
-    assert result.touched_sources[0].path == "diagram.png"
-    assert result.touched_sources[0].source_class == "other"
+    assert result.candidate_sources[0].path == "diagram.png"
+    assert result.candidate_sources[0].source_class == "other"
 
 
 def test_repo_scan_ignores_managed_and_transient_directories(tmp_path: Path) -> None:
@@ -95,12 +126,11 @@ def test_repo_scan_ignores_managed_and_transient_directories(tmp_path: Path) -> 
     (tmp_path / "build").mkdir()
     (tmp_path / "build" / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
 
-    result = scan_repo(tmp_path)
+    result = scan_repo(tmp_path, all_classes=True)
 
     assert result.scanned == 1
-    assert result.registered == 1
-    assert result.ignored == 0
-    assert [item.path for item in result.touched_sources] == ["README.md"]
+    assert result.registered == 0
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
 
 
 def test_repo_scan_reports_unsupported_files(tmp_path: Path) -> None:
@@ -109,13 +139,15 @@ def test_repo_scan_reports_unsupported_files(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
 
-    result = scan_repo(tmp_path)
+    result = scan_repo(tmp_path, all_classes=True)
 
     assert result.scanned == 1
     assert result.unsupported == 1
 
 
-def test_repo_scan_is_idempotent_and_backfills_existing_workspace_metadata(tmp_path: Path) -> None:
+def test_repo_scan_preview_is_non_mutating_for_existing_workspace_metadata(
+    tmp_path: Path,
+) -> None:
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
     source = tmp_path / "README.md"
@@ -128,6 +160,26 @@ def test_repo_scan_is_idempotent_and_backfills_existing_workspace_metadata(tmp_p
 
     result = scan_repo(tmp_path)
 
+    candidates = {item.path: item for item in result.candidate_sources}
+    assert candidates["README.md"].status == "already_curated"
+    assert candidates["README.md"].source_id == added.source_id
+    updated = load_source_record(added.manifest_path)
+    assert updated.source_class is None
+    assert updated.discovered_by is None
+    assert updated.source_labels == []
+
+
+def test_repo_scan_apply_is_idempotent_and_backfills_existing_workspace_metadata(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    source = tmp_path / "README.md"
+    source.write_text("# Readme\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    result = apply_repo_scan(tmp_path, class_filters=["documentation"])
+
     touched = {item.path: item for item in result.touched_sources}
     assert touched["README.md"].status == "already_registered"
     updated = load_source_record(added.manifest_path)
@@ -136,17 +188,17 @@ def test_repo_scan_is_idempotent_and_backfills_existing_workspace_metadata(tmp_p
     assert updated.source_labels == []
 
 
-def test_repo_scan_registers_new_source_id_after_content_changes(tmp_path: Path) -> None:
+def test_repo_scan_apply_registers_new_source_id_after_content_changes(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
     source = tmp_path / "README.md"
     source.write_text("# One\n", encoding="utf-8")
 
-    first = scan_repo(tmp_path)
+    first = apply_repo_scan(tmp_path, class_filters=["documentation"])
     first_id = {item.path: item for item in first.touched_sources}["README.md"].source_id
 
     source.write_text("# Two\n", encoding="utf-8")
-    second = scan_repo(tmp_path)
+    second = apply_repo_scan(tmp_path, class_filters=["documentation"])
     second_id = {item.path: item for item in second.touched_sources}["README.md"].source_id
 
     assert first_id != second_id
@@ -160,12 +212,133 @@ def test_render_repo_scan_json_matches_expected_shape(tmp_path: Path) -> None:
 
     payload = json.loads(render_repo_scan_json(scan_repo(tmp_path)))
 
+    assert payload["mode"] == "preview"
     assert payload["scanned"] == 1
-    assert payload["registered"] == 1
+    assert payload["candidates"] == 1
+    assert payload["registered"] == 0
     assert payload["already_registered"] == 0
     assert payload["unsupported"] == 0
     assert payload["ignored"] >= 0
     assert payload["class_counts"]["documentation"] == 1
-    assert payload["touched_sources"][0]["path"] == "README.md"
-    assert payload["touched_sources"][0]["source_class"] == "documentation"
-    assert payload["touched_sources"][0]["status"] == "registered"
+    assert payload["candidate_sources"][0]["path"] == "README.md"
+    assert payload["candidate_sources"][0]["source_class"] == "documentation"
+    assert payload["candidate_sources"][0]["status"] == "candidate"
+
+
+def test_repo_scan_defaults_to_configured_default_classes(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
+    assert [item.path for item in result.ignored_paths if item.reason == "class_filter"] == [
+        "src/main.py"
+    ]
+
+
+def test_repo_scan_class_filter_includes_code(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path, class_filters=["code"])
+
+    assert [item.path for item in result.candidate_sources] == ["src/main.py"]
+    assert result.class_counts["code"] == 1
+
+
+def test_repo_scan_include_exclude_patterns_are_workspace_relative(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    config_path = tmp_path / "splendor.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["sources"]["include_patterns"] = ["docs/**", "README.md"]
+    config["sources"]["exclude_patterns"] = ["docs/generated/**", "*.tmp.md"]
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    generated_dir = docs_dir / "generated"
+    generated_dir.mkdir()
+    (generated_dir / "skip.md").write_text("# Skip\n", encoding="utf-8")
+    (tmp_path / "note.tmp.md").write_text("# Skip\n", encoding="utf-8")
+    (tmp_path / "other.md").write_text("# Other\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md", "docs/guide.md"]
+    ignored = {item.path: item.reason for item in result.ignored_paths}
+    assert ignored["docs/generated/skip.md"] == "exclude_patterns"
+    assert ignored["note.tmp.md"] == "include_patterns"
+    assert ignored["other.md"] == "include_patterns"
+
+
+def test_repo_scan_respects_gitignore(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / ".gitignore").write_text("generated.md\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    (tmp_path / "generated.md").write_text("# Generated\n", encoding="utf-8")
+
+    git_init = subprocess.run(
+        ["git", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert git_init.returncode == 0
+
+    result = scan_repo(tmp_path, all_classes=True)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
+    assert {item.path: item.reason for item in result.ignored_paths}["generated.md"] == "gitignore"
+
+
+def test_repo_scan_apply_requires_explicit_class_or_all(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="requires at least one --class filter or --all"):
+        apply_repo_scan(tmp_path)
+
+
+def test_repo_scan_apply_refuses_large_candidate_set_without_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initialize_workspace(tmp_path)
+    for index in range(3):
+        (tmp_path / f"doc-{index}.md").write_text(f"# Doc {index}\n", encoding="utf-8")
+    monkeypatch.setattr("splendor.commands.repo_scan.LARGE_APPLY_CANDIDATE_LIMIT", 2)
+
+    with pytest.raises(RuntimeError, match="refused 3 candidates"):
+        apply_repo_scan(tmp_path, class_filters=["documentation"])
+
+    result = apply_repo_scan(
+        tmp_path,
+        class_filters=["documentation"],
+        allow_large_apply=True,
+    )
+    assert result.registered == 3
+
+
+def test_repo_scan_report_writes_only_requested_report(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+
+    result = write_repo_scan_report(scan_repo(tmp_path), tmp_path / "scan-report.json")
+    payload = json.loads((tmp_path / "scan-report.json").read_text(encoding="utf-8"))
+
+    assert result.report_path.endswith("scan-report.json")
+    assert payload["candidate_sources"][0]["path"] == "README.md"
+    assert _manifest_paths(tmp_path) == []

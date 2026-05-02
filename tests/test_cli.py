@@ -129,13 +129,33 @@ def test_cli_brief_parser_accepts_agent_context() -> None:
     assert args.json_output is True
 
 
-def test_cli_repo_scan_parser_accepts_json_flag() -> None:
+def test_cli_repo_scan_parser_accepts_preview_apply_and_report_flags() -> None:
     parser = build_parser()
 
-    args = parser.parse_args(["repo", "scan", "--json"])
+    args = parser.parse_args(
+        [
+            "repo",
+            "scan",
+            "--apply",
+            "--class",
+            "documentation",
+            "--class",
+            "code",
+            "--all",
+            "--allow-large-apply",
+            "--report",
+            "reports/repo-scan.json",
+            "--json",
+        ]
+    )
 
     assert args.command == "repo"
     assert args.repo_command == "scan"
+    assert args.apply is True
+    assert args.class_filters == ["documentation", "code"]
+    assert args.all_classes is True
+    assert args.allow_large_apply is True
+    assert args.report == Path("reports/repo-scan.json")
     assert args.json_output is True
 
 

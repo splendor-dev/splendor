@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from splendor.commands.repo_scan import RepoScanResult, scan_repo
+from splendor.commands.repo_scan import RepoScanResult, apply_repo_scan
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter
@@ -27,7 +27,7 @@ class RepoRefreshResult:
 
 
 def refresh_repo(root: Path) -> RepoRefreshResult:
-    scan = scan_repo(root)
+    scan = apply_repo_scan(root, all_classes=True, allow_large_apply=True)
     config = load_config(root)
     layout = resolve_layout(root, config)
     generated_at = utc_now_iso()

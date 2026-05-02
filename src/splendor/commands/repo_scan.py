@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from splendor.config import load_config
 from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, SUPPORTED_SOURCE_TYPES
-from splendor.layout import resolve_layout
+from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.schemas.types import SourceClass
-from splendor.state.source_registry import register_source
+from splendor.state.source_registry import load_source_record, register_source
 
 _CONFIG_EXTENSIONS = {"json", "yaml", "yml"}
 _DOCUMENTATION_EXTENSIONS = {"md", "pdf", "txt"}
@@ -20,13 +22,43 @@ _CODE_EXTENSIONS = (
 )
 _IGNORED_TOP_LEVEL_DIRS = {
     ".git",
+    ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    ".tox",
     ".venv",
     "__pycache__",
     "build",
     "dist",
+    "node_modules",
 }
+_SOURCE_CLASSES: tuple[SourceClass, ...] = ("code", "documentation", "configuration", "other")
+LARGE_APPLY_CANDIDATE_LIMIT = 200
+
+
+@dataclass(frozen=True)
+class CuratedSourceInfo:
+    source_id: str
+    title: str
+
+
+@dataclass(frozen=True)
+class RepoScanCandidate:
+    path: str
+    source_class: SourceClass
+    source_labels: list[str]
+    already_curated: bool
+    source_id: str | None = None
+    title: str | None = None
+    status: str = "candidate"
+
+
+@dataclass(frozen=True)
+class RepoScanIgnoredPath:
+    path: str
+    reason: str
+    source_class: SourceClass | None = None
+    source_labels: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -40,59 +72,135 @@ class RepoScanItem:
 
 @dataclass(frozen=True)
 class RepoScanResult:
+    mode: str
     scanned: int
+    candidates: int
     registered: int
     already_registered: int
     unsupported: int
     ignored: int
     class_counts: dict[str, int]
+    class_filters: list[str]
+    include_patterns: list[str]
+    exclude_patterns: list[str]
+    candidate_sources: list[RepoScanCandidate]
+    ignored_paths: list[RepoScanIgnoredPath]
     touched_sources: list[RepoScanItem]
+    report_path: str | None = None
 
 
-def scan_repo(root: Path) -> RepoScanResult:
+def scan_repo(
+    root: Path,
+    *,
+    class_filters: list[SourceClass] | None = None,
+    all_classes: bool = False,
+) -> RepoScanResult:
     config = load_config(root)
     layout = resolve_layout(root, config)
-    supported_paths: list[Path] = []
-    ignored = 0
-    unsupported = 0
+    selected_classes = _selected_classes(
+        configured_default_classes=config.sources.repo_scan_default_classes,
+        class_filters=class_filters,
+        all_classes=all_classes,
+    )
+    include_patterns = list(config.sources.include_patterns)
+    exclude_patterns = list(config.sources.exclude_patterns)
+    curated_sources = _workspace_curated_sources(root, layout)
 
-    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
-        current_dir = Path(dirpath)
-        dirnames[:] = [
-            dirname
-            for dirname in sorted(dirnames)
-            if not _is_ignored_dir(current_dir / dirname, root, layout)
-        ]
-        ignored += len(filenames) - len(
-            [
-                filename
-                for filename in filenames
-                if not _is_ignored_path(current_dir / filename, root, layout)
-            ]
-        )
-        for filename in sorted(filenames):
-            path = current_dir / filename
-            if _is_ignored_path(path, root, layout):
-                continue
-            if path.suffix.lstrip(".") not in SUPPORTED_SOURCE_TYPES:
-                unsupported += 1
-                continue
-            supported_paths.append(path)
-
-    touched_sources: list[RepoScanItem] = []
-    class_counts = {name: 0 for name in ("code", "documentation", "configuration", "other")}
-    registered = 0
-    already_registered = 0
+    supported_paths, ignored_paths, unsupported = _discover_supported_paths(root, layout)
+    ignored_by_path = {item.path: item for item in ignored_paths}
+    candidate_sources: list[RepoScanCandidate] = []
+    class_counts = {name: 0 for name in _SOURCE_CLASSES}
 
     for path in supported_paths:
         relative_path = path.relative_to(root).as_posix()
         source_class = _classify_path(path, relative_path)
         source_labels = _labels_for(relative_path)
+        if not _matches_include_patterns(relative_path, include_patterns):
+            ignored_by_path[relative_path] = RepoScanIgnoredPath(
+                path=relative_path,
+                reason="include_patterns",
+                source_class=source_class,
+                source_labels=source_labels,
+            )
+            continue
+        if _matches_any_pattern(relative_path, exclude_patterns):
+            ignored_by_path[relative_path] = RepoScanIgnoredPath(
+                path=relative_path,
+                reason="exclude_patterns",
+                source_class=source_class,
+                source_labels=source_labels,
+            )
+            continue
+        if source_class not in selected_classes:
+            ignored_by_path[relative_path] = RepoScanIgnoredPath(
+                path=relative_path,
+                reason="class_filter",
+                source_class=source_class,
+                source_labels=source_labels,
+            )
+            continue
+
+        curated = curated_sources.get(relative_path)
+        status = "already_curated" if curated else "candidate"
+        class_counts[source_class] += 1
+        candidate_sources.append(
+            RepoScanCandidate(
+                path=relative_path,
+                source_class=source_class,
+                source_labels=source_labels,
+                already_curated=curated is not None,
+                source_id=curated.source_id if curated else None,
+                title=curated.title if curated else None,
+                status=status,
+            )
+        )
+
+    return RepoScanResult(
+        mode="preview",
+        scanned=len(supported_paths),
+        candidates=len(candidate_sources),
+        registered=0,
+        already_registered=sum(1 for candidate in candidate_sources if candidate.already_curated),
+        unsupported=unsupported,
+        ignored=len(ignored_by_path),
+        class_counts=class_counts,
+        class_filters=list(selected_classes),
+        include_patterns=include_patterns,
+        exclude_patterns=exclude_patterns,
+        candidate_sources=candidate_sources,
+        ignored_paths=[ignored_by_path[key] for key in sorted(ignored_by_path)],
+        touched_sources=[],
+    )
+
+
+def apply_repo_scan(
+    root: Path,
+    *,
+    class_filters: list[SourceClass] | None = None,
+    all_classes: bool = False,
+    allow_large_apply: bool = False,
+) -> RepoScanResult:
+    if not class_filters and not all_classes:
+        msg = "repo scan --apply requires at least one --class filter or --all"
+        raise ValueError(msg)
+    preview = scan_repo(root, class_filters=class_filters, all_classes=all_classes)
+    if preview.candidates > LARGE_APPLY_CANDIDATE_LIMIT and not allow_large_apply:
+        msg = (
+            "repo scan --apply refused "
+            f"{preview.candidates} candidates; rerun with --allow-large-apply after reviewing "
+            "the preview/report"
+        )
+        raise RuntimeError(msg)
+
+    registered = 0
+    already_registered = 0
+    touched_sources: list[RepoScanItem] = []
+    for candidate in preview.candidate_sources:
         registered_source = register_source(
             root,
-            path,
-            source_class=source_class,
-            source_labels=source_labels,
+            root / candidate.path,
+            source_class=candidate.source_class,
+            source_labels=candidate.source_labels,
             discovered_by="repo_scan",
             refresh_existing_metadata=True,
         )
@@ -101,36 +209,91 @@ def scan_repo(root: Path) -> RepoScanResult:
             already_registered += 1
         else:
             registered += 1
-        class_counts[source_class] += 1
         touched_sources.append(
             RepoScanItem(
-                path=relative_path,
+                path=candidate.path,
                 source_id=registered_source.record.source_id,
-                source_class=source_class,
-                source_labels=source_labels,
+                source_class=candidate.source_class,
+                source_labels=candidate.source_labels,
                 status=status,
             )
         )
 
     return RepoScanResult(
-        scanned=len(supported_paths),
+        mode="apply",
+        scanned=preview.scanned,
+        candidates=preview.candidates,
         registered=registered,
         already_registered=already_registered,
-        unsupported=unsupported,
-        ignored=ignored,
-        class_counts=class_counts,
+        unsupported=preview.unsupported,
+        ignored=preview.ignored,
+        class_counts=preview.class_counts,
+        class_filters=preview.class_filters,
+        include_patterns=preview.include_patterns,
+        exclude_patterns=preview.exclude_patterns,
+        candidate_sources=preview.candidate_sources,
+        ignored_paths=preview.ignored_paths,
         touched_sources=touched_sources,
+    )
+
+
+def write_repo_scan_report(result: RepoScanResult, report_path: Path) -> RepoScanResult:
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(render_repo_scan_json(result) + "\n", encoding="utf-8")
+    return RepoScanResult(
+        mode=result.mode,
+        scanned=result.scanned,
+        candidates=result.candidates,
+        registered=result.registered,
+        already_registered=result.already_registered,
+        unsupported=result.unsupported,
+        ignored=result.ignored,
+        class_counts=result.class_counts,
+        class_filters=result.class_filters,
+        include_patterns=result.include_patterns,
+        exclude_patterns=result.exclude_patterns,
+        candidate_sources=result.candidate_sources,
+        ignored_paths=result.ignored_paths,
+        touched_sources=result.touched_sources,
+        report_path=report_path.as_posix(),
     )
 
 
 def render_repo_scan_json(result: RepoScanResult) -> str:
     payload = {
+        "mode": result.mode,
         "scanned": result.scanned,
+        "candidates": result.candidates,
         "registered": result.registered,
         "already_registered": result.already_registered,
         "unsupported": result.unsupported,
         "ignored": result.ignored,
         "class_counts": result.class_counts,
+        "class_filters": result.class_filters,
+        "include_patterns": result.include_patterns,
+        "exclude_patterns": result.exclude_patterns,
+        "report_path": result.report_path,
+        "candidate_sources": [
+            {
+                "path": item.path,
+                "source_class": item.source_class,
+                "source_labels": item.source_labels,
+                "already_curated": item.already_curated,
+                "source_id": item.source_id,
+                "title": item.title,
+                "status": item.status,
+            }
+            for item in result.candidate_sources
+        ],
+        "ignored_paths": [
+            {
+                "path": item.path,
+                "reason": item.reason,
+                "source_class": item.source_class,
+                "source_labels": item.source_labels or [],
+            }
+            for item in result.ignored_paths
+        ],
         "touched_sources": [
             {
                 "path": item.path,
@@ -145,24 +308,104 @@ def render_repo_scan_json(result: RepoScanResult) -> str:
     return json.dumps(payload, indent=2)
 
 
-def _is_ignored_path(path: Path, root: Path, layout) -> bool:
+def _selected_classes(
+    *,
+    configured_default_classes: list[SourceClass],
+    class_filters: list[SourceClass] | None,
+    all_classes: bool,
+) -> tuple[SourceClass, ...]:
+    if all_classes:
+        return _SOURCE_CLASSES
+    if class_filters:
+        return tuple(dict.fromkeys(class_filters))
+    if configured_default_classes:
+        return tuple(dict.fromkeys(configured_default_classes))
+    return ("documentation",)
+
+
+def _discover_supported_paths(
+    root: Path, layout: ResolvedLayout
+) -> tuple[list[Path], list[RepoScanIgnoredPath], int]:
+    walked_files: list[Path] = []
+    ignored_paths_by_path: dict[str, RepoScanIgnoredPath] = {}
+    unsupported = 0
+
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+        current_dir = Path(dirpath)
+        filtered_dirnames = []
+        for dirname in sorted(dirnames):
+            path = current_dir / dirname
+            reason = _ignored_dir_reason(path, root, layout)
+            if reason is not None:
+                continue
+            filtered_dirnames.append(dirname)
+        dirnames[:] = filtered_dirnames
+        for filename in sorted(filenames):
+            path = current_dir / filename
+            relative_path = path.relative_to(root).as_posix()
+            reason = _ignored_path_reason(path, root, layout)
+            if reason is not None:
+                ignored_paths_by_path[relative_path] = RepoScanIgnoredPath(
+                    path=relative_path,
+                    reason=reason,
+                )
+                continue
+            walked_files.append(path)
+
+    gitignored = _git_ignored_paths(root, walked_files)
+    supported_paths: list[Path] = []
+    for path in walked_files:
+        relative_path = path.relative_to(root).as_posix()
+        if relative_path in gitignored:
+            ignored_paths_by_path[relative_path] = RepoScanIgnoredPath(
+                path=relative_path,
+                reason="gitignore",
+            )
+            continue
+        if path.suffix.lstrip(".") not in SUPPORTED_SOURCE_TYPES:
+            unsupported += 1
+            continue
+        supported_paths.append(path)
+
+    return (
+        supported_paths,
+        [ignored_paths_by_path[key] for key in sorted(ignored_paths_by_path)],
+        unsupported,
+    )
+
+
+def _workspace_curated_sources(root: Path, layout: ResolvedLayout) -> dict[str, CuratedSourceInfo]:
+    curated: dict[str, CuratedSourceInfo] = {}
+    for manifest_path in sorted(layout.source_records_dir.glob("*.json")):
+        record = load_source_record(manifest_path)
+        if record.source_ref_kind != "workspace_path":
+            continue
+        curated[record.source_ref] = CuratedSourceInfo(
+            source_id=record.source_id,
+            title=record.title,
+        )
+    return curated
+
+
+def _ignored_path_reason(path: Path, root: Path, layout: ResolvedLayout) -> str | None:
     relative = path.relative_to(root)
     if not relative.parts:
-        return False
-    first = relative.parts[0]
-    return first in _ignored_top_level_dirs(root, layout)
+        return None
+    if relative.parts[0] in _ignored_top_level_dirs(root, layout):
+        return "managed_or_transient"
+    return None
 
 
-def _is_ignored_dir(path: Path, root: Path, layout) -> bool:
+def _ignored_dir_reason(path: Path, root: Path, layout: ResolvedLayout) -> str | None:
     relative = path.relative_to(root)
     if not relative.parts:
-        return False
-    if len(relative.parts) == 1:
-        return relative.parts[0] in _ignored_top_level_dirs(root, layout)
-    return False
+        return None
+    if relative.parts[0] in _ignored_top_level_dirs(root, layout):
+        return "managed_or_transient"
+    return None
 
 
-def _ignored_top_level_dirs(root: Path, layout) -> set[str]:
+def _ignored_top_level_dirs(root: Path, layout: ResolvedLayout) -> set[str]:
     ignored_top_level_dirs = _IGNORED_TOP_LEVEL_DIRS | {
         layout.raw_dir.relative_to(root).parts[0],
         layout.derived_dir.relative_to(root).parts[0],
@@ -172,6 +415,50 @@ def _ignored_top_level_dirs(root: Path, layout) -> set[str]:
         layout.planning_dir.relative_to(root).parts[0],
     }
     return ignored_top_level_dirs
+
+
+def _git_ignored_paths(root: Path, paths: list[Path]) -> set[str]:
+    if not paths or not (root / ".git").exists():
+        return set()
+    walked_paths = {path.relative_to(root).as_posix() for path in paths}
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "--ignored", "--others", "--exclude-standard"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return set()
+    if result.returncode != 0:
+        return set()
+    return {line.strip() for line in result.stdout.splitlines() if line.strip() in walked_paths}
+
+
+def _matches_include_patterns(relative_path: str, patterns: list[str]) -> bool:
+    if not patterns:
+        return True
+    return _matches_any_pattern(relative_path, patterns)
+
+
+def _matches_any_pattern(relative_path: str, patterns: list[str]) -> bool:
+    return any(_matches_pattern(relative_path, pattern) for pattern in patterns)
+
+
+def _matches_pattern(relative_path: str, pattern: str) -> bool:
+    normalized_pattern = pattern.strip().replace("\\", "/")
+    if not normalized_pattern:
+        return False
+    if fnmatch.fnmatchcase(relative_path, normalized_pattern):
+        return True
+    if "/" not in normalized_pattern and fnmatch.fnmatchcase(
+        Path(relative_path).name, normalized_pattern
+    ):
+        return True
+    if normalized_pattern.endswith("/**"):
+        directory = normalized_pattern[:-3].rstrip("/")
+        return relative_path == directory or relative_path.startswith(f"{directory}/")
+    return False
 
 
 def _classify_path(path: Path, relative_path: str) -> SourceClass:

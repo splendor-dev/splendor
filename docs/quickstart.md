@@ -90,13 +90,29 @@ uv run splendor --root /tmp/demo-repo add-source --glob "docs/*.md"
 uv run splendor --root /tmp/demo-repo add-source --dir docs
 ```
 
-For real repositories, prefer curated `add-source`, `--glob`, or `--dir` registration over broad
-repo discovery. Current `splendor repo scan` is broad and mutating: it registers supported files it
-finds under the workspace. Issue #70 showed that this can create thousands of manifests in repos
-with generated configs, tests, or large code trees. M13-P2 redesign work will make repo scan safe by
-default with non-mutating candidate reports, filters, and explicit apply semantics. Until then, use
-`repo scan` only for small demo repositories or deliberate bulk registration runs whose diff you
-intend to review.
+For real repositories, prefer curated `add-source`, `--glob`, or `--dir` registration when you
+already know the source set. `splendor repo scan` is safe by default: the bare command previews
+candidate sources without writing manifests, wiki pages, derived artifacts, queues, runs, or
+reports.
+
+```bash
+uv run splendor --root /tmp/demo-repo repo scan
+uv run splendor --root /tmp/demo-repo repo scan --json
+uv run splendor --root /tmp/demo-repo repo scan --class documentation --report /tmp/demo-repo/reports/repo-scan.json
+```
+
+To register candidates from a reviewed preview, apply explicitly with a class or all-class opt-in:
+
+```bash
+uv run splendor --root /tmp/demo-repo repo scan --apply --class documentation
+uv run splendor --root /tmp/demo-repo repo scan --apply --all --allow-large-apply
+```
+
+`sources.include_patterns`, `sources.exclude_patterns`, and
+`sources.repo_scan_default_classes` in `splendor.yaml` control candidate discovery. Patterns are
+workspace-root-relative POSIX globs; exclude matches win over include matches, and class filtering
+runs after include/exclude filtering. Git-ignored files, dependency directories, build outputs, and
+Splendor-managed state/output directories are skipped by default.
 
 Readable source lookup maps titles and paths back to canonical source IDs without renaming source
 records or generated `wiki/sources/src-...md` pages:
