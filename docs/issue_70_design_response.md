@@ -44,7 +44,8 @@ curated project knowledge."
 The design distinction is:
 
 - **Discovery** finds candidate files and reports them without changing source manifests.
-- **Curation** explicitly accepts sources into `state/manifests/sources/`.
+- **Curation** explicitly accepts sources into the configured source-record registry, which defaults
+  to `state/manifests/sources/` and is controlled by `layout.source_records_dir`.
 - **Synthesis** creates or updates maintained wiki pages only when the result adds cross-source
   value, review context, contradiction handling, or handoff value.
 
@@ -56,8 +57,15 @@ rather than assumed to be the primary value.
 
 The next implementation slices should document and then implement these contracts:
 
-- `splendor repo scan` defaults to a non-mutating candidate preview.
-- Mutating registration from scan requires `--apply`.
+- `splendor repo scan` defaults to a non-mutating candidate preview. Non-mutating means stdout
+  output only by default: no source manifests, wiki pages, derived artifacts, queue records, run
+  records, or reports are written.
+- `repo scan --json` emits the same preview as machine-readable JSON to stdout. Persisting a
+  discovery report requires an explicit output flag such as `--report PATH`, and that flag writes
+  only the report, not source manifests.
+- Mutating registration from scan requires `--apply`. This is an intentional safety-breaking
+  change from the current mutating default: the old behavior moves behind `--apply`, and the bare
+  command should clearly say that it is preview-only and print the exact apply command.
 - Broad registration requires explicit class/all opt-in and should refuse huge candidate sets
   without confirmation flags.
 - `repo scan` supports class filtering, such as `--class documentation`, `--class code`, and
@@ -65,6 +73,9 @@ The next implementation slices should document and then implement these contract
 - `splendor.yaml` supports planned `sources.include_patterns` and `sources.exclude_patterns`.
 - Scan candidate output includes paths, classes, labels, ignore reasons, and whether a source is
   already curated.
+- M13-P2.2 must update CLI help, README/quickstart guidance, and tests around the new preview
+  default, the `--apply` compatibility path, JSON output, report persistence, class filters, and
+  large-candidate refusal.
 - A freshness workflow reports curated sources whose current canonical file content differs from
   the manifest checksum and prints exact next commands.
 - `brief --agent-context` leads with actual project state, stale/contested/actionable items, and

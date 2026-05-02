@@ -79,7 +79,9 @@ reports may classify and rank them, but candidates are not part of the durable s
 the user accepts them.
 
 **Curated sources** are immutable source artifacts that represent the project’s evidence base and
-are recorded in `state/manifests/sources/`.
+are recorded in the configured source-record registry. The default registry path is
+`state/manifests/sources/`; non-default layouts use `layout.source_records_dir` in
+`splendor.yaml`.
 
 Examples:
 - markdown notes
@@ -116,6 +118,25 @@ Examples:
 - already-curated candidate markers
 
 Discovery reports are not source manifests. They help users and agents decide what to curate.
+Planned `splendor repo scan` behavior is:
+
+- default output is a human-readable stdout preview only
+- `--json` emits a machine-readable preview to stdout
+- persistent report files are written only when the operator passes an explicit report path such as
+  `--report PATH`
+- preview/report generation must not write source manifests, wiki pages, derived artifacts, queue
+  records, or run records
+- mutating source registration is allowed only through an explicit apply path
+
+The minimum planned candidate fields are:
+- `path`: workspace-root-relative POSIX path or external reference
+- `class`: candidate class such as `documentation`, `code`, or `configuration`
+- `labels`: deterministic labels assigned during classification
+- `status`: `included`, `excluded`, or `already_curated`
+- `ignore_reason`: explanation when a candidate is skipped
+- `matched_include_patterns` and `matched_exclude_patterns`
+- `source_id` and `title` when the candidate is already curated
+- `next_command`: exact follow-up command for registration, inspection, or exclusion
 
 ### 4.3 Derived Extraction Artifacts
 
@@ -767,6 +788,9 @@ Planned M13-P2 contracts:
 
 - `splendor repo scan` should default to a non-mutating candidate preview that writes no source
   manifests unless the user passes an explicit apply flag.
+- This preview default is an intentional safety-breaking CLI change. The previous mutating behavior
+  moves to `repo scan --apply`; the bare command should say that it is preview-only and print the
+  exact apply command.
 - Repo scan should support class filters, include/exclude patterns from `splendor.yaml`, and guard
   against large candidate sets before registration.
 - Broad registration should require explicit all/classes opt-in and should refuse huge candidate
@@ -1159,9 +1183,18 @@ Current source settings:
   `.ocr.txt`
 
 Planned source-discovery settings:
-- `sources.include_patterns`: optional glob patterns that define repo-scan candidate inclusion
-- `sources.exclude_patterns`: optional glob patterns that skip generated/noisy paths
-- `sources.repo_scan_default_classes`: class policy for non-mutating candidate discovery
+- `sources.include_patterns`: optional workspace-root-relative POSIX glob patterns that define
+  repo-scan candidate inclusion
+- `sources.exclude_patterns`: optional workspace-root-relative POSIX glob patterns that skip
+  generated/noisy paths; exclude matches win over include matches
+- `sources.repo_scan_default_classes`: class policy for non-mutating candidate discovery, applied
+  after include/exclude filtering
+
+Repo scan should skip Git-ignored files, Splendor state/output directories, dependency directories,
+build artifacts, and other generated paths by default unless a future explicit override flag
+documents the extra churn. Class filters narrow the already-filtered candidate set; they should not
+override excludes. The default class policy should bias toward documentation and curated knowledge
+over all supported files.
 
 ## 28. Minimum Opinionated Core
 

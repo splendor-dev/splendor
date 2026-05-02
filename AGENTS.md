@@ -63,7 +63,8 @@
 
 - Keep repository layout changes aligned with `src/splendor/layout.py`.
 - Use models in `src/splendor/schemas/` as the contract for persisted record shapes.
-- `state/manifests/sources/` is the canonical machine-readable source registry.
+- `state/manifests/sources/` is the default machine-readable source registry; non-default layouts
+  may override it with `layout.source_records_dir`.
 - Treat source discovery and source curation as separate concepts. Future discovery workflows must
   be non-mutating by default and should produce candidate reports before writing manifests.
 - Treat source manifests as intentional curated sources, not a dumping ground for every supported
