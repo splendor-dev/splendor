@@ -90,6 +90,14 @@ uv run splendor --root /tmp/demo-repo add-source --glob "docs/*.md"
 uv run splendor --root /tmp/demo-repo add-source --dir docs
 ```
 
+For real repositories, prefer curated `add-source`, `--glob`, or `--dir` registration over broad
+repo discovery. Current `splendor repo scan` is broad and mutating: it registers supported files it
+finds under the workspace. Issue #70 showed that this can create thousands of manifests in repos
+with generated configs, tests, or large code trees. M13-P2 redesign work will make repo scan safe by
+default with non-mutating candidate reports, filters, and explicit apply semantics. Until then, use
+`repo scan` only for small demo repositories or deliberate bulk registration runs whose diff you
+intend to review.
+
 Readable source lookup maps titles and paths back to canonical source IDs without renaming source
 records or generated `wiki/sources/src-...md` pages:
 

@@ -2,20 +2,29 @@
 
 ## 1. Overview
 
-**Splendor** is a local-first, git-native, schema-driven knowledge compiler for code-and-research repositories. It turns a software project and its surrounding research materials into a maintained, queryable, reviewable project wiki composed primarily of markdown files, with structured provenance, planning objects, and incremental LLM-assisted synthesis.
+**Splendor** is a local-first, git-native, schema-driven agent context system for
+code-and-research repositories. It maintains curated project knowledge, provenance, planning
+objects, freshness signals, and reviewable synthesis in markdown and structured sidecars so humans
+and agents can decide what is trustworthy, stale, contested, and actionable.
 
 The product is inspired by the LLM Wiki pattern: a persistent wiki that is continuously updated as new source material arrives, instead of re-deriving knowledge from raw documents at query time. In Splendor, that pattern is adapted specifically for software projects that require substantial research, domain knowledge, technical decision tracking, and project planning. The uploaded concept note emphasizes the persistent wiki as the central compounding artifact, with raw sources remaining immutable and the LLM maintaining the synthesized layer. fileciteturn0file0L6-L18 fileciteturn0file0L35-L43
+
+Issue #70 clarified that this wiki layer must not become a noisy mirror of files agents can already
+read directly. Splendor should distinguish discovery from curation, keep source manifests
+intentional, and generate synthesis when it adds cross-source value, freshness context,
+contradiction handling, or handoff value.
 
 ## 2. Product Goals
 
 ### Core goals
 
-1. **Maintain a persistent project wiki in git**
-   - The wiki lives either inside the code repository or in a companion repository.
-   - The wiki is primarily markdown and optimized for GitHub readability and reviewability.
+1. **Maintain curated project context in git**
+   - The knowledge workspace lives either inside the code repository or in a companion repository.
+   - The durable state is markdown and schema-bound sidecars optimized for GitHub readability and
+     reviewability.
 
 2. **Support incremental source ingestion**
-   - New sources are added to the repository and processed into structured wiki updates.
+   - Curated sources are added to the repository and processed into structured knowledge updates.
    - Existing wiki pages are updated rather than recreated from scratch.
 
 3. **Treat provenance as a first-class concern**
@@ -51,6 +60,7 @@ Splendor is built around a few principles:
 - **Local-first authoring and ingestion**
 - **Git-native collaboration and review**
 - **Persistent knowledge over stateless retrieval**
+- **Curated source intent over broad file mirroring**
 - **Structured provenance over opaque synthesis**
 - **Deterministic maintenance where rules suffice**
 - **LLMs for semantic work, not for every operation**
@@ -58,11 +68,18 @@ Splendor is built around a few principles:
 
 ## 4. Core Conceptual Model
 
-Splendor has five conceptual layers.
+Splendor has seven conceptual layers.
 
-### 4.1 Sources
+### 4.1 Source Candidates and Curated Sources
 
-Immutable source artifacts that represent the project’s evidence base.
+Splendor distinguishes files it discovers from sources the user intentionally curates.
+
+**Source candidates** are files or external references found by discovery workflows. Candidate
+reports may classify and rank them, but candidates are not part of the durable source registry until
+the user accepts them.
+
+**Curated sources** are immutable source artifacts that represent the project’s evidence base and
+are recorded in `state/manifests/sources/`.
 
 Examples:
 - markdown notes
@@ -75,7 +92,8 @@ Examples:
 - design docs
 - code files or code snapshots
 
-The source layer is append-oriented. Sources are not mutated by LLM workflows.
+The source layer is append-oriented. Sources are not mutated by LLM workflows. Discovery must not
+create large manifest or wiki churn unless the user explicitly applies a curated selection.
 
 Splendor now defaults to workspace-backed registration for in-repo files and materialized copies
 for external local files. Materialization under `raw/sources/` remains useful for external and
@@ -87,7 +105,19 @@ already live inside git. The source model therefore distinguishes between:
 - any optional **materialized snapshot or pointer artifact** Splendor creates for provenance,
   portability, or repairability
 
-### 4.2 Derived Extraction Artifacts
+### 4.2 Discovery Reports
+
+Machine-readable reports produced by non-mutating discovery workflows.
+
+Examples:
+- repo scan candidate reports
+- include/exclude match summaries
+- candidate class counts
+- already-curated candidate markers
+
+Discovery reports are not source manifests. They help users and agents decide what to curate.
+
+### 4.3 Derived Extraction Artifacts
 
 Machine-generated extraction outputs derived from raw sources.
 
@@ -102,7 +132,7 @@ Examples:
 
 These are repairable intermediates, not the wiki itself.
 
-### 4.3 Knowledge Pages
+### 4.4 Knowledge Pages
 
 Maintained markdown pages that form the project wiki.
 
@@ -118,12 +148,30 @@ Examples:
 These pages are incrementally updated as new sources arrive.
 
 Source-summary pages are ingestion artifacts, not the full compounding synthesis layer. They make a
-registered source searchable, reviewable, and traceable to an ingest run. Concept, topic,
+curated source searchable, reviewable, and traceable to an ingest run. Concept, topic,
 comparison, architecture, and overview pages are the maintained synthesis layer where Splendor
 turns source evidence into project knowledge. Product workflows should keep that distinction
 explicit instead of implying that source-summary generation alone completes wiki maintenance.
 
-### 4.4 Operational Ledger
+Future public concepts should name this distinction directly:
+- **Generated source-summary artifact**: a per-source page or sidecar produced by ingest, useful
+  when the source is opaque, transformed, external, PDF/OCR-derived, or otherwise hard to inspect
+  directly.
+- **Maintained synthesis page**: a curated wiki page that compounds evidence across sources,
+  decisions, tasks, contradictions, and project history.
+
+### 4.5 Freshness State
+
+Computed state that compares curated source manifests, canonical source paths, generated artifacts,
+and wiki pages.
+
+Freshness answers:
+- which curated sources changed since their manifest checksum
+- which ingests or source summaries are stale
+- which synthesis pages need follow-up
+- which exact command should move the project state forward
+
+### 4.6 Operational Ledger
 
 Durable operational records that track what happened.
 
@@ -139,7 +187,7 @@ Examples:
 
 This layer exists to support idempotency, trust, debugging, and recovery.
 
-### 4.5 Planning Objects
+### 4.7 Planning Objects
 
 Structured project-management artifacts rendered as markdown and queryable through the CLI/UI.
 
@@ -715,6 +763,24 @@ Current implementation:
 - Mutating `splendor wiki compile <source-id>` remains deferred to a later reviewed compile-loop
   slice.
 
+Planned M13-P2 contracts:
+
+- `splendor repo scan` should default to a non-mutating candidate preview that writes no source
+  manifests unless the user passes an explicit apply flag.
+- Repo scan should support class filters, include/exclude patterns from `splendor.yaml`, and guard
+  against large candidate sets before registration.
+- Broad registration should require explicit all/classes opt-in and should refuse huge candidate
+  sets unless the operator passes documented confirmation flags.
+- `splendor.yaml` should add planned `sources.include_patterns`, `sources.exclude_patterns`, and a
+  repo-scan default class policy that favors documentation/curated knowledge over all supported
+  files.
+- A freshness workflow should report curated sources whose canonical file content differs from the
+  manifest checksum and should include source IDs, titles, paths, status, and exact next commands.
+- `brief --agent-context` should lead with project state, stale/contested/actionable items, and
+  next actions before metadata.
+- A future `suggest-next` command should rank work from open tasks, stale sources, failed jobs,
+  missing synthesis, and contradictions.
+
 Later optional support:
 - additional OCR providers
 - image captioning or metadata extraction
@@ -1092,6 +1158,11 @@ Current source settings:
 - `sources.ocr_sidecar_suffix`: sidecar suffix appended to the resolved source path, default
   `.ocr.txt`
 
+Planned source-discovery settings:
+- `sources.include_patterns`: optional glob patterns that define repo-scan candidate inclusion
+- `sources.exclude_patterns`: optional glob patterns that skip generated/noisy paths
+- `sources.repo_scan_default_classes`: class policy for non-mutating candidate discovery
+
 ## 28. Minimum Opinionated Core
 
 The smallest opinionated core should be:
@@ -1117,7 +1188,7 @@ The smallest opinionated core should be:
 Splendor should be considered successful at the product-spec level if it can do the following reliably:
 
 1. initialize a repo or subdirectory as a Splendor wiki
-2. add a source and create stable source metadata
+2. curate a source and create stable source metadata
 3. ingest a source and create a stable source-summary page
 4. identify or update affected synthesis pages through a reviewable compile/update path
 5. avoid duplicate accidental re-ingestion
@@ -1130,6 +1201,8 @@ Splendor should be considered successful at the product-spec level if it can do 
 11. lint the repo deterministically
 12. operate locally without GitHub
 13. optionally integrate with GitHub Actions for maintenance
+14. preview repo discovery without mutating manifests or wiki pages
+15. report stale curated sources and actionable next commands
 
 ## 30. Open Design Questions
 
@@ -1142,7 +1215,9 @@ These are not blockers to the spec, but should remain visible:
 5. how aggressively to auto-update central synthesis pages
 6. exact level of provenance granularity at the paragraph/claim level
 7. whether a companion-repo linking model needs a first-class schema element
+8. exact generated source-summary policy for readable in-repo markdown and code files
 
 ## 31. Summary Product Statement
 
-**Splendor turns a code repo and its research materials into a maintained, queryable, reviewable project wiki — with provenance, tasks, decisions, and incremental LLM-assisted synthesis.**
+**Splendor turns curated project sources, planning state, and review signals into an agent-ready
+context layer with provenance, freshness, contradictions, next actions, and reviewable synthesis.**

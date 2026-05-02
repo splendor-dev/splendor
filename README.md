@@ -136,10 +136,14 @@ Implemented today:
 
 Not implemented yet:
 
+- safe-by-default non-mutating `repo scan` candidate discovery
 - mutating review-gated `splendor wiki compile`
 - heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
 - changed-files-driven refresh suggestions
+
+Current `splendor repo scan` is broad and mutating. On real repositories, prefer curated
+`add-source` registration until the M13-P2 safe discovery redesign from issue #70 lands.
 
 Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
 `derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
@@ -152,6 +156,7 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [docs/quickstart.md](docs/quickstart.md)
 - [docs/companion_repo_setup.md](docs/companion_repo_setup.md)
 - [docs/dogfooding.md](docs/dogfooding.md)
+- [docs/issue_70_design_response.md](docs/issue_70_design_response.md)
 - [docs/splendor_product_spec.md](docs/splendor_product_spec.md)
 - [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md)
 - [docs/schema_contracts.md](docs/schema_contracts.md)
@@ -159,12 +164,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M12-P2.1`
-- Current planned slice: `M13-P1`
-- Current PR sub-slice: `M13-P1.1`
+- Previous completed PR sub-slice: `M13-P1.1`
+- Current planned slice: `M13-P2`
+- Current PR sub-slice: `M13-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.1`
+- Next planned PR sub-slice: `M13-P2.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -204,5 +209,16 @@ explicit dead-letter records, and stale-lease recovery.
 refresh through the existing ingest queue, and readable source lookup by title or path without
 changing canonical source IDs. `M11-P2.1` is implemented: it adds CLI-first topic scaffolding,
 deterministic templates, and wiki index rebuild support. `M11-P3.1` is implemented: it adds query
-filters for tags/source refs and a compact agent-context handoff mode. The current PR sub-slice is
-`M12-P1.1`, which adds rich-source dispatch and the first deterministic text-bearing PDF path.
+filters for tags/source refs and a compact agent-context handoff mode.
+
+`M12-P1.1`, `M12-P2.1`, and `M13-P1.1` are implemented. The current M13-P2 work responds to the
+first real agent-experience report in issue #70 by redesigning repo discovery around safe
+candidate reports, curated source manifests, source freshness, and higher-signal agent handoffs.
+
+`M13-P2.1` is a docs/planning-only reset:
+
+- [x] record the accepted Issue #70 design response
+- [x] realign the roadmap around safe discovery, curation, freshness, and agent handoff
+- [x] document planned interfaces for `repo scan`, freshness, `brief --agent-context`, and
+  `suggest-next`
+- [x] avoid Python, schema, test, and runtime behavior changes
