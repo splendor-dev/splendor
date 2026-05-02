@@ -125,6 +125,17 @@ def test_repo_scan_ignores_managed_and_transient_directories(tmp_path: Path) -> 
     (tmp_path / ".venv" / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
     (tmp_path / "build").mkdir()
     (tmp_path / "build" / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
+    packages_dir = tmp_path / "packages" / "app"
+    packages_dir.mkdir(parents=True)
+    nested_node_modules = packages_dir / "node_modules"
+    nested_node_modules.mkdir()
+    (nested_node_modules / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
+    nested_cache = tmp_path / "src" / "__pycache__"
+    nested_cache.mkdir(parents=True)
+    (nested_cache / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
+    generated_docs = tmp_path / "docs" / "generated"
+    generated_docs.mkdir(parents=True)
+    (generated_docs / "ignored.md").write_text("# Ignored\n", encoding="utf-8")
 
     result = scan_repo(tmp_path, all_classes=True)
 
@@ -298,15 +309,15 @@ def test_repo_scan_include_exclude_patterns_are_workspace_relative(
     config_path = tmp_path / "splendor.yaml"
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     config["sources"]["include_patterns"] = ["docs/**", "README.md"]
-    config["sources"]["exclude_patterns"] = ["docs/generated/**", "*.tmp.md"]
+    config["sources"]["exclude_patterns"] = ["docs/drafts/**", "*.tmp.md"]
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
     (docs_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
-    generated_dir = docs_dir / "generated"
-    generated_dir.mkdir()
-    (generated_dir / "skip.md").write_text("# Skip\n", encoding="utf-8")
+    drafts_dir = docs_dir / "drafts"
+    drafts_dir.mkdir()
+    (drafts_dir / "skip.md").write_text("# Skip\n", encoding="utf-8")
     (tmp_path / "note.tmp.md").write_text("# Skip\n", encoding="utf-8")
     (tmp_path / "other.md").write_text("# Other\n", encoding="utf-8")
 
@@ -314,7 +325,7 @@ def test_repo_scan_include_exclude_patterns_are_workspace_relative(
 
     assert [item.path for item in result.candidate_sources] == ["README.md", "docs/guide.md"]
     ignored = {item.path: item.reason for item in result.ignored_paths}
-    assert ignored["docs/generated/skip.md"] == "exclude_patterns"
+    assert ignored["docs/drafts/skip.md"] == "exclude_patterns"
     assert ignored["note.tmp.md"] == "include_patterns"
     assert ignored["other.md"] == "include_patterns"
 
@@ -364,12 +375,39 @@ def test_repo_scan_globs_are_path_segment_aware(tmp_path: Path) -> None:
 
     result = scan_repo(tmp_path)
 
-    assert [item.path for item in result.candidate_sources] == ["docs/guide.md"]
+    assert [item.path for item in result.candidate_sources] == [
+        "configs/root.yml",
+        "docs/guide.md",
+    ]
     ignored = {item.path: item.reason for item in result.ignored_paths}
     assert ignored["docs/nested/deep.md"] == "include_patterns"
     assert ignored["docs/private/note.md"] == "include_patterns"
-    assert ignored["configs/root.yml"] == "include_patterns"
     assert ignored["configs/scenes/generated.yml"] == "exclude_patterns"
+
+
+def test_repo_scan_globstar_matches_zero_or_more_path_segments(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config_path = tmp_path / "splendor.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["sources"]["include_patterns"] = ["docs/**/*.md"]
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    nested_docs_dir = docs_dir / "nested"
+    nested_docs_dir.mkdir()
+    (nested_docs_dir / "deep.md").write_text("# Deep\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path)
+
+    assert [item.path for item in result.candidate_sources] == [
+        "docs/guide.md",
+        "docs/nested/deep.md",
+    ]
+    assert {item.path: item.reason for item in result.ignored_paths}["README.md"] == (
+        "include_patterns"
+    )
 
 
 def test_repo_scan_respects_gitignore(tmp_path: Path) -> None:
@@ -419,6 +457,30 @@ def test_repo_scan_respects_gitignore_when_workspace_is_repository_subdirectory(
 
     assert [item.path for item in result.candidate_sources] == ["README.md"]
     assert {item.path: item.reason for item in result.ignored_paths}["generated.md"] == "gitignore"
+
+
+def test_repo_scan_prunes_gitignored_directories_before_walking(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / ".gitignore").write_text("vendor/\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    vendor_dir = tmp_path / "vendor"
+    vendor_dir.mkdir()
+    (vendor_dir / "skip.md").write_text("# Ignored\n", encoding="utf-8")
+
+    git_init = subprocess.run(
+        ["git", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert git_init.returncode == 0
+
+    result = scan_repo(tmp_path, all_classes=True)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
+    assert "vendor/skip.md" not in {item.path for item in result.ignored_paths}
 
 
 def test_repo_scan_apply_requires_explicit_class_or_all(tmp_path: Path) -> None:

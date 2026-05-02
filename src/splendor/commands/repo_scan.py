@@ -6,7 +6,8 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass, replace
-from pathlib import Path, PurePosixPath
+from fnmatch import fnmatchcase
+from pathlib import Path
 
 from splendor.config import load_config
 from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, SUPPORTED_SOURCE_TYPES
@@ -20,7 +21,8 @@ _DOCUMENTATION_EXTENSIONS = {"md", "pdf", "txt"}
 _CODE_EXTENSIONS = (
     SUPPORTED_SOURCE_TYPES - _CONFIG_EXTENSIONS - _DOCUMENTATION_EXTENSIONS - IMAGE_SOURCE_TYPES
 )
-_IGNORED_TOP_LEVEL_DIRS = {
+_IGNORED_DIR_NAMES = {
+    ".cache",
     ".git",
     ".mypy_cache",
     ".pytest_cache",
@@ -29,7 +31,9 @@ _IGNORED_TOP_LEVEL_DIRS = {
     ".venv",
     "__pycache__",
     "build",
+    "coverage",
     "dist",
+    "generated",
     "node_modules",
 }
 _SOURCE_CLASSES: tuple[SourceClass, ...] = ("code", "documentation", "configuration", "other")
@@ -61,6 +65,12 @@ class RepoScanIgnoredPath:
     reason: str
     source_class: SourceClass | None = None
     source_labels: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class GitIgnoreContext:
+    repo_root: Path | None
+    workspace_root: Path
 
 
 @dataclass(frozen=True)
@@ -339,6 +349,7 @@ def _discover_supported_paths(
     walked_files: list[Path] = []
     ignored_paths_by_path: dict[str, RepoScanIgnoredPath] = {}
     unsupported = 0
+    gitignore = _git_ignore_context(root)
 
     for dirpath, dirnames, filenames in os.walk(root, topdown=True):
         current_dir = Path(dirpath)
@@ -346,6 +357,8 @@ def _discover_supported_paths(
         for dirname in sorted(dirnames):
             path = current_dir / dirname
             reason = _ignored_dir_reason(path, root, layout)
+            if reason is None and _is_git_ignored_path(path, gitignore, is_dir=True):
+                reason = "gitignore"
             if reason is not None:
                 continue
             filtered_dirnames.append(dirname)
@@ -362,7 +375,7 @@ def _discover_supported_paths(
                 continue
             walked_files.append(path)
 
-    gitignored = _git_ignored_paths(root, walked_files)
+    gitignored = _git_ignored_paths(root, walked_files, gitignore)
     supported_paths: list[Path] = []
     for path in walked_files:
         relative_path = path.relative_to(root).as_posix()
@@ -407,7 +420,9 @@ def _ignored_path_reason(path: Path, root: Path, layout: ResolvedLayout) -> str 
     relative = path.relative_to(root)
     if not relative.parts:
         return None
-    if relative.parts[0] in _ignored_top_level_dirs(root, layout):
+    if _is_managed_layout_path(relative, root, layout) or _has_ignored_dir_name(
+        relative.parts, is_dir=False
+    ):
         return "managed_or_transient"
     return None
 
@@ -416,27 +431,42 @@ def _ignored_dir_reason(path: Path, root: Path, layout: ResolvedLayout) -> str |
     relative = path.relative_to(root)
     if not relative.parts:
         return None
-    if relative.parts[0] in _ignored_top_level_dirs(root, layout):
+    if _is_managed_layout_path(relative, root, layout) or _has_ignored_dir_name(
+        relative.parts, is_dir=True
+    ):
         return "managed_or_transient"
     return None
 
 
-def _ignored_top_level_dirs(root: Path, layout: ResolvedLayout) -> set[str]:
-    ignored_top_level_dirs = _IGNORED_TOP_LEVEL_DIRS | {
-        layout.raw_dir.relative_to(root).parts[0],
-        layout.derived_dir.relative_to(root).parts[0],
-        layout.state_dir.relative_to(root).parts[0],
-        layout.reports_dir.relative_to(root).parts[0],
-        layout.wiki_dir.relative_to(root).parts[0],
-        layout.planning_dir.relative_to(root).parts[0],
-    }
-    return ignored_top_level_dirs
+def _is_managed_layout_path(relative: Path, root: Path, layout: ResolvedLayout) -> bool:
+    return any(
+        _parts_start_with(relative.parts, managed_parts)
+        for managed_parts in _managed_layout_parts(root, layout)
+    )
 
 
-def _git_ignored_paths(root: Path, paths: list[Path]) -> set[str]:
-    if not paths:
-        return set()
-    walked_paths = {path.relative_to(root).as_posix() for path in paths}
+def _managed_layout_parts(root: Path, layout: ResolvedLayout) -> tuple[tuple[str, ...], ...]:
+    managed_paths = (
+        layout.raw_dir,
+        layout.derived_dir,
+        layout.state_dir,
+        layout.reports_dir,
+        layout.wiki_dir,
+        layout.planning_dir,
+    )
+    return tuple(path.relative_to(root).parts for path in managed_paths)
+
+
+def _parts_start_with(parts: tuple[str, ...], prefix: tuple[str, ...]) -> bool:
+    return len(parts) >= len(prefix) and parts[: len(prefix)] == prefix
+
+
+def _has_ignored_dir_name(parts: tuple[str, ...], *, is_dir: bool) -> bool:
+    directory_parts = parts if is_dir else parts[:-1]
+    return any(part in _IGNORED_DIR_NAMES for part in directory_parts)
+
+
+def _git_ignore_context(root: Path) -> GitIgnoreContext:
     try:
         top_level = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
@@ -445,17 +475,27 @@ def _git_ignored_paths(root: Path, paths: list[Path]) -> set[str]:
             check=False,
         )
     except OSError:
-        return set()
+        return GitIgnoreContext(repo_root=None, workspace_root=root.resolve())
     if top_level.returncode != 0:
+        return GitIgnoreContext(repo_root=None, workspace_root=root.resolve())
+    return GitIgnoreContext(
+        repo_root=Path(top_level.stdout.strip()).resolve(),
+        workspace_root=root.resolve(),
+    )
+
+
+def _git_ignored_paths(root: Path, paths: list[Path], gitignore: GitIgnoreContext) -> set[str]:
+    if not paths:
         return set()
-    repo_root = Path(top_level.stdout.strip()).resolve()
-    workspace_root = root.resolve()
+    walked_paths = {path.relative_to(root).as_posix() for path in paths}
+    if gitignore.repo_root is None:
+        return set()
     try:
         result = subprocess.run(
             [
                 "git",
                 "-C",
-                str(repo_root),
+                str(gitignore.repo_root),
                 "ls-files",
                 "--ignored",
                 "--others",
@@ -476,13 +516,46 @@ def _git_ignored_paths(root: Path, paths: list[Path]) -> set[str]:
         if not repo_relative:
             continue
         try:
-            workspace_relative = (repo_root / repo_relative).resolve().relative_to(workspace_root)
+            workspace_relative = (
+                (gitignore.repo_root / repo_relative)
+                .resolve()
+                .relative_to(gitignore.workspace_root)
+            )
         except ValueError:
             continue
         relative_path = workspace_relative.as_posix()
         if relative_path in walked_paths:
             ignored.add(relative_path)
     return ignored
+
+
+def _is_git_ignored_path(path: Path, gitignore: GitIgnoreContext, *, is_dir: bool = False) -> bool:
+    if gitignore.repo_root is None:
+        return False
+    try:
+        repo_relative = path.resolve().relative_to(gitignore.repo_root).as_posix()
+    except ValueError:
+        return False
+    if is_dir:
+        repo_relative = f"{repo_relative.rstrip('/')}/"
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(gitignore.repo_root),
+                "check-ignore",
+                "--quiet",
+                "--",
+                repo_relative,
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
 
 
 def _matches_include_patterns(relative_path: str, patterns: list[str]) -> bool:
@@ -496,18 +569,38 @@ def _matches_any_pattern(relative_path: str, patterns: list[str]) -> bool:
 
 
 def _matches_pattern(relative_path: str, pattern: str) -> bool:
-    normalized_pattern = pattern.strip().replace("\\", "/")
+    normalized_pattern = _normalize_pattern(pattern)
     if not normalized_pattern:
         return False
-    if "/" not in normalized_pattern and "/" in relative_path:
+    path_parts = tuple(part for part in relative_path.split("/") if part)
+    pattern_parts = tuple(part for part in normalized_pattern.split("/") if part)
+    if len(pattern_parts) == 1 and len(path_parts) != 1:
         return False
-    path = PurePosixPath(relative_path)
-    if path.match(normalized_pattern):
-        return True
-    if normalized_pattern.endswith("/**"):
-        directory = normalized_pattern[:-3].rstrip("/")
-        return relative_path == directory or relative_path.startswith(f"{directory}/")
-    return False
+    return _match_path_parts(path_parts, pattern_parts)
+
+
+def _normalize_pattern(pattern: str) -> str:
+    normalized = pattern.strip().replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized.strip("/")
+
+
+def _match_path_parts(path_parts: tuple[str, ...], pattern_parts: tuple[str, ...]) -> bool:
+    if not pattern_parts:
+        return not path_parts
+    pattern_part, *remaining_pattern = pattern_parts
+    remaining_pattern_parts = tuple(remaining_pattern)
+    if pattern_part == "**":
+        return any(
+            _match_path_parts(path_parts[index:], remaining_pattern_parts)
+            for index in range(len(path_parts) + 1)
+        )
+    if not path_parts:
+        return False
+    return fnmatchcase(path_parts[0], pattern_part) and _match_path_parts(
+        path_parts[1:], remaining_pattern_parts
+    )
 
 
 def _latest_curated_source(sources: list[CuratedSourceInfo]) -> CuratedSourceInfo | None:
