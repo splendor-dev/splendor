@@ -334,21 +334,18 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M12-P2.1`
-- Current planned slice: `M13-P1`
-- Current PR sub-slice: `M13-P1.1`
+- Previous completed PR sub-slice: `M13-P1.1`
+- Current planned slice: `M13-P2`
+- Current PR sub-slice: `M13-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.1`
+- Next planned PR sub-slice: `M13-P2.2`
 
-`M10-P0.1` is implemented: the CLI-first wiki status and source-impact suggestion bridge is in
-place. `M10-P0.2` is implemented: project briefing and the non-mutating review-gated compile-loop
-contract are available. `M10-P0.3` is implemented: it polishes the visible dogfood workflow with
-restrained next-action hints, claim-bearing snippets, and read-only web status/source-detail
-surfaces. The current PR sub-slice is `M9-P2.1`, under parent slice `M9-P2`, which returns to
-read-only planning and runtime inspection pages for the local web UI. The lifecycle marker means
-`M9-P2.1` is in progress on feature branches and merged once the same committed state is observed
-on `main`.
+`M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The current M13-P2 sequence
+responds to issue #70 by making source discovery safe, keeping source manifests curated, and
+shifting agent-facing value toward freshness, contested knowledge, planning state, and next
+actions. The lifecycle marker means `M13-P2.1` is in progress on feature branches and merged once
+the same committed state is observed on `main`.
 
 ---
 
@@ -753,7 +750,7 @@ text-bearing PDFs through deterministic local extraction. Parsed PDF text is sto
 `derived/parsed/`, linked from source manifests through `derived_artifacts`, and used by the same
 source-summary/query path as text-native sources.
 
-`M12-P2.1` is in progress: it adds explicitly configured image/OCR dispatch using a deterministic
+`M12-P2.1` is implemented: it adds explicitly configured image/OCR dispatch using a deterministic
 sidecar-text provider. OCR-derived text is stored separately under `derived/ocr/`, linked from
 source manifests through `derived_artifacts`, and used by the same generated source-summary/query
 path when extraction succeeds. Sidecar checksum metadata is stored under `derived/metadata/` so
@@ -762,27 +759,45 @@ deterministically without destabilizing text-native or text-bearing PDF ingest.
 
 ---
 
-## Milestone 13 — v1 stabilization and release
+## Milestone 13 — v1 stabilization, agent usefulness, and release
 
 ### Goal
-Publish a coherent, documented v1 that feels like a complete product.
+Publish a coherent v1 only after the first real agent-experience feedback is addressed: broad repo
+discovery must be safe, source manifests must stay curated, and agent handoffs must summarize
+freshness, contested knowledge, planning state, and next actions rather than mostly metadata.
 
 ### Scope
 - contract hardening
 - docs and examples
 - migration notes
 - versioned schemas
-- extension points
-- performance polish
-- one or two real-world showcase repos
+- issue #70 design response
+- safe repo discovery and curation controls
+- source freshness and diff-since-ingest reporting
+- higher-signal agent handoff and next-action guidance
+- source-summary policy and path-first UX
+- release finalization after the redesign lands
 
 ### Planned PR slices
 - `M13-P1` Schema/docs/migration stabilization
-- `M13-P2` Extension/performance/release finalization
+- `M13-P2` Issue #70 agent-usefulness redesign
+- `M13-P3` Extension/performance/release finalization
+
+### Current PR sub-slices
+- `M13-P2.1` Docs-only design reset and roadmap realignment
+- `M13-P2.2` Safe repo scan candidate discovery
+- `M13-P2.3` Source freshness / diff-since-ingest workflow
+- `M13-P2.4` Agent handoff brief and suggest-next
+- `M13-P2.5` Source-summary policy and path-first UX
 
 ### Deliverables
 - v1 schema versions
 - migration documentation for earlier repos
+- issue #70 design response
+- safe repo scan candidate reports
+- curated source registration guidance
+- freshness reporting for changed curated sources
+- actionable agent handoff and next-action surfaces
 - end-to-end tutorials
 - reference example repos
 - stable CLI docs
@@ -794,6 +809,8 @@ Publish a coherent, documented v1 that feels like a complete product.
 - the product is stable enough for sustained real-world use
 - the architecture is coherent
 - the CLI, file contracts, and workflow model are documented and dependable
+- broad discovery cannot accidentally create large manifest/wiki churn
+- generated artifacts add value beyond readable source files
 - the difference between core and optional features is very clear
 
 ---
