@@ -14,7 +14,7 @@ from splendor.commands.repo_scan import (
     scan_repo,
     write_repo_scan_report,
 )
-from splendor.state.source_registry import load_source_record
+from splendor.state.source_registry import load_source_record, write_source_record
 
 
 def _manifest_paths(root: Path) -> list[Path]:
@@ -211,6 +211,37 @@ def test_repo_scan_apply_registers_new_source_id_after_content_changes(tmp_path:
     assert second.registered == 1
 
 
+def test_repo_scan_preview_uses_latest_manifest_for_changed_workspace_path(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    source = tmp_path / "README.md"
+    source.write_text("# One\n", encoding="utf-8")
+    first = add_source(tmp_path, source)
+    first_record = load_source_record(first.manifest_path)
+    write_source_record(
+        first.manifest_path,
+        first_record.model_copy(update={"added_at": "2026-01-01T00:00:00+00:00"}),
+    )
+
+    source.write_text("# Two\n", encoding="utf-8")
+    second = add_source(tmp_path, source)
+    second_record = load_source_record(second.manifest_path)
+    write_source_record(
+        second.manifest_path,
+        second_record.model_copy(update={"added_at": "2026-01-02T00:00:00+00:00"}),
+    )
+
+    source.write_text("# Three\n", encoding="utf-8")
+
+    preview = scan_repo(tmp_path)
+    preview_candidate = {item.path: item for item in preview.candidate_sources}["README.md"]
+
+    assert preview_candidate.status == "new_version_candidate"
+    assert preview_candidate.source_id == second.source_id
+
+
 def test_render_repo_scan_json_matches_expected_shape(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
@@ -288,6 +319,25 @@ def test_repo_scan_include_exclude_patterns_are_workspace_relative(
     assert ignored["other.md"] == "include_patterns"
 
 
+def test_repo_scan_separatorless_globs_match_only_workspace_root(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config_path = tmp_path / "splendor.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["sources"]["include_patterns"] = ["README.md"]
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Root\n", encoding="utf-8")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "README.md").write_text("# Nested\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
+    assert {item.path: item.reason for item in result.ignored_paths}["docs/README.md"] == (
+        "include_patterns"
+    )
+
+
 def test_repo_scan_globs_are_path_segment_aware(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     config_path = tmp_path / "splendor.yaml"
@@ -339,6 +389,33 @@ def test_repo_scan_respects_gitignore(tmp_path: Path) -> None:
     assert git_init.returncode == 0
 
     result = scan_repo(tmp_path, all_classes=True)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
+    assert {item.path: item.reason for item in result.ignored_paths}["generated.md"] == "gitignore"
+
+
+def test_repo_scan_respects_gitignore_when_workspace_is_repository_subdirectory(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "project"
+    workspace_root = repo_root / "workspace"
+    workspace_root.mkdir(parents=True)
+    initialize_workspace(workspace_root)
+    _remove_workspace_config(workspace_root)
+    (repo_root / ".gitignore").write_text("workspace/generated.md\n", encoding="utf-8")
+    (workspace_root / "README.md").write_text("# Readme\n", encoding="utf-8")
+    (workspace_root / "generated.md").write_text("# Generated\n", encoding="utf-8")
+
+    git_init = subprocess.run(
+        ["git", "init"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert git_init.returncode == 0
+
+    result = scan_repo(workspace_root, all_classes=True)
 
     assert [item.path for item in result.candidate_sources] == ["README.md"]
     assert {item.path: item.reason for item in result.ignored_paths}["generated.md"] == "gitignore"

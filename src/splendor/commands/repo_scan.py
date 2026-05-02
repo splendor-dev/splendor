@@ -41,6 +41,7 @@ class CuratedSourceInfo:
     source_id: str
     title: str
     checksum: str
+    added_at: str
 
 
 @dataclass(frozen=True)
@@ -81,7 +82,7 @@ class RepoScanResult:
     unsupported: int
     ignored: int
     class_counts: dict[str, int]
-    class_filters: list[str]
+    class_filters: list[SourceClass]
     include_patterns: list[str]
     exclude_patterns: list[str]
     candidate_sources: list[RepoScanCandidate]
@@ -147,7 +148,7 @@ def scan_repo(
             (source for source in curated_for_path if source.checksum == current_checksum),
             None,
         )
-        previous_curated = curated_for_path[0] if curated_for_path else None
+        previous_curated = _latest_curated_source(curated_for_path)
         status = (
             "already_curated"
             if current_curated is not None
@@ -396,6 +397,7 @@ def _workspace_curated_sources(
                 source_id=record.source_id,
                 title=record.title,
                 checksum=record.checksum,
+                added_at=record.added_at,
             )
         )
     return curated
@@ -432,12 +434,33 @@ def _ignored_top_level_dirs(root: Path, layout: ResolvedLayout) -> set[str]:
 
 
 def _git_ignored_paths(root: Path, paths: list[Path]) -> set[str]:
-    if not paths or not (root / ".git").exists():
+    if not paths:
         return set()
     walked_paths = {path.relative_to(root).as_posix() for path in paths}
     try:
+        top_level = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return set()
+    if top_level.returncode != 0:
+        return set()
+    repo_root = Path(top_level.stdout.strip()).resolve()
+    workspace_root = root.resolve()
+    try:
         result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "--ignored", "--others", "--exclude-standard"],
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "ls-files",
+                "--ignored",
+                "--others",
+                "--exclude-standard",
+            ],
             text=True,
             capture_output=True,
             check=False,
@@ -446,7 +469,20 @@ def _git_ignored_paths(root: Path, paths: list[Path]) -> set[str]:
         return set()
     if result.returncode != 0:
         return set()
-    return {line.strip() for line in result.stdout.splitlines() if line.strip() in walked_paths}
+
+    ignored: set[str] = set()
+    for line in result.stdout.splitlines():
+        repo_relative = line.strip()
+        if not repo_relative:
+            continue
+        try:
+            workspace_relative = (repo_root / repo_relative).resolve().relative_to(workspace_root)
+        except ValueError:
+            continue
+        relative_path = workspace_relative.as_posix()
+        if relative_path in walked_paths:
+            ignored.add(relative_path)
+    return ignored
 
 
 def _matches_include_patterns(relative_path: str, patterns: list[str]) -> bool:
@@ -463,6 +499,8 @@ def _matches_pattern(relative_path: str, pattern: str) -> bool:
     normalized_pattern = pattern.strip().replace("\\", "/")
     if not normalized_pattern:
         return False
+    if "/" not in normalized_pattern and "/" in relative_path:
+        return False
     path = PurePosixPath(relative_path)
     if path.match(normalized_pattern):
         return True
@@ -470,6 +508,12 @@ def _matches_pattern(relative_path: str, pattern: str) -> bool:
         directory = normalized_pattern[:-3].rstrip("/")
         return relative_path == directory or relative_path.startswith(f"{directory}/")
     return False
+
+
+def _latest_curated_source(sources: list[CuratedSourceInfo]) -> CuratedSourceInfo | None:
+    if not sources:
+        return None
+    return max(sources, key=lambda source: (source.added_at, source.source_id))
 
 
 def _classify_path(path: Path, relative_path: str) -> SourceClass:
