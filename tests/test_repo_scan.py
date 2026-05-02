@@ -198,6 +198,12 @@ def test_repo_scan_apply_registers_new_source_id_after_content_changes(tmp_path:
     first_id = {item.path: item for item in first.touched_sources}["README.md"].source_id
 
     source.write_text("# Two\n", encoding="utf-8")
+    preview = scan_repo(tmp_path)
+    preview_candidate = {item.path: item for item in preview.candidate_sources}["README.md"]
+    assert preview_candidate.status == "new_version_candidate"
+    assert preview_candidate.already_curated is False
+    assert preview_candidate.source_id == first_id
+
     second = apply_repo_scan(tmp_path, class_filters=["documentation"])
     second_id = {item.path: item for item in second.touched_sources}["README.md"].source_id
 
@@ -280,6 +286,40 @@ def test_repo_scan_include_exclude_patterns_are_workspace_relative(
     assert ignored["docs/generated/skip.md"] == "exclude_patterns"
     assert ignored["note.tmp.md"] == "include_patterns"
     assert ignored["other.md"] == "include_patterns"
+
+
+def test_repo_scan_globs_are_path_segment_aware(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config_path = tmp_path / "splendor.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["sources"]["include_patterns"] = ["docs/*", "configs/**/*.yml"]
+    config["sources"]["exclude_patterns"] = ["docs/private/*", "configs/scenes/*.yml"]
+    config["sources"]["repo_scan_default_classes"] = ["documentation", "configuration"]
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    nested_docs_dir = docs_dir / "nested"
+    nested_docs_dir.mkdir()
+    (nested_docs_dir / "deep.md").write_text("# Deep\n", encoding="utf-8")
+    private_dir = docs_dir / "private"
+    private_dir.mkdir()
+    (private_dir / "note.md").write_text("# Private\n", encoding="utf-8")
+    configs_dir = tmp_path / "configs"
+    configs_dir.mkdir()
+    (configs_dir / "root.yml").write_text("root: true\n", encoding="utf-8")
+    scenes_dir = configs_dir / "scenes"
+    scenes_dir.mkdir()
+    (scenes_dir / "generated.yml").write_text("generated: true\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path)
+
+    assert [item.path for item in result.candidate_sources] == ["docs/guide.md"]
+    ignored = {item.path: item.reason for item in result.ignored_paths}
+    assert ignored["docs/nested/deep.md"] == "include_patterns"
+    assert ignored["docs/private/note.md"] == "include_patterns"
+    assert ignored["configs/root.yml"] == "include_patterns"
+    assert ignored["configs/scenes/generated.yml"] == "exclude_patterns"
 
 
 def test_repo_scan_respects_gitignore(tmp_path: Path) -> None:

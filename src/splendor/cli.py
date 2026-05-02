@@ -599,6 +599,29 @@ def build_parser() -> argparse.ArgumentParser:
         "refresh", help="Refresh deterministic repo-aware wiki pages"
     )
     repo_refresh_parser.add_argument(
+        "--apply-scan",
+        action="store_true",
+        help="Register scan candidates before refreshing pages. Requires --class or --all.",
+    )
+    repo_refresh_parser.add_argument(
+        "--class",
+        action="append",
+        choices=("documentation", "code", "configuration", "other"),
+        dest="class_filters",
+        help="Limit refresh scan candidates to a source class. Repeat for multiple classes.",
+    )
+    repo_refresh_parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_classes",
+        help="Include every supported source class in the refresh scan.",
+    )
+    repo_refresh_parser.add_argument(
+        "--allow-large-apply",
+        action="store_true",
+        help="Allow --apply-scan when the candidate set is larger than the safety threshold.",
+    )
+    repo_refresh_parser.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
@@ -1482,8 +1505,12 @@ def handle_repo_scan(args: argparse.Namespace) -> int:
             "queues, or runs written."
         )
         if result.candidate_sources:
-            classes = " ".join(f"--class {name}" for name in result.class_filters)
-            print(f"Apply explicitly: splendor repo scan --apply {classes}".rstrip())
+            class_flags = (
+                "--all"
+                if args.all_classes
+                else " ".join(f"--class {name}" for name in result.class_filters)
+            )
+            print(f"Apply explicitly: splendor repo scan --apply {class_flags}".rstrip())
     if result.candidate_sources:
         print("Candidate sources:")
         for item in result.candidate_sources:
@@ -1507,7 +1534,13 @@ def handle_repo_scan(args: argparse.Namespace) -> int:
 def handle_repo_refresh(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
-        result = refresh_repo(root)
+        result = refresh_repo(
+            root,
+            apply_scan=args.apply_scan,
+            class_filters=args.class_filters,
+            all_classes=args.all_classes,
+            allow_large_apply=args.allow_large_apply,
+        )
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
 

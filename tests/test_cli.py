@@ -159,13 +159,28 @@ def test_cli_repo_scan_parser_accepts_preview_apply_and_report_flags() -> None:
     assert args.json_output is True
 
 
-def test_cli_repo_refresh_parser_accepts_json_flag() -> None:
+def test_cli_repo_refresh_parser_accepts_apply_scan_flags() -> None:
     parser = build_parser()
 
-    args = parser.parse_args(["repo", "refresh", "--json"])
+    args = parser.parse_args(
+        [
+            "repo",
+            "refresh",
+            "--apply-scan",
+            "--class",
+            "documentation",
+            "--all",
+            "--allow-large-apply",
+            "--json",
+        ]
+    )
 
     assert args.command == "repo"
     assert args.repo_command == "refresh"
+    assert args.apply_scan is True
+    assert args.class_filters == ["documentation"]
+    assert args.all_classes is True
+    assert args.allow_large_apply is True
     assert args.json_output is True
 
 

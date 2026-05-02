@@ -83,7 +83,7 @@ What it does:
 - checks out `main`
 - installs Python 3.12 and `uv`
 - syncs development dependencies
-- runs `uv run splendor repo refresh`
+- runs `uv run splendor repo refresh` in safe non-registering mode
 - runs `uv run splendor lint`
 - uploads generated lint reports as a GitHub Actions artifact
 - opens or updates a PR from `codex/splendor-generated-repo-refresh` when deterministic generated
@@ -92,7 +92,6 @@ What it does:
 Reviewed output paths:
 
 - `wiki/**`
-- `state/manifests/sources/**`
 - `raw/sources/**`
 
 Permissions:

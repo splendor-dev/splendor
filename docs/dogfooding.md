@@ -14,8 +14,13 @@ uv run splendor lint
 uv run splendor health
 ```
 
-`repo refresh` scans supported in-repo files, registers source manifests, and generates the
-repository architecture/topic pages that make a fresh workspace useful before any manual curation.
+`repo refresh` scans supported in-repo files without registering new source manifests by default,
+then generates the repository architecture/topic pages. To seed manifests from the same reviewed
+scan, opt in explicitly:
+
+```bash
+uv run splendor repo refresh --apply-scan --all --allow-large-apply
+```
 
 ## Curated Notes
 

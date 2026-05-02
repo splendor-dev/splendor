@@ -350,10 +350,13 @@ The CLI now includes `splendor repo refresh` for deterministic repo-aware wiki m
 
 Current runtime behavior:
 
-- run repo discovery using the existing repo-scan registration path
-- write machine-generated architecture and topic pages for repository structure and source linkage
-- link generated pages to discovered source IDs through frontmatter and provenance links
+- run safe repo discovery without registering new source manifests by default
+- write machine-generated architecture and topic pages for repository structure and curated source
+  linkage
+- link generated pages to already-curated source IDs through frontmatter and provenance links
 - update the wiki index and log idempotently
+- mutating scan registration requires `repo refresh --apply-scan` plus `--class ...` or `--all`;
+  large apply runs also require `--allow-large-apply`
 
 ## Review config
 

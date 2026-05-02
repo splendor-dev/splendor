@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import fnmatch
 import json
 import os
 import subprocess
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass, replace
+from pathlib import Path, PurePosixPath
 
 from splendor.config import load_config
 from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, SUPPORTED_SOURCE_TYPES
 from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.schemas.types import SourceClass
 from splendor.state.source_registry import load_source_record, register_source
+from splendor.utils.hashing import sha256_file
 
 _CONFIG_EXTENSIONS = {"json", "yaml", "yml"}
 _DOCUMENTATION_EXTENSIONS = {"md", "pdf", "txt"}
@@ -40,6 +40,7 @@ LARGE_APPLY_CANDIDATE_LIMIT = 200
 class CuratedSourceInfo:
     source_id: str
     title: str
+    checksum: str
 
 
 @dataclass(frozen=True)
@@ -140,17 +141,41 @@ def scan_repo(
             )
             continue
 
-        curated = curated_sources.get(relative_path)
-        status = "already_curated" if curated else "candidate"
+        curated_for_path = curated_sources.get(relative_path, [])
+        current_checksum = sha256_file(path)
+        current_curated = next(
+            (source for source in curated_for_path if source.checksum == current_checksum),
+            None,
+        )
+        previous_curated = curated_for_path[0] if curated_for_path else None
+        status = (
+            "already_curated"
+            if current_curated is not None
+            else "new_version_candidate"
+            if previous_curated is not None
+            else "candidate"
+        )
         class_counts[source_class] += 1
         candidate_sources.append(
             RepoScanCandidate(
                 path=relative_path,
                 source_class=source_class,
                 source_labels=source_labels,
-                already_curated=curated is not None,
-                source_id=curated.source_id if curated else None,
-                title=curated.title if curated else None,
+                already_curated=current_curated is not None,
+                source_id=(
+                    current_curated.source_id
+                    if current_curated is not None
+                    else previous_curated.source_id
+                    if previous_curated is not None
+                    else None
+                ),
+                title=(
+                    current_curated.title
+                    if current_curated is not None
+                    else previous_curated.title
+                    if previous_curated is not None
+                    else None
+                ),
                 status=status,
             )
         )
@@ -240,23 +265,7 @@ def apply_repo_scan(
 def write_repo_scan_report(result: RepoScanResult, report_path: Path) -> RepoScanResult:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(render_repo_scan_json(result) + "\n", encoding="utf-8")
-    return RepoScanResult(
-        mode=result.mode,
-        scanned=result.scanned,
-        candidates=result.candidates,
-        registered=result.registered,
-        already_registered=result.already_registered,
-        unsupported=result.unsupported,
-        ignored=result.ignored,
-        class_counts=result.class_counts,
-        class_filters=result.class_filters,
-        include_patterns=result.include_patterns,
-        exclude_patterns=result.exclude_patterns,
-        candidate_sources=result.candidate_sources,
-        ignored_paths=result.ignored_paths,
-        touched_sources=result.touched_sources,
-        report_path=report_path.as_posix(),
-    )
+    return replace(result, report_path=report_path.as_posix())
 
 
 def render_repo_scan_json(result: RepoScanResult) -> str:
@@ -374,15 +383,20 @@ def _discover_supported_paths(
     )
 
 
-def _workspace_curated_sources(root: Path, layout: ResolvedLayout) -> dict[str, CuratedSourceInfo]:
-    curated: dict[str, CuratedSourceInfo] = {}
+def _workspace_curated_sources(
+    root: Path, layout: ResolvedLayout
+) -> dict[str, list[CuratedSourceInfo]]:
+    curated: dict[str, list[CuratedSourceInfo]] = {}
     for manifest_path in sorted(layout.source_records_dir.glob("*.json")):
         record = load_source_record(manifest_path)
         if record.source_ref_kind != "workspace_path":
             continue
-        curated[record.source_ref] = CuratedSourceInfo(
-            source_id=record.source_id,
-            title=record.title,
+        curated.setdefault(record.source_ref, []).append(
+            CuratedSourceInfo(
+                source_id=record.source_id,
+                title=record.title,
+                checksum=record.checksum,
+            )
         )
     return curated
 
@@ -449,11 +463,8 @@ def _matches_pattern(relative_path: str, pattern: str) -> bool:
     normalized_pattern = pattern.strip().replace("\\", "/")
     if not normalized_pattern:
         return False
-    if fnmatch.fnmatchcase(relative_path, normalized_pattern):
-        return True
-    if "/" not in normalized_pattern and fnmatch.fnmatchcase(
-        Path(relative_path).name, normalized_pattern
-    ):
+    path = PurePosixPath(relative_path)
+    if path.match(normalized_pattern):
         return True
     if normalized_pattern.endswith("/**"):
         directory = normalized_pattern[:-3].rstrip("/")

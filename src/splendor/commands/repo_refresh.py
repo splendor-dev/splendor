@@ -6,10 +6,17 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from splendor.commands.repo_scan import RepoScanResult, apply_repo_scan
+from splendor.commands.repo_scan import (
+    RepoScanCandidate,
+    RepoScanItem,
+    RepoScanResult,
+    apply_repo_scan,
+    scan_repo,
+)
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter
+from splendor.schemas.types import SourceClass
 from splendor.utils.fs import write_text_atomic
 from splendor.utils.provenance import dedupe_provenance_links, make_provenance_link
 from splendor.utils.time import utc_now_iso
@@ -26,12 +33,29 @@ class RepoRefreshResult:
     linked_source_ids: list[str]
 
 
-def refresh_repo(root: Path) -> RepoRefreshResult:
-    scan = apply_repo_scan(root, all_classes=True, allow_large_apply=True)
+def refresh_repo(
+    root: Path,
+    *,
+    apply_scan: bool = False,
+    class_filters: list[SourceClass] | None = None,
+    all_classes: bool = False,
+    allow_large_apply: bool = False,
+) -> RepoRefreshResult:
+    if apply_scan:
+        scan = apply_repo_scan(
+            root,
+            class_filters=class_filters,
+            all_classes=all_classes,
+            allow_large_apply=allow_large_apply,
+        )
+    else:
+        scan = scan_repo(root, class_filters=class_filters, all_classes=all_classes)
     config = load_config(root)
     layout = resolve_layout(root, config)
     generated_at = utc_now_iso()
-    linked_source_ids = sorted({item.source_id for item in scan.touched_sources})
+    linked_source_ids = sorted(
+        {item.source_id for item in _source_rows(scan) if item.source_id is not None}
+    )
     source_refs = linked_source_ids
     provenance_links = dedupe_provenance_links(
         make_provenance_link(
@@ -39,7 +63,8 @@ def refresh_repo(root: Path) -> RepoRefreshResult:
             path_ref=item.path,
             role="supports",
         )
-        for item in scan.touched_sources
+        for item in _source_rows(scan)
+        if item.source_id is not None
     )
 
     architecture_path = layout.wiki_dir / "architecture" / "repository-structure.md"
@@ -156,12 +181,10 @@ def _render_sources_page(
         "| Path | Source ID | Class | Labels | Status |",
         "| --- | --- | --- | --- | --- |",
     ]
-    for item in sorted(scan.touched_sources, key=lambda candidate: candidate.path):
+    for item in sorted(_source_rows(scan), key=lambda candidate: candidate.path):
         labels = ", ".join(item.source_labels) if item.source_labels else "-"
-        row = (
-            f"| `{item.path}` | `{item.source_id}` | {item.source_class} | "
-            f"{labels} | {item.status} |"
-        )
+        source_id = item.source_id if item.source_id is not None else "-"
+        row = f"| `{item.path}` | `{source_id}` | {item.source_class} | {labels} | {item.status} |"
         rows.append(row)
     if len(rows) == 2:
         rows.append("| - | - | - | - | - |")
@@ -183,9 +206,13 @@ def _group_paths_by_class(scan: RepoScanResult) -> dict[str, list[str]]:
         "configuration": [],
         "other": [],
     }
-    for item in sorted(scan.touched_sources, key=lambda candidate: candidate.path):
+    for item in sorted(_source_rows(scan), key=lambda candidate: candidate.path):
         grouped[item.source_class].append(item.path)
     return {name: paths for name, paths in grouped.items() if paths}
+
+
+def _source_rows(scan: RepoScanResult) -> list[RepoScanItem | RepoScanCandidate]:
+    return scan.touched_sources if scan.touched_sources else scan.candidate_sources
 
 
 def _path_bullets(paths: list[str]) -> str:
