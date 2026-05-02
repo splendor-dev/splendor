@@ -487,27 +487,35 @@ def _git_ignore_context(root: Path) -> GitIgnoreContext:
 def _git_ignored_paths(root: Path, paths: list[Path], gitignore: GitIgnoreContext) -> set[str]:
     if not paths:
         return set()
-    walked_paths = {path.relative_to(root).as_posix() for path in paths}
     if gitignore.repo_root is None:
         return set()
+    repo_paths_by_workspace_path: dict[str, str] = {}
+    for path in paths:
+        try:
+            repo_relative = path.resolve().relative_to(gitignore.repo_root).as_posix()
+        except ValueError:
+            continue
+        repo_paths_by_workspace_path[repo_relative] = path.relative_to(root).as_posix()
+    if not repo_paths_by_workspace_path:
+        return set()
+
     try:
         result = subprocess.run(
             [
                 "git",
                 "-C",
                 str(gitignore.repo_root),
-                "ls-files",
-                "--ignored",
-                "--others",
-                "--exclude-standard",
+                "check-ignore",
+                "--stdin",
             ],
+            input="\n".join(repo_paths_by_workspace_path) + "\n",
             text=True,
             capture_output=True,
             check=False,
         )
     except OSError:
         return set()
-    if result.returncode != 0:
+    if result.returncode not in {0, 1}:
         return set()
 
     ignored: set[str] = set()
@@ -515,17 +523,9 @@ def _git_ignored_paths(root: Path, paths: list[Path], gitignore: GitIgnoreContex
         repo_relative = line.strip()
         if not repo_relative:
             continue
-        try:
-            workspace_relative = (
-                (gitignore.repo_root / repo_relative)
-                .resolve()
-                .relative_to(gitignore.workspace_root)
-            )
-        except ValueError:
-            continue
-        relative_path = workspace_relative.as_posix()
-        if relative_path in walked_paths:
-            ignored.add(relative_path)
+        workspace_relative = repo_paths_by_workspace_path.get(repo_relative)
+        if workspace_relative is not None:
+            ignored.add(workspace_relative)
     return ignored
 
 
