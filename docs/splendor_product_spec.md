@@ -442,6 +442,15 @@ Field meanings:
   - Optional path to the materialized artifact under `raw/sources/` when one exists.
   - Pointer-backed sources use `raw/sources/<source_id>/pointer.json`.
   - Symlink-backed sources use `raw/sources/<source_id>/<filename>`.
+- `logical_id`
+  - Optional stable logical identity above the content-addressed `source_id`.
+  - Workspace-backed sources use `source:<workspace-path>`, for example
+    `source:docs/spec.md`, so agents can refer to a logical source across content refreshes.
+- `aliases`
+  - Optional stable lookup aliases for the source. Workspace-backed registrations persist the
+    repo-relative path alias and expose the effective logical ID through lookup/freshness payloads.
+  - These aliases do not replace content-addressed `src-...` IDs for manifests, queue records, run
+    records, or generated source-summary pages.
 - `source_commit_capture`
   - Optional nullable capture intent persisted separately from `source_commit`. `true` preserves an
     explicit capture request across refreshes, `false` preserves an explicit opt-out, and `null`
@@ -755,13 +764,14 @@ Current implementation:
   source ID.
 - `splendor add-source --glob "pattern"` and `splendor add-source --dir path` register batches in
   deterministic path order with filename-derived titles.
-- `splendor source list` and `splendor source lookup [query]` map human-readable titles and paths
-  back to canonical source IDs without renaming existing source-summary pages.
+- `splendor source list` and `splendor source lookup [query]` map human-readable titles, paths, and
+  stable logical IDs back to canonical source IDs without renaming existing source-summary pages.
 - `splendor source refresh <source-id|title|path>` detects changed source content, registers the
   current bytes as a new canonical source version when the checksum changed, and queues ingest via
   the existing queue ledger while preserving active-lease and dead-letter protections.
-  Stable logical source identities, explicit source supersession fields, automated historical
-  pruning, and topic-ref migration remain later lifecycle work.
+  Stable logical source identities now remain constant for workspace-backed source paths across
+  those content-addressed versions. Explicit source supersession fields, automated historical
+  pruning, safe full-workspace refresh, and topic-ref migration remain later lifecycle work.
 - `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.
@@ -822,13 +832,16 @@ M13-P2 repo-discovery contracts:
 Release-readiness boundary:
 
 - v1 treats content-addressed source IDs as the persisted compatibility contract.
-- readable paths, titles, and source refs are lookup and display aids, not durable aliases yet.
+- readable paths, titles, source refs, and logical IDs are lookup and display aids above that
+  compatibility contract; generated source-summary pages and run provenance still use `src-...`
+  identifiers.
 - generated source-summary pages, queue records, run records, derived artifacts, and explicit
   reports are committed when they explain a reviewed workspace update; failed or exploratory local
   reports can remain local.
-- issue #72's desired stable logical source identities, `supersedes`/`superseded_by` source
-  lifecycle, one-command workspace refresh, superseded-state pruning, and `pr-summary` surface are
-  post-v1 follow-ups unless a future roadmap slice explicitly pulls them forward.
+- issue #72's desired stable logical source identity layer has started with workspace-backed
+  `source:<path>` aliases. `supersedes`/`superseded_by` source lifecycle, one-command workspace
+  refresh, superseded-state pruning, and `pr-summary` surface remain post-v1 follow-ups unless a
+  future roadmap slice explicitly pulls them forward.
 - issue #79 tracks the deferred mutating compile/update workflow from #41; v1 ships briefing and
   the non-mutating compile contract only.
 - `docs/v1_release_handoff.md` is the v1 handoff checklist for final validation, GitHub metadata,

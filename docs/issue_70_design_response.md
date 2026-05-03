@@ -107,9 +107,10 @@ in issue #72.
 
 - #70 is closed after the M13-P2/M13-P3.1 response for scan safety, curated curation, source
   freshness, ranked handoff, and path-first source-summary UX.
-- #72 is a separate parent feedback loop for source-refresh lifecycle and agent workflow. Its stable
-  logical source identities, `supersedes`/`superseded_by`, full workspace refresh, pruning, and
-  `pr-summary` requests remain post-v1 work.
+- #72 is a separate parent feedback loop for source-refresh lifecycle and agent workflow. Its
+  stable logical source identity layer has started with workspace-backed `source:<path>` aliases;
+  `supersedes`/`superseded_by`, full workspace refresh, pruning, and `pr-summary` requests remain
+  post-v1 work.
 - #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
   `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
   deferred and is tracked by #79.

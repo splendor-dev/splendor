@@ -80,6 +80,8 @@ Implemented fields:
 - `origin_url`
 - `original_path`
 - `materialized_at`
+- `logical_id`
+- `aliases`
 - `source_commit`
 - `source_class`
 - `source_labels`
@@ -118,6 +120,17 @@ Implemented fields:
   - Symlink-backed sources use `raw/sources/<source_id>/<filename>`.
 - `materialized_at`
   - Timestamp indicating when `storage_path` was created or last refreshed.
+- `logical_id`
+  - Stable logical source identity for workspace-backed sources.
+  - New workspace-backed registrations use `source:<workspace-path>`, for example
+    `source:docs/spec.md`.
+  - Content-addressed `source_id` values remain the canonical manifest filenames, queue payload
+    targets, run provenance, and generated source-summary page identifiers.
+- `aliases`
+  - Stable lookup aliases for the logical source identity.
+  - Workspace-backed registrations include the repo-relative path alias, and lookup/freshness JSON
+    also exposes the effective logical ID as an alias for agent handoff.
+  - External and legacy manifests may leave this empty.
 - `source_commit_capture`
   - Nullable persisted intent for git provenance capture:
     - `true` means commit capture was explicitly requested for registration and refresh
@@ -150,8 +163,8 @@ Implemented fields:
 - `splendor add-source --dir path` registers direct child files in deterministic path order.
 - Newly registered CLI sources are handed to the existing ingest queue as `ingest-<source-id>`
   records; already registered sources are reported without creating duplicate work.
-- `splendor source list` and `splendor source lookup [query]` provide a readable title/path to
-  `source_id` mapping. They are lookup surfaces only and do not rename canonical source IDs or
+- `splendor source list` and `splendor source lookup [query]` provide a readable title/path/logical
+  ID to `source_id` mapping. They are lookup surfaces only and do not rename canonical source IDs or
   generated `wiki/sources/src-...md` pages.
 - `splendor source refresh <source-id|title|path>` resolves the tracked workspace or external path,
   compares current bytes to the manifest checksum, registers changed content as a new canonical
@@ -395,8 +408,9 @@ Current runtime behavior:
 - The release-ready core is file-based, deterministic, and compatible with legacy `path`-only
   source manifests.
 - Source freshness, suggest-next, and agent briefing use existing records as read-only signals.
-- Richer lifecycle fields for stable logical source identities and supersession-aware history are
-  deferred so they can be designed without breaking the v1 manifest contract.
+- Stable logical source identities are schema-version-1-compatible optional fields above the
+  content-addressed `source_id` compatibility contract. Supersession-aware history remains deferred
+  so it can be designed without breaking the v1 manifest contract.
 - The final v1 handoff in `docs/v1_release_handoff.md` treats schema version `1`, legacy manifest
   compatibility, and deferred source-lifecycle fields as release checklist items rather than
   implicit assumptions.

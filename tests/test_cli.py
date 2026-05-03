@@ -375,6 +375,7 @@ def test_cli_source_lookup_maps_readable_path_to_source_id(tmp_path: Path, capsy
     assert "Sources: 1" in out
     assert "Audio Quality Feedback" in out or "audio quality feedback" in out
     assert "docs/audio-quality-feedback.md" in out
+    assert "logical_id=source:docs/audio-quality-feedback.md" in out
     assert out.index("docs/audio-quality-feedback.md") < out.index("source_id=src-")
 
 
@@ -394,6 +395,25 @@ def test_cli_source_list_reports_registered_sources(tmp_path: Path, capsys) -> N
     assert "ref=brief.md" in out
 
 
+def test_cli_source_lookup_matches_stable_logical_id(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "docs" / "brief.md"
+    source.parent.mkdir()
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "lookup", "source:docs/brief.md", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [source["source_id"] for source in payload["sources"]] == [source_id]
+    assert payload["sources"][0]["logical_id"] == "source:docs/brief.md"
+
+
 def test_cli_source_list_json_reports_registered_sources(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -407,6 +427,8 @@ def test_cli_source_list_json_reports_registered_sources(tmp_path: Path, capsys)
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert [source["source_id"] for source in payload["sources"]] == [source_id]
+    assert payload["sources"][0]["logical_id"] == "source:brief.md"
+    assert payload["sources"][0]["aliases"] == ["brief.md", "source:brief.md"]
     assert payload["sources"][0]["source_ref"] == "brief.md"
 
 
@@ -425,6 +447,8 @@ def test_cli_source_lookup_json_reports_source_payload(tmp_path: Path, capsys) -
     assert payload["sources"] == [
         {
             "source_id": source_id,
+            "logical_id": "source:brief.md",
+            "aliases": ["brief.md", "source:brief.md"],
             "title": "brief",
             "source_type": "md",
             "status": "registered",
@@ -483,6 +507,9 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
     refreshed_id = [path.stem for path in manifests if path.stem != original_id][0]
     assert f"Registered refreshed source ID: {refreshed_id}" in out
     assert (tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").exists()
+    records = [load_source_record(path) for path in manifests]
+    assert {record.logical_id for record in records} == {"source:brief.md"}
+    assert {tuple(record.aliases) for record in records} == {("brief.md",)}
 
 
 def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsys) -> None:
@@ -540,7 +567,9 @@ def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -
     ]
     assert payload == {
         "requested_source_id": original_id,
+        "requested_logical_id": "source:brief.md",
         "source_id": refreshed_ids[0],
+        "logical_id": "source:brief.md",
         "changed": True,
         "queued": True,
         "queue_path": f"state/queue/ingest-{refreshed_ids[0]}.json",
@@ -744,7 +773,9 @@ def test_cli_source_freshness_reports_changed_workspace_sources_without_mutating
     out = capsys.readouterr().out
     assert "Source freshness preview" in out
     assert "changed=1" in out
-    assert f"- brief.md: changed title=brief source_id={source_id}" in out
+    assert (
+        f"- brief.md: changed title=brief logical_id=source:brief.md source_id={source_id}" in out
+    )
     assert "Manifest checksum:" in out
     assert "Current checksum:" in out
     assert "Next: splendor source refresh brief.md" in out
@@ -1228,6 +1259,22 @@ def test_cli_ingest_command(tmp_path: Path, capsys) -> None:
     assert "Ingested source" in captured.out
     assert "Source ref: brief.md" in captured.out
     assert "Canonical content: workspace path" in captured.out
+
+
+def test_cli_ingest_command_accepts_stable_logical_id(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "docs" / "brief.md"
+    source.parent.mkdir()
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "source:docs/brief.md"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert f"Source ID: {source_id}" in captured.out
+    assert "Source ref: docs/brief.md" in captured.out
 
 
 def test_cli_ingest_command_reports_stored_artifact_for_copied_workspace_source(

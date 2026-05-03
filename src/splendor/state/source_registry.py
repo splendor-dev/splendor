@@ -17,6 +17,7 @@ from splendor.state.source_compat import (
     canonical_source_ref,
     effective_materialized_path,
     is_legacy_copied_manifest,
+    logical_source_id_for_ref,
 )
 from splendor.state.source_pointer import pointer_artifact_relpath, write_source_pointer
 from splendor.utils.fs import (
@@ -449,6 +450,7 @@ def register_source(
     source_id = stable_source_id(checksum)
     manifest_path = layout.source_records_dir / f"{source_id}.json"
     source_ref, source_ref_kind = _source_reference(root, candidate)
+    logical_id = logical_source_id_for_ref(source_ref, source_ref_kind)
     selected_storage_mode = _storage_mode_for_source(
         source_ref_kind=source_ref_kind,
         config=config,
@@ -502,6 +504,17 @@ def register_source(
             if updated != existing:
                 write_source_record(manifest_path, updated)
                 existing = updated
+        if logical_id is not None and (
+            existing.logical_id is None or source_ref not in existing.aliases
+        ):
+            aliases = sorted({*existing.aliases, source_ref})
+            updated = SourceRecord.model_validate(
+                existing.model_dump(mode="json")
+                | {"logical_id": existing.logical_id or logical_id, "aliases": aliases}
+            )
+            if updated != existing:
+                write_source_record(manifest_path, updated)
+                existing = updated
         return RegisteredSource(
             record=existing,
             manifest_path=manifest_path,
@@ -541,6 +554,8 @@ def register_source(
             stored_path.relative_to(root).as_posix() if stored_path is not None else None
         ),
         materialized_at=(added_at if stored_path is not None else None),
+        logical_id=logical_id,
+        aliases=([source_ref] if logical_id is not None else []),
         source_commit_capture=capture_source_commit,
         source_commit=source_commit,
         source_class=source_class,
