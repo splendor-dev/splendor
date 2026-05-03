@@ -178,12 +178,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P3.1`
-- Current planned slice: `M13-P3`
-- Current PR sub-slice: `M13-P3.2`
+- Previous completed PR sub-slice: `M13-P3.2`
+- Current planned slice: `M14-P0`
+- Current PR sub-slice: `M14-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M14-P0`
-- Next planned PR sub-slice: `M14-P0.1`
+- Next planned slice: `M14-P1`
+- Next planned PR sub-slice: `M14-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -275,6 +275,11 @@ remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 r
 stays open as the parent feedback loop for stable logical source identities, supersession
 lifecycle, full workspace refresh, pruning, and PR-summary ideas deferred to post-v1 planning.
 Issue #79 tracks the deferred mutating compile/update path from #41.
+
+`M14-P0.1` is the post-v1 planning intake before asking the SynthBanshee Claude agent for a full
+retry. It records the detailed sequence needed to make that retry meaningful: stable logical source
+identities, supersession-aware refresh, a safe workspace refresh path, superseded-state cleanup,
+topic-ref migration, and PR-oriented generated-state summary/review handoff.
 
 ### v1 readiness checklist
 
