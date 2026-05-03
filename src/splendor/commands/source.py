@@ -25,6 +25,7 @@ from splendor.state.source_registry import (
     load_source_record,
     register_source,
     resolve_manifest_storage_path,
+    write_source_record,
 )
 from splendor.utils.hashing import sha256_file
 
@@ -225,6 +226,10 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
             source_labels=requested.source_labels,
             discovered_by=requested.discovered_by,
         )
+        refreshed = _record_source_supersession(
+            requested_match=requested_match,
+            refreshed=refreshed,
+        )
     else:
         refreshed = RegisteredSource(
             record=requested,
@@ -288,6 +293,41 @@ def _existing_materialized_path(root: Path, source: SourceRecord) -> Path | None
     return resolve_manifest_storage_path(root, stored_path_value)
 
 
+def _record_source_supersession(
+    *,
+    requested_match: SourceLookupResult,
+    refreshed: RegisteredSource,
+) -> RegisteredSource:
+    requested = requested_match.source
+    current = refreshed.record
+    if current.source_id == requested.source_id:
+        return refreshed
+
+    if requested.superseded_by != current.source_id:
+        updated_requested = SourceRecord.model_validate(
+            requested.model_dump(mode="json") | {"superseded_by": current.source_id}
+        )
+        write_source_record(requested_match.manifest_path, updated_requested)
+
+    current_supersedes = list(current.supersedes)
+    if requested.source_id not in current_supersedes:
+        current_supersedes.append(requested.source_id)
+
+    updated_current_fields: dict[str, object] = {}
+    if current.superseded_by is not None:
+        updated_current_fields["superseded_by"] = None
+    if current_supersedes != current.supersedes:
+        updated_current_fields["supersedes"] = current_supersedes
+    if not updated_current_fields:
+        return refreshed
+
+    updated_current = SourceRecord.model_validate(
+        current.model_dump(mode="json") | updated_current_fields
+    )
+    write_source_record(refreshed.manifest_path, updated_current)
+    return replace(refreshed, record=updated_current)
+
+
 def render_source_lookup_json(root: Path, results: list[SourceLookupResult]) -> str:
     return json.dumps(
         {"sources": [_source_payload(root, result) for result in results]},
@@ -302,6 +342,14 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
             "requested_logical_id": effective_logical_id(result.requested),
             "source_id": result.refreshed.record.source_id,
             "logical_id": effective_logical_id(result.refreshed.record),
+            "supersedes": result.refreshed.record.supersedes,
+            "superseded_by": result.refreshed.record.superseded_by,
+            "requested_superseded_by": (
+                result.refreshed.record.source_id
+                if result.changed
+                and result.refreshed.record.source_id != result.requested.source_id
+                else result.requested.superseded_by
+            ),
             "changed": result.changed,
             "queued": result.queued,
             "queue_path": (
@@ -450,12 +498,13 @@ def _workspace_freshness_items(
 
     layout = resolve_layout(root, load_config(root))
     current_checksum = sha256_file(source_path)
-    latest_result = max(results, key=_latest_source_sort_key)
+    active_results = [result for result in results if result.source.superseded_by is None]
+    latest_result = max(active_results or results, key=_latest_source_sort_key)
 
     items = []
     for result in results:
         source = result.source
-        if source.source_id != latest_result.source.source_id:
+        if source.superseded_by is not None or source.source_id != latest_result.source.source_id:
             items.append(
                 SourceFreshnessItem(
                     source=source,
@@ -465,8 +514,8 @@ def _workspace_freshness_items(
                     manifest_checksum=source.checksum,
                     current_checksum=current_checksum,
                     message=(
-                        "older source version for this workspace path; "
-                        "latest manifest is freshness target"
+                        "superseded source version for this workspace path; "
+                        "active manifest is freshness target"
                     ),
                     next_commands=[],
                 )
@@ -536,6 +585,8 @@ def _freshness_payload(root: Path, item: SourceFreshnessItem) -> dict[str, objec
         "source_id": source.source_id,
         "logical_id": effective_logical_id(source),
         "aliases": effective_aliases(source),
+        "supersedes": source.supersedes,
+        "superseded_by": source.superseded_by,
         "title": source.title,
         "source_ref": canonical_source_ref(source),
         "source_ref_kind": source.source_ref_kind,
@@ -556,6 +607,8 @@ def _source_payload(root: Path, result: SourceLookupResult) -> dict[str, object]
         "title": source.title,
         "source_type": source.source_type,
         "status": source.status,
+        "supersedes": source.supersedes,
+        "superseded_by": source.superseded_by,
         "source_ref": canonical_source_ref(source),
         "source_ref_kind": source.source_ref_kind,
         "original_path": source.original_path,

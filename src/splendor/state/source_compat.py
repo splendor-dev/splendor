@@ -48,6 +48,10 @@ def effective_aliases(source: SourceRecord) -> list[str]:
     return deduped
 
 
+def is_superseded_source(source: SourceRecord) -> bool:
+    return source.superseded_by is not None
+
+
 def effective_stored_path(source: SourceRecord) -> str | None:
     if effective_storage_mode(source) != "copy":
         return None

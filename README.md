@@ -178,12 +178,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P0.1`
+- Previous completed PR sub-slice: `M14-P1.1`
 - Current planned slice: `M14-P1`
-- Current PR sub-slice: `M14-P1.1`
+- Current PR sub-slice: `M14-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M14-P1`
-- Next planned PR sub-slice: `M14-P1.2`
+- Next planned PR sub-slice: `M14-P1.3`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -278,9 +278,15 @@ Issue #79 tracks the deferred mutating compile/update path from #41.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
 workspace-backed manifests now persist `source:<workspace-path>` logical IDs and path aliases while
-keeping `src-...` IDs as the compatibility contract. Supersession-aware refresh, safe workspace
-refresh, pruning/topic-ref migration, and PR-oriented generated-state summary/review handoff remain
-later slices before the SynthBanshee Claude retry.
+keeping `src-...` IDs as the compatibility contract. Safe workspace refresh, pruning/topic-ref
+migration, and PR-oriented generated-state summary/review handoff remain later slices before the
+SynthBanshee Claude retry.
+
+`M14-P1.2` makes source refresh supersession-aware: changed workspace-backed sources keep their
+stable logical ID, register a new content-addressed `src-...` version, and link the previous and
+current versions with `supersedes` / `superseded_by`. Health treats superseded workspace source
+versions as historical provenance instead of active current-byte targets. Full workspace refresh,
+pruning/topic-ref migration, and PR-summary support remain later slices before the retry.
 
 ### v1 readiness checklist
 

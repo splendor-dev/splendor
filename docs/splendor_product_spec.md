@@ -773,8 +773,10 @@ Current implementation:
   current bytes as a new canonical source version when the checksum changed, and queues ingest via
   the existing queue ledger while preserving active-lease and dead-letter protections.
   Stable logical source identities now remain constant for workspace-backed source paths across
-  those content-addressed versions. Explicit source supersession fields, automated historical
-  pruning, safe full-workspace refresh, and topic-ref migration remain later lifecycle work.
+  those content-addressed versions. Refresh also links changed versions with `supersedes` and
+  `superseded_by` so health treats older workspace-backed manifests as historical records instead
+  of active current-byte targets. Automated historical pruning, safe full-workspace refresh, and
+  topic-ref migration remain later lifecycle work.
 - `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.
@@ -843,10 +845,11 @@ Release-readiness boundary:
 - generated source-summary pages, queue records, run records, derived artifacts, and explicit
   reports are committed when they explain a reviewed workspace update; failed or exploratory local
   reports can remain local.
-- issue #72's desired stable logical source identity layer has started with workspace-backed
-  `source:<path>` aliases. `supersedes`/`superseded_by` source lifecycle, one-command workspace
-  refresh, superseded-state pruning, and `pr-summary` surface remain post-v1 follow-ups unless a
-  future roadmap slice explicitly pulls them forward.
+- issue #72's desired stable logical source identity and source-supersession layers have started
+  with workspace-backed `source:<path>` aliases plus `supersedes`/`superseded_by` source-version
+  links. One-command workspace refresh, superseded-state pruning/topic-ref migration, and the
+  `pr-summary` surface remain follow-ups unless a future roadmap slice explicitly pulls them
+  forward.
 - issue #79 tracks the deferred mutating compile/update workflow from #41; v1 ships briefing and
   the non-mutating compile contract only.
 - `docs/v1_release_handoff.md` is the v1 handoff checklist for final validation, GitHub metadata,

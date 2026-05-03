@@ -885,6 +885,10 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
                 print(f"Matched existing source version: {result.refreshed.record.source_id}")
             else:
                 print(f"Registered refreshed source ID: {result.refreshed.record.source_id}")
+            print(
+                "Superseded previous source version: "
+                f"{result.requested.source_id} -> {result.refreshed.record.source_id}"
+            )
     else:
         print(f"No source content change detected for {canonical_source_ref(result.requested)}")
         print(f"Source ID: {result.requested.source_id}")
@@ -892,6 +896,10 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
     logical_id = effective_logical_id(result.refreshed.record)
     if logical_id is not None:
         print(f"Logical ID: {logical_id}")
+    if result.refreshed.record.supersedes:
+        print(f"Supersedes: {', '.join(result.refreshed.record.supersedes)}")
+    if result.refreshed.record.superseded_by is not None:
+        print(f"Superseded by: {result.refreshed.record.superseded_by}")
     if result.queued and result.queue_path is not None:
         print(f"Queued ingest: {result.queue_path}")
         print("Next: splendor ingest --pending")

@@ -452,6 +452,8 @@ def test_cli_source_lookup_json_reports_source_payload(tmp_path: Path, capsys) -
             "title": "brief",
             "source_type": "md",
             "status": "registered",
+            "supersedes": [],
+            "superseded_by": None,
             "source_ref": "brief.md",
             "source_ref_kind": "workspace_path",
             "original_path": "brief.md",
@@ -510,6 +512,10 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
     records = [load_source_record(path) for path in manifests]
     assert {record.logical_id for record in records} == {"source:brief.md"}
     assert {tuple(record.aliases) for record in records} == {("brief.md",)}
+    records_by_id = {record.source_id: record for record in records}
+    assert records_by_id[original_id].superseded_by == refreshed_id
+    assert records_by_id[refreshed_id].supersedes == [original_id]
+    assert records_by_id[refreshed_id].superseded_by is None
 
 
 def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsys) -> None:
@@ -529,6 +535,14 @@ def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsy
     out = capsys.readouterr().out
     assert f"Matched existing source version: {original_id}" in out
     assert f"Registered refreshed source {original_id}" not in out
+    records = {
+        load_source_record(path).source_id: load_source_record(path)
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    }
+    refreshed_id = next(source_id for source_id in records if source_id != original_id)
+    assert records[refreshed_id].superseded_by == original_id
+    assert records[original_id].supersedes == [refreshed_id]
+    assert records[original_id].superseded_by is None
 
 
 def test_source_refresh_noop_returns_existing_materialized_path(tmp_path: Path, capsys) -> None:
@@ -570,6 +584,9 @@ def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -
         "requested_logical_id": "source:brief.md",
         "source_id": refreshed_ids[0],
         "logical_id": "source:brief.md",
+        "supersedes": [original_id],
+        "superseded_by": None,
+        "requested_superseded_by": refreshed_ids[0],
         "changed": True,
         "queued": True,
         "queue_path": f"state/queue/ingest-{refreshed_ids[0]}.json",

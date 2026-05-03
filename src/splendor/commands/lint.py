@@ -270,10 +270,12 @@ def _run_reference_integrity_checks(
         planning_by_kind[record.kind].setdefault(record.record_id, []).append(record)
 
     source_by_id: dict[str, list[_SourceInventory]] = {}
+    source_by_ref: dict[str, list[_SourceInventory]] = {}
     for manifest in inventory.source_manifests:
         if manifest.record is None:
             continue
         source_by_id.setdefault(manifest.record.source_id, []).append(manifest)
+        source_by_ref.setdefault(canonical_source_ref(manifest.record), []).append(manifest)
     source_refs_by_identity: dict[str, set[str]] = {}
     for manifest in inventory.source_manifests:
         if manifest.record is None:
@@ -403,6 +405,10 @@ def _run_reference_integrity_checks(
             continue
         checked_count += 1 + len(manifest.record.aliases)
         issues.extend(_source_identity_issues(root, manifest, source_refs_by_identity))
+        checked_count += len(manifest.record.supersedes) + (
+            1 if manifest.record.superseded_by is not None else 0
+        )
+        issues.extend(_source_lifecycle_issues(root, manifest, source_by_id, source_by_ref))
         checked_count += len(manifest.record.derived_artifacts)
         issues.extend(_derived_artifact_issues(root, layout, manifest))
         checked_count += len(manifest.record.linked_pages)
@@ -494,6 +500,128 @@ def _source_identity_issues(
             )
         )
     return issues
+
+
+def _source_lifecycle_issues(
+    root: Path,
+    manifest: _SourceInventory,
+    source_by_id: dict[str, list[_SourceInventory]],
+    source_by_ref: dict[str, list[_SourceInventory]],
+) -> list[MaintenanceIssue]:
+    if manifest.record is None:
+        return []
+    source = manifest.record
+    manifest_relpath = workspace_relative_path(root, manifest.manifest_path)
+    issues: list[MaintenanceIssue] = []
+    active_versions = [
+        ref_manifest.record
+        for ref_manifest in source_by_ref.get(canonical_source_ref(source), [])
+        if ref_manifest.record is not None and ref_manifest.record.superseded_by is None
+    ]
+    if source.superseded_by is None and len(active_versions) > 1:
+        issues.append(
+            MaintenanceIssue(
+                code="multiple-active-source-versions",
+                message=(
+                    "Multiple active source versions share the same canonical source ref: "
+                    f"{canonical_source_ref(source)}"
+                ),
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-lifecycle",
+            )
+        )
+
+    for superseded_id in source.supersedes:
+        target = _single_source_record(source_by_id, superseded_id)
+        if target is None:
+            issues.append(
+                MaintenanceIssue(
+                    code="missing-source-supersedes-ref",
+                    message=f"Source supersedes unknown source: {superseded_id}",
+                    path=manifest_relpath,
+                    record_id=source.source_id,
+                    check_name="source-lifecycle",
+                )
+            )
+            continue
+        if canonical_source_ref(target) != canonical_source_ref(source):
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-source-supersession-ref",
+                    message=(
+                        f"Source supersedes a different canonical source ref: {superseded_id}"
+                    ),
+                    path=manifest_relpath,
+                    record_id=source.source_id,
+                    check_name="source-lifecycle",
+                )
+            )
+        if target.superseded_by != source.source_id:
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-source-supersession-link",
+                    message=(
+                        "Source supersedes a record that does not point back with "
+                        f"superseded_by: {superseded_id}"
+                    ),
+                    path=manifest_relpath,
+                    record_id=source.source_id,
+                    check_name="source-lifecycle",
+                )
+            )
+
+    if source.superseded_by is None:
+        return issues
+
+    successor = _single_source_record(source_by_id, source.superseded_by)
+    if successor is None:
+        issues.append(
+            MaintenanceIssue(
+                code="missing-source-superseded-by-ref",
+                message=f"Source superseded_by references unknown source: {source.superseded_by}",
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-lifecycle",
+            )
+        )
+        return issues
+    if canonical_source_ref(successor) != canonical_source_ref(source):
+        issues.append(
+            MaintenanceIssue(
+                code="invalid-source-supersession-ref",
+                message=(
+                    "Source superseded_by points at a different canonical source ref: "
+                    f"{source.superseded_by}"
+                ),
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-lifecycle",
+            )
+        )
+    if source.source_id not in successor.supersedes:
+        issues.append(
+            MaintenanceIssue(
+                code="invalid-source-supersession-link",
+                message=(
+                    "Source superseded_by points at a record that does not include this source in "
+                    f"supersedes: {source.superseded_by}"
+                ),
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-lifecycle",
+            )
+        )
+    return issues
+
+
+def _single_source_record(
+    source_by_id: dict[str, list[_SourceInventory]], source_id: str
+) -> SourceRecord | None:
+    matches = source_by_id.get(source_id, [])
+    if len(matches) != 1:
+        return None
+    return matches[0].record
 
 
 def _derived_artifact_issues(
