@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P1.1`
+- Previous completed PR sub-slice: `M14-P1.2`
 - Current planned slice: `M14-P1`
-- Current PR sub-slice: `M14-P1.2`
+- Current PR sub-slice: `M14-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M14-P1`
-- Next planned PR sub-slice: `M14-P1.3`
+- Next planned PR sub-slice: `M14-P1.4`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -842,8 +842,8 @@ performance/scaling follow-ups.
 - [x] Issue #70 is closed after the M13-P2/M13-P3.1 response for agent usefulness; release notes
   identify that #72 now owns remaining source lifecycle and agent-workflow follow-up.
 - [x] Issue #72 remains the parent feedback loop for source-refresh lifecycle and agent workflow;
-  stable logical source identities, source supersession, full workspace refresh, pruning, and
-  `pr-summary` remain post-v1 work.
+  stable logical source identities, source supersession, and safe workspace refresh have landed;
+  pruning and `pr-summary` remain post-v1 work.
 - [x] Issue #79 tracks the deferred mutating compile/update path from #41 so #41 can stay closed for
   the shipped v1 briefing and non-mutating compile-contract scope.
 - [x] Final release handoff records validation commands, docs state, issue state, GitHub metadata,
@@ -899,7 +899,9 @@ post-#72 lifecycle loop is substantially implemented. The intended sequence befo
 3. `M14-P1.2` makes source refresh supersession-aware, so changed sources do not leave stale runs
    or health failures for agents to clean manually before later topic-ref migration.
 4. `M14-P1.3` provides one safe workspace refresh path for changed-source detection, refresh,
-   ingest, index rebuild, and a health-clean end state.
+   ingest, index rebuild, and a health-clean end state. The first implementation is
+   `splendor workspace refresh --changed --ingest --rebuild-index`, limited to curated
+   workspace-backed source manifests.
 5. `M14-P1.4` handles superseded generated-state pruning and topic-ref migration.
 6. `M14-P2.1` adds `splendor pr-summary --since main` or an equivalent PR-oriented summary with
    lower-noise generated-state review guidance.

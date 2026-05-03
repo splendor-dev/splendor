@@ -114,6 +114,7 @@ Implemented today:
   `splendor add-source --dir path`
 - `splendor source list`, `splendor source lookup [query]`, `splendor source freshness`, and
   `splendor source refresh <source-id|title|path>`
+- `splendor workspace refresh --changed` with optional `--ingest` and `--rebuild-index`
 - `splendor ingest <source-id>` and `splendor ingest --pending`
 - `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
 - `splendor repair ingest <source-id>`
@@ -139,8 +140,7 @@ Not implemented yet:
 - mutating review-gated `splendor wiki compile`
 - heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
-- stable logical source identities and supersession-aware pruning
-- one-command full workspace refresh for changed sources
+- supersession-aware pruning and topic-ref migration
 - PR-oriented generated-state summaries such as `splendor pr-summary --since main`
 
 `splendor repo scan` is safe by default: it previews candidates without writing manifests or
@@ -150,6 +150,12 @@ source files to their manifest checksums, reports unchanged/changed/missing/unsu
 and prints exact `source refresh`/`ingest --pending` next commands for stale paths. `--json` emits
 the same preview for machine handoff, and `--report PATH` writes only an explicit freshness report.
 Relative report paths use the current working directory.
+`splendor workspace refresh --changed` composes that freshness view with the existing
+supersession-aware refresh path for changed curated workspace-backed sources. Add `--ingest` to
+ingest only queue jobs created or reused for the refreshed sources, and add `--rebuild-index` to
+regenerate `wiki/index.md` after that targeted ingest succeeds. JSON output reports both initial
+and final freshness counts. The command does not discover or register uncurated files, prune
+superseded generated state, migrate topic refs, or mutate maintained synthesis pages.
 
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
@@ -178,12 +184,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.1`
+- Previous completed PR sub-slice: `M14-P1.2`
 - Current planned slice: `M14-P1`
-- Current PR sub-slice: `M14-P1.2`
+- Current PR sub-slice: `M14-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M14-P1`
-- Next planned PR sub-slice: `M14-P1.3`
+- Next planned PR sub-slice: `M14-P1.4`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -272,8 +278,9 @@ ingest handoff, #44's query snippets, #45's web status/source detail pages, and 
 visibility as represented in current behavior. It still calls out #41's mutating compile/update
 workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Issues #30 and #37
 remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
-stays open as the parent feedback loop for stable logical source identities, supersession
-lifecycle, full workspace refresh, pruning, and PR-summary ideas deferred to post-v1 planning.
+stays open as the parent feedback loop; stable logical source identities, supersession lifecycle,
+and safe workspace refresh have landed, while pruning, topic-ref migration, and PR-summary ideas
+remain post-v1 planning work.
 Issue #79 tracks the deferred mutating compile/update path from #41.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
@@ -285,8 +292,13 @@ SynthBanshee Claude retry.
 `M14-P1.2` makes source refresh supersession-aware: changed workspace-backed sources keep their
 stable logical ID, register a new content-addressed `src-...` version, and link the previous and
 current versions with `supersedes` / `superseded_by`. Health treats superseded workspace source
-versions as historical provenance instead of active current-byte targets. Full workspace refresh,
-pruning/topic-ref migration, and PR-summary support remain later slices before the retry.
+versions as historical provenance instead of active current-byte targets.
+
+`M14-P1.3` adds the safe workspace refresh path:
+`splendor workspace refresh --changed --ingest --rebuild-index` detects changed curated
+workspace-backed sources, refreshes them through the supersession-aware source lifecycle, drains
+only the refreshed sources' ingest jobs, and rebuilds the wiki index. Pruning/topic-ref migration
+and PR-summary support remain later slices before the retry.
 
 ### v1 readiness checklist
 
