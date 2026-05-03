@@ -1493,7 +1493,7 @@ def _print_agent_context(result: ProjectBrief) -> None:
     if result.suggested_actions:
         print("Suggested next:")
         for action in result.suggested_actions[:5]:
-            subject = action.path or action.source_ref or action.record_id or "-"
+            subject = _suggested_action_target(action)
             command = f" command={action.command}" if action.command else ""
             print(
                 f"- [{action.priority}/{action.category}] {action.title} target={subject}{command}"
@@ -1561,7 +1561,7 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
         f"stale={result.status.stale_pages}"
     )
     for action in result.actions:
-        target = action.path or action.source_ref or action.record_id or "-"
+        target = _suggested_action_target(action)
         command = f" command={action.command}" if action.command else ""
         print(
             f"{action.rank}. [{action.priority}/{action.category}] {action.title} "
@@ -1569,6 +1569,10 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
         )
         print(f"   Reason: {action.reason}")
     return 0
+
+
+def _suggested_action_target(action) -> str:
+    return action.source_ref or action.path or action.record_id or "-"
 
 
 def handle_serve(args: argparse.Namespace) -> int:

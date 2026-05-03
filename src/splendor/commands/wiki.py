@@ -17,7 +17,7 @@ from splendor.state.source_registry import load_source_record
 from splendor.utils.fs import write_text_atomic
 from splendor.utils.wiki import parse_wiki_markdown, render_frontmatter
 
-_SYNTHESIS_KINDS = {"architecture", "concept", "entity", "glossary", "topic"}
+SYNTHESIS_KINDS = {"architecture", "concept", "entity", "glossary", "topic"}
 _REVIEW_NEEDED_STATES = {"draft", "machine-generated", "contested", "stale"}
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
 _SLUG_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
@@ -270,7 +270,7 @@ def add_topic_page(
         msg = f"Topic page already exists: {page_ref}"
         raise FileExistsError(msg)
 
-    pages, invalid_pages = _load_wiki_pages(root, layout)
+    pages, invalid_pages = load_wiki_pages(root, layout)
     if invalid_pages:
         msg = f"Cannot add topic with invalid wiki pages present: {invalid_pages[0].path}"
         raise ValueError(msg)
@@ -314,7 +314,7 @@ def add_topic_page(
 def rebuild_wiki_index(root: Path) -> WikiIndexRebuildResult:
     config = load_config(root)
     layout = resolve_layout(root, config)
-    pages, invalid_pages = _load_wiki_pages(root, layout)
+    pages, invalid_pages = load_wiki_pages(root, layout)
     if invalid_pages:
         msg = f"Cannot rebuild index with invalid wiki pages present: {invalid_pages[0].path}"
         raise ValueError(msg)
@@ -392,7 +392,7 @@ def _load_runs(layout) -> list[RunRecord]:
     return records
 
 
-def _load_wiki_pages(
+def load_wiki_pages(
     root: Path, layout
 ) -> tuple[list[WikiPageSnapshot], list[InvalidWikiPageSnapshot]]:
     pages: list[WikiPageSnapshot] = []
@@ -442,7 +442,7 @@ def build_wiki_status(root: Path) -> WikiStatus:
     config = load_config(root)
     layout = resolve_layout(root, config)
     sources = load_sources(layout)
-    pages, invalid_pages = _load_wiki_pages(root, layout)
+    pages, invalid_pages = load_wiki_pages(root, layout)
     queue_records = _load_queue(layout)
     runs = _load_runs(layout)
 
@@ -457,17 +457,17 @@ def build_wiki_status(root: Path) -> WikiStatus:
     review_needed_synthesis_pages = sum(
         1
         for page in pages
-        if page.frontmatter.kind in _SYNTHESIS_KINDS
+        if page.frontmatter.kind in SYNTHESIS_KINDS
         and page.frontmatter.review_state in _REVIEW_NEEDED_STATES
     )
 
     synthesis_source_ids = {
         source_ref
         for page in pages
-        if page.frontmatter.kind in _SYNTHESIS_KINDS
+        if page.frontmatter.kind in SYNTHESIS_KINDS
         for source_ref in page.frontmatter.source_refs
     }
-    synthesis_pages = [page for page in pages if page.frontmatter.kind in _SYNTHESIS_KINDS]
+    synthesis_pages = [page for page in pages if page.frontmatter.kind in SYNTHESIS_KINDS]
     ingested_source_ids = {
         source.source_id
         for source in sources
@@ -613,13 +613,13 @@ def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
         raise FileNotFoundError(msg)
 
     source = load_source_record(manifest_path)
-    pages, _invalid_pages = _load_wiki_pages(root, layout)
+    pages, _invalid_pages = load_wiki_pages(root, layout)
     summaries = _source_summary_pages(pages, source_id)
     source_terms = _source_terms(source, summaries)
     suggestions = [
         suggestion
         for page in pages
-        if page.frontmatter.kind in _SYNTHESIS_KINDS
+        if page.frontmatter.kind in SYNTHESIS_KINDS
         for suggestion in [_score_page(source=source, page=page, source_terms=source_terms)]
         if suggestion is not None
     ]

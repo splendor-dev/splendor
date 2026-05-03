@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import shlex
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import MaintenanceReport, QuerySnapshot
+from splendor.schemas import MaintenanceReport, QuerySnapshot, SourceRecord
 from splendor.state.query_snapshot import last_query_path_for
 from splendor.state.source_compat import canonical_source_ref
 from splendor.utils.planning import (
@@ -24,12 +24,14 @@ from .query import QueryMatch, QueryValidationError, run_query
 from .queue import QueueInspectResult, inspect_queue
 from .source import SourceFreshnessResult, scan_source_freshness
 from .wiki import (
-    _SYNTHESIS_KINDS,
+    SYNTHESIS_KINDS,
+    InvalidWikiPageSnapshot,
     RecentRunSnapshot,
+    WikiPageSnapshot,
     WikiStatus,
-    _load_wiki_pages,
     build_wiki_status,
     load_sources,
+    load_wiki_pages,
 )
 
 _BRIEF_MATCH_LIMIT = 5
@@ -37,6 +39,31 @@ _BRIEF_PLANNING_LIMIT = 8
 _BRIEF_SOURCE_LIMIT = 5
 _BRIEF_REPORT_COMMANDS = ("lint", "health")
 _SUGGESTION_LIMIT = 8
+_SUGGESTION_CATEGORY_LIMITS = {
+    "source-freshness": 3,
+    "queue": 3,
+    "wiki-validation": 2,
+    "goal-match": 3,
+    "planning": 2,
+    "synthesis": 2,
+    "wiki-review": 2,
+    "maintenance": 2,
+    "query": 1,
+    "orientation": 1,
+}
+_SUGGESTION_CATEGORY_ORDER = {
+    "source-freshness": 0,
+    "queue": 1,
+    "wiki-validation": 2,
+    "goal-match": 3,
+    "planning": 4,
+    "synthesis": 5,
+    "wiki-review": 6,
+    "maintenance": 7,
+    "query": 8,
+    "orientation": 9,
+}
+_SUGGESTION_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 _PLANNING_STATUSES = {
     "task": {"todo", "in_progress", "blocked"},
     "milestone": {"planned", "active"},
@@ -130,6 +157,27 @@ class SuggestNextResult:
 
 
 @dataclass(frozen=True)
+class BriefStateSnapshot:
+    root: Path
+    goal: str | None
+    query_summary: str | None
+    layout: object
+    status: WikiStatus
+    queue: QueueInspectResult
+    freshness: SourceFreshnessResult
+    matches: list[BriefMatch]
+    planning_items: list[BriefPlanningItem]
+    recent_sources: list[BriefSourceItem]
+    recent_runs: list[RecentRunSnapshot]
+    latest_reports: list[BriefReportSnapshot]
+    last_query: BriefLastQuery | None
+    warnings: list[BriefWarning]
+    sources_by_id: dict[str, SourceRecord]
+    wiki_pages: list[WikiPageSnapshot]
+    invalid_wiki_pages: list[InvalidWikiPageSnapshot]
+
+
+@dataclass(frozen=True)
 class ProjectBrief:
     goal: str | None
     query_summary: str | None
@@ -146,11 +194,56 @@ class ProjectBrief:
 
 
 def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
+    snapshot = _collect_brief_state(root, goal)
+    suggested_actions = _ranked_suggestions(snapshot)
+    next_actions = _next_actions(
+        status=snapshot.status,
+        matches=snapshot.matches,
+        planning_items=snapshot.planning_items,
+        warnings=snapshot.warnings,
+        suggested_actions=suggested_actions,
+    )
+    return ProjectBrief(
+        goal=snapshot.goal,
+        query_summary=snapshot.query_summary,
+        status=snapshot.status,
+        matches=snapshot.matches,
+        planning_items=snapshot.planning_items,
+        recent_sources=snapshot.recent_sources,
+        recent_runs=snapshot.recent_runs,
+        latest_reports=snapshot.latest_reports,
+        last_query=snapshot.last_query,
+        warnings=snapshot.warnings,
+        suggested_actions=suggested_actions,
+        next_actions=next_actions,
+    )
+
+
+def build_suggest_next(root: Path, goal: str | None = None) -> SuggestNextResult:
+    snapshot = _collect_brief_state(root, goal)
+    actions = _ranked_suggestions(snapshot)
+    return SuggestNextResult(
+        goal=snapshot.goal,
+        actions=actions,
+        status=snapshot.status,
+        queue=snapshot.queue,
+        freshness=snapshot.freshness,
+        matches=snapshot.matches,
+        planning_items=snapshot.planning_items,
+        latest_reports=snapshot.latest_reports,
+        warnings=snapshot.warnings,
+    )
+
+
+def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
     config = load_config(root)
     layout = resolve_layout(root, config)
     status = build_wiki_status(root)
+    queue = inspect_queue(root)
+    freshness = scan_source_freshness(root)
     normalized_goal = goal.strip() if goal is not None else ""
     query_summary: str | None = None
+    query_warning: BriefWarning | None = None
     matches: list[BriefMatch] = []
     if normalized_goal:
         try:
@@ -158,27 +251,29 @@ def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
         except (QueryValidationError, OSError, ValueError) as exc:
             query_result = None
             query_summary = f"Query skipped: {_brief_error(exc)}"
+            query_warning = BriefWarning(area="query", path=None, message=query_summary)
         if query_result is not None:
             query_summary = query_result.summary
             matches = [_brief_match(match) for match in query_result.matches[:_BRIEF_MATCH_LIMIT]]
 
     planning_items, warnings = _active_planning_items(root, layout)
-    recent_sources = _recent_sources(root, layout)
+    if query_warning is not None:
+        warnings.insert(0, query_warning)
+    sources = load_sources(layout)
+    sources_by_id = {source.source_id: source for source in sources}
+    wiki_pages, invalid_wiki_pages = load_wiki_pages(root, layout)
+    recent_sources = _recent_sources(sources)
     recent_runs = status.recent_runs
     latest_reports = _latest_reports(root, layout)
     last_query = _last_query(layout)
-    suggested_actions = build_suggest_next(root, normalized_goal or None).actions
-    next_actions = _next_actions(
-        status=status,
-        matches=matches,
-        planning_items=planning_items,
-        warnings=warnings,
-        suggested_actions=suggested_actions,
-    )
-    return ProjectBrief(
+    return BriefStateSnapshot(
+        root=root,
         goal=normalized_goal or None,
         query_summary=query_summary,
+        layout=layout,
         status=status,
+        queue=queue,
+        freshness=freshness,
         matches=matches,
         planning_items=planning_items,
         recent_sources=recent_sources,
@@ -186,54 +281,9 @@ def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
         latest_reports=latest_reports,
         last_query=last_query,
         warnings=warnings,
-        suggested_actions=suggested_actions,
-        next_actions=next_actions,
-    )
-
-
-def build_suggest_next(root: Path, goal: str | None = None) -> SuggestNextResult:
-    config = load_config(root)
-    layout = resolve_layout(root, config)
-    status = build_wiki_status(root)
-    queue = inspect_queue(root)
-    freshness = scan_source_freshness(root)
-    normalized_goal = goal.strip() if goal is not None else ""
-    matches: list[BriefMatch] = []
-    warnings: list[BriefWarning] = []
-    if normalized_goal:
-        try:
-            query_result = run_query(root, normalized_goal)
-        except (QueryValidationError, OSError, ValueError) as exc:
-            warnings.append(
-                BriefWarning(area="query", path=None, message=f"Query skipped: {_brief_error(exc)}")
-            )
-        else:
-            matches = [_brief_match(match) for match in query_result.matches[:_BRIEF_MATCH_LIMIT]]
-
-    planning_items, planning_warnings = _active_planning_items(root, layout)
-    warnings.extend(planning_warnings)
-    latest_reports = _latest_reports(root, layout)
-    actions = _ranked_suggestions(
-        root=root,
-        layout=layout,
-        status=status,
-        queue=queue,
-        freshness=freshness,
-        matches=matches,
-        planning_items=planning_items,
-        latest_reports=latest_reports,
-        warnings=warnings,
-    )
-    return SuggestNextResult(
-        goal=normalized_goal or None,
-        actions=actions[:_SUGGESTION_LIMIT],
-        status=status,
-        queue=queue,
-        freshness=freshness,
-        matches=matches,
-        planning_items=planning_items,
-        latest_reports=latest_reports,
-        warnings=warnings,
+        sources_by_id=sources_by_id,
+        wiki_pages=wiki_pages,
+        invalid_wiki_pages=invalid_wiki_pages,
     )
 
 
@@ -293,8 +343,8 @@ def _active_planning_items(
     return items[:_BRIEF_PLANNING_LIMIT], warnings
 
 
-def _recent_sources(root: Path, layout) -> list[BriefSourceItem]:
-    sources = sorted(load_sources(layout), key=lambda source: (source.added_at, source.source_id))
+def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:
+    sources = sorted(sources, key=lambda source: (source.added_at, source.source_id))
     return [
         BriefSourceItem(
             source_id=source.source_id,
@@ -380,28 +430,13 @@ def _next_actions(
     return actions
 
 
-def _ranked_suggestions(
-    *,
-    root: Path,
-    layout,
-    status: WikiStatus,
-    queue: QueueInspectResult,
-    freshness: SourceFreshnessResult,
-    matches: list[BriefMatch],
-    planning_items: list[BriefPlanningItem],
-    latest_reports: list[BriefReportSnapshot],
-    warnings: list[BriefWarning],
-) -> list[SuggestedAction]:
-    sources_by_id = {source.source_id: source for source in load_sources(layout)}
+def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
     actions: list[SuggestedAction] = []
-    rank = 0
 
     def add(priority: str, category: str, title: str, reason: str, command: str | None, **kwargs):
-        nonlocal rank
-        rank += 1
         actions.append(
             SuggestedAction(
-                rank=rank,
+                rank=0,
                 priority=priority,
                 category=category,
                 title=title,
@@ -411,7 +446,7 @@ def _ranked_suggestions(
             )
         )
 
-    for item in freshness.sources:
+    for item in snapshot.freshness.sources:
         source = item.source
         if item.status == "changed":
             add(
@@ -436,8 +471,8 @@ def _ranked_suggestions(
                 source_ref=canonical_source_ref(source),
             )
 
-    for item in queue.items:
-        source = sources_by_id.get(item.source_id or "")
+    for item in snapshot.queue.items:
+        source = snapshot.sources_by_id.get(item.source_id or "")
         source_ref = canonical_source_ref(source) if source is not None else None
         if item.operator_state in {"pending", "failed_due", "expired_leased"}:
             add(
@@ -478,11 +513,11 @@ def _ranked_suggestions(
                 source_ref=source_ref,
             )
 
-    for page in _review_page_actions(root, layout):
+    for page in _review_page_actions(snapshot.wiki_pages, snapshot.invalid_wiki_pages):
         add(**page)
 
-    for source_id in _sources_missing_synthesis(root, layout, sources_by_id):
-        source = sources_by_id[source_id]
+    for source_id in _sources_missing_synthesis(snapshot.wiki_pages, snapshot.sources_by_id):
+        source = snapshot.sources_by_id[source_id]
         source_ref = canonical_source_ref(source)
         add(
             "medium",
@@ -495,7 +530,7 @@ def _ranked_suggestions(
             source_ref=source_ref,
         )
 
-    for report in latest_reports:
+    for report in snapshot.latest_reports:
         if report.status != "passed" or report.issue_count:
             add(
                 "medium",
@@ -507,7 +542,7 @@ def _ranked_suggestions(
                 path=report.path,
             )
 
-    for match in matches[:3]:
+    for match in snapshot.matches[:3]:
         add(
             "medium",
             "goal-match",
@@ -518,7 +553,7 @@ def _ranked_suggestions(
             record_id=match.record_id,
         )
 
-    for item in planning_items:
+    for item in snapshot.planning_items:
         command = f"splendor task list --status {item.status}" if item.kind == "task" else None
         add(
             "low",
@@ -530,7 +565,7 @@ def _ranked_suggestions(
             record_id=item.record_id,
         )
 
-    for warning in warnings:
+    for warning in snapshot.warnings:
         add(
             "low",
             warning.area,
@@ -549,15 +584,40 @@ def _ranked_suggestions(
             "splendor brief --agent-context",
         )
 
-    return actions
+    return _finalize_suggestions(actions)
 
 
 def _first_command(commands: list[str]) -> str | None:
     return commands[0] if commands else None
 
 
-def _review_page_actions(root: Path, layout) -> list[dict[str, object]]:
-    pages, invalid_pages = _load_wiki_pages(root, layout)
+def _finalize_suggestions(actions: list[SuggestedAction]) -> list[SuggestedAction]:
+    by_category: dict[str, int] = {}
+    capped: list[tuple[int, SuggestedAction]] = []
+    for sequence, action in enumerate(actions):
+        current_count = by_category.get(action.category, 0)
+        category_limit = _SUGGESTION_CATEGORY_LIMITS.get(action.category, 1)
+        if current_count >= category_limit:
+            continue
+        by_category[action.category] = current_count + 1
+        capped.append((sequence, action))
+
+    capped.sort(
+        key=lambda item: (
+            _SUGGESTION_CATEGORY_ORDER.get(item[1].category, 99),
+            _SUGGESTION_PRIORITY_ORDER.get(item[1].priority, 99),
+            item[0],
+        )
+    )
+    return [
+        replace(action, rank=rank)
+        for rank, (_sequence, action) in enumerate(capped[:_SUGGESTION_LIMIT], start=1)
+    ]
+
+
+def _review_page_actions(
+    pages: list[WikiPageSnapshot], invalid_pages: list[InvalidWikiPageSnapshot]
+) -> list[dict[str, object]]:
     actions: list[dict[str, object]] = []
     for invalid in invalid_pages:
         actions.append(
@@ -574,7 +634,7 @@ def _review_page_actions(root: Path, layout) -> list[dict[str, object]]:
         state = page.frontmatter.review_state
         if state not in {"contested", "stale", "draft", "machine-generated"}:
             continue
-        if page.frontmatter.kind not in _SYNTHESIS_KINDS and state != "contested":
+        if page.frontmatter.kind not in SYNTHESIS_KINDS and state != "contested":
             continue
         priority = "high" if state in {"contested", "stale"} else "medium"
         actions.append(
@@ -594,15 +654,16 @@ def _review_page_actions(root: Path, layout) -> list[dict[str, object]]:
     return actions
 
 
-def _sources_missing_synthesis(root: Path, layout, sources_by_id) -> list[str]:
-    pages, _invalid_pages = _load_wiki_pages(root, layout)
+def _sources_missing_synthesis(
+    pages: list[WikiPageSnapshot], sources_by_id: dict[str, SourceRecord]
+) -> list[str]:
     synthesis_source_ids = {
         source_ref
         for page in pages
-        if page.frontmatter.kind in _SYNTHESIS_KINDS
+        if page.frontmatter.kind in SYNTHESIS_KINDS
         for source_ref in page.frontmatter.source_refs
     }
-    synthesis_pages = [page for page in pages if page.frontmatter.kind in _SYNTHESIS_KINDS]
+    synthesis_pages = [page for page in pages if page.frontmatter.kind in SYNTHESIS_KINDS]
     source_ids = []
     for source_id, source in sources_by_id.items():
         if source.status != "ingested":
