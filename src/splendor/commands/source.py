@@ -61,6 +61,7 @@ class SourceFreshnessResult:
     changed: int
     missing: int
     unsupported: int
+    historical: int
     sources: list[SourceFreshnessItem]
     report_path: str | None = None
 
@@ -75,13 +76,29 @@ def list_sources(root: Path) -> list[SourceLookupResult]:
 
 
 def scan_source_freshness(root: Path) -> SourceFreshnessResult:
-    items = [_freshness_item(root, result) for result in list_sources(root)]
+    lookup_results = list_sources(root)
+    workspace_groups: dict[str, list[SourceLookupResult]] = {}
+    items_by_source_id: dict[str, SourceFreshnessItem] = {}
+
+    for result in lookup_results:
+        source = result.source
+        if source.source_ref_kind == "workspace_path" and source.source_ref:
+            workspace_groups.setdefault(source.source_ref, []).append(result)
+            continue
+        items_by_source_id[source.source_id] = _freshness_item(root, result)
+
+    for grouped_results in workspace_groups.values():
+        for item in _workspace_freshness_items(root, grouped_results):
+            items_by_source_id[item.source.source_id] = item
+
+    items = [items_by_source_id[result.source.source_id] for result in lookup_results]
     return SourceFreshnessResult(
         total=len(items),
         unchanged=sum(1 for item in items if item.status == "unchanged"),
         changed=sum(1 for item in items if item.status == "changed"),
         missing=sum(1 for item in items if item.status == "missing"),
         unsupported=sum(1 for item in items if item.status == "unsupported"),
+        historical=sum(1 for item in items if item.status == "historical"),
         sources=items,
     )
 
@@ -226,11 +243,7 @@ def write_source_freshness_report(
 ) -> SourceFreshnessResult:
     resolved_report_path = report_path if report_path.is_absolute() else root / report_path
     resolved_report_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        report_value = resolved_report_path.relative_to(root).as_posix()
-    except ValueError:
-        report_value = resolved_report_path.as_posix()
-    result_with_report_path = replace(result, report_path=report_value)
+    result_with_report_path = replace(result, report_path=resolved_report_path.as_posix())
     resolved_report_path.write_text(
         render_source_freshness_json(root, result_with_report_path) + "\n",
         encoding="utf-8",
@@ -246,6 +259,7 @@ def render_source_freshness_json(root: Path, result: SourceFreshnessResult) -> s
             "changed": result.changed,
             "missing": result.missing,
             "unsupported": result.unsupported,
+            "historical": result.historical,
             "report_path": result.report_path,
             "sources": [_freshness_payload(root, item) for item in result.sources],
         },
@@ -309,56 +323,102 @@ def _freshness_item(root: Path, result: SourceLookupResult) -> SourceFreshnessIt
             next_commands=[],
         )
 
-    source_path = resolve_workspace_path(root, source.source_ref, context="Workspace source")
+    return _workspace_freshness_items(root, [result])[0]
+
+
+def _workspace_freshness_items(
+    root: Path, results: list[SourceLookupResult]
+) -> list[SourceFreshnessItem]:
+    source_ref = results[0].source.source_ref
+    if source_ref is None:
+        msg = "Workspace freshness group is missing source_ref"
+        raise ValueError(msg)
+
+    source_path = resolve_workspace_path(root, source_ref, context="Workspace source")
     if not source_path.exists():
-        return SourceFreshnessItem(
-            source=source,
-            manifest_path=result.manifest_path,
-            canonical_path=source.source_ref,
-            status="missing",
-            manifest_checksum=source.checksum,
-            current_checksum=None,
-            message="canonical workspace source file is missing",
-            next_commands=[],
-        )
+        return [
+            SourceFreshnessItem(
+                source=result.source,
+                manifest_path=result.manifest_path,
+                canonical_path=source_ref,
+                status="missing",
+                manifest_checksum=result.source.checksum,
+                current_checksum=None,
+                message="canonical workspace source file is missing",
+                next_commands=[f"splendor source lookup {result.source.source_id}"],
+            )
+            for result in results
+        ]
     if not source_path.is_file():
-        return SourceFreshnessItem(
-            source=source,
-            manifest_path=result.manifest_path,
-            canonical_path=source.source_ref,
-            status="unsupported",
-            manifest_checksum=source.checksum,
-            current_checksum=None,
-            message="canonical workspace source ref does not resolve to a file",
-            next_commands=[],
-        )
+        return [
+            SourceFreshnessItem(
+                source=result.source,
+                manifest_path=result.manifest_path,
+                canonical_path=source_ref,
+                status="unsupported",
+                manifest_checksum=result.source.checksum,
+                current_checksum=None,
+                message="canonical workspace source ref does not resolve to a file",
+                next_commands=[],
+            )
+            for result in results
+        ]
 
     current_checksum = sha256_file(source_path)
-    if current_checksum == source.checksum:
-        return SourceFreshnessItem(
-            source=source,
-            manifest_path=result.manifest_path,
-            canonical_path=source.source_ref,
-            status="unchanged",
-            manifest_checksum=source.checksum,
-            current_checksum=current_checksum,
-            message="canonical workspace source matches manifest checksum",
-            next_commands=[f"splendor wiki suggest {source.source_id}"],
-        )
+    matching_source_ids = {
+        result.source.source_id for result in results if result.source.checksum == current_checksum
+    }
+    changed_candidate = None if matching_source_ids else max(results, key=_latest_source_sort_key)
 
-    return SourceFreshnessItem(
-        source=source,
-        manifest_path=result.manifest_path,
-        canonical_path=source.source_ref,
-        status="changed",
-        manifest_checksum=source.checksum,
-        current_checksum=current_checksum,
-        message="canonical workspace source differs from manifest checksum",
-        next_commands=[
-            f"splendor source refresh {source.source_ref}",
-            "splendor ingest --pending",
-        ],
-    )
+    items = []
+    for result in results:
+        source = result.source
+        if source.source_id in matching_source_ids:
+            items.append(
+                SourceFreshnessItem(
+                    source=source,
+                    manifest_path=result.manifest_path,
+                    canonical_path=source_ref,
+                    status="unchanged",
+                    manifest_checksum=source.checksum,
+                    current_checksum=current_checksum,
+                    message="canonical workspace source matches manifest checksum",
+                    next_commands=[f"splendor wiki suggest {source.source_id}"],
+                )
+            )
+            continue
+
+        if changed_candidate is not None and source.source_id == changed_candidate.source.source_id:
+            items.append(
+                SourceFreshnessItem(
+                    source=source,
+                    manifest_path=result.manifest_path,
+                    canonical_path=source_ref,
+                    status="changed",
+                    manifest_checksum=source.checksum,
+                    current_checksum=current_checksum,
+                    message="canonical workspace source differs from manifest checksum",
+                    next_commands=[
+                        f"splendor source refresh {source_ref}",
+                        "splendor ingest --pending",
+                    ],
+                )
+            )
+            continue
+
+        items.append(
+            SourceFreshnessItem(
+                source=source,
+                manifest_path=result.manifest_path,
+                canonical_path=source_ref,
+                status="historical",
+                manifest_checksum=source.checksum,
+                current_checksum=current_checksum,
+                message="older source version for this workspace path; current path is covered",
+                next_commands=[],
+            )
+        )
+    return items
 
 
 def _freshness_payload(root: Path, item: SourceFreshnessItem) -> dict[str, object]:

@@ -196,9 +196,11 @@ uv run splendor --root /tmp/demo-repo ingest --pending
 ```
 
 `source freshness` is a safe preview. By default it writes nothing and reports unchanged, changed,
-missing, and unsupported source freshness states for curated sources. Workspace-backed changed
-sources include manifest/current checksums and exact next commands; non-workspace sources are
-reported as unsupported for this preview.
+missing, historical, and unsupported source freshness states for curated sources. Workspace-backed
+changed sources include manifest/current checksums and exact next commands; older source versions
+for paths already covered by a current manifest are reported as historical. Non-workspace sources
+are reported as unsupported for this preview. Relative `--report` paths use the current working
+directory.
 
 Refresh does not override active ingest leases or dead-letter protections; use `queue retry` or
 `repair ingest` for those recovery cases.

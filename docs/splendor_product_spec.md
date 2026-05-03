@@ -802,8 +802,9 @@ M13-P2 repo-discovery contracts:
   knowledge over all supported files.
 - `splendor source freshness` reports curated sources whose canonical file content differs from the
   manifest checksum and includes source IDs, titles, paths, freshness status, manifest/current
-  checksums where available, and exact next commands. The default command is non-mutating; `--json`
-  emits machine-readable output and `--report PATH` writes only an explicit freshness report.
+  checksums where available, historical source-version status for paths already covered by a current
+  manifest, and exact next commands. The default command is non-mutating; `--json` emits
+  machine-readable output and `--report PATH` writes only an explicit freshness report.
 - `brief --agent-context` should lead with project state, stale/contested/actionable items, and
   next actions before metadata.
 - A future `suggest-next` command should rank work from open tasks, stale sources, failed jobs,

@@ -773,7 +773,7 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 - versioned schemas
 - issue #70 design response
 - safe repo discovery and curation controls
-- source freshness and diff-since-ingest reporting
+- source freshness and manifest-drift reporting
 - higher-signal agent handoff and next-action guidance
 - source-summary policy and path-first UX
 - release finalization after the redesign lands
@@ -786,7 +786,7 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 ### Current PR sub-slices
 - `M13-P2.1` Docs-only design reset and roadmap realignment
 - `M13-P2.2` Safe repo scan candidate discovery
-- `M13-P2.3` Source freshness / diff-since-ingest workflow
+- `M13-P2.3` Source freshness / manifest-drift workflow
 - `M13-P2.4` Agent handoff brief and suggest-next
 - `M13-P2.5` Source-summary policy and path-first UX
 

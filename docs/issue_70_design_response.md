@@ -78,7 +78,8 @@ The next implementation slices should document and then implement these contract
   large-candidate refusal.
 - `splendor source freshness` reports curated sources whose current canonical file content differs
   from the manifest checksum, prints path-first status with exact next commands, supports JSON and
-  explicit report output, and does not mutate manifests or derived state by default.
+  explicit report output, separates historical source versions from actionable stale paths, and does
+  not mutate manifests or derived state by default.
 - `brief --agent-context` leads with actual project state, stale/contested/actionable items, and
   next actions before metadata.
 - A future `suggest-next` command ranks work from open tasks, stale sources, failed jobs, missing

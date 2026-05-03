@@ -160,10 +160,12 @@ Implemented fields:
 - `splendor source freshness` is a non-mutating preview over curated source manifests. It reports
   path-first freshness state for workspace-backed canonical source refs, including unchanged,
   changed, missing, and unsupported statuses, manifest/current checksums where available, source
-  IDs, titles, manifest paths, and exact next commands for changed sources.
+  IDs, titles, manifest paths, historical versions for paths covered by a current manifest, and
+  exact next commands for changed sources.
 - `splendor source freshness --json` emits the same preview for machine handoff. `--report PATH`
-  writes only an explicit freshness report JSON; the default command writes no source manifests,
-  wiki pages, derived artifacts, queue records, run records, or reports.
+  writes only an explicit freshness report JSON, with relative report paths resolved from the
+  current working directory; the default command writes no source manifests, wiki pages, derived
+  artifacts, queue records, run records, or reports.
 - Refresh uses the queue ledger directly, so active leases remain protected and dead-lettered jobs
   still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
 - Text-bearing PDF sources are routed through source-type dispatch during ingest. The source

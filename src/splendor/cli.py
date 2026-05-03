@@ -223,7 +223,10 @@ def build_parser() -> argparse.ArgumentParser:
     source_freshness_parser.add_argument(
         "--report",
         type=Path,
-        help="Write the freshness report JSON to this explicit path.",
+        help=(
+            "Write the freshness report JSON to this explicit path. "
+            "Relative paths use the current working directory."
+        ),
     )
     source_freshness_parser.add_argument(
         "--json",
@@ -876,7 +879,7 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
     try:
         result = scan_source_freshness(root)
         if args.report is not None:
-            result = write_source_freshness_report(root, result, args.report)
+            result = write_source_freshness_report(root, result, args.report.resolve())
     except (FileNotFoundError, ValueError) as exc:
         return _print_error(exc)
 
@@ -891,7 +894,8 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
         f"unchanged={result.unchanged} "
         f"changed={result.changed} "
         f"missing={result.missing} "
-        f"unsupported={result.unsupported}"
+        f"unsupported={result.unsupported} "
+        f"historical={result.historical}"
     )
     if result.report_path is not None:
         print(f"Report: {result.report_path}")
@@ -911,8 +915,10 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
         print(f"  Message: {item.message}")
         for command in item.next_commands:
             print(f"  Next: {command}")
-    if result.changed or result.missing:
+    if result.changed:
         print("Next: splendor source refresh <path>")
+    elif result.missing:
+        print("Next: restore missing source files or inspect the listed source manifests")
     else:
         print("Next: splendor source lookup")
     return 0

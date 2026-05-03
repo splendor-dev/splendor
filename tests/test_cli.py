@@ -777,11 +777,44 @@ def test_cli_source_freshness_json_reports_unchanged_missing_and_unsupported(
         )
         assert statuses["missing.md"]["status"] == "missing"
         assert statuses["missing.md"]["current_checksum"] is None
+        assert statuses["missing.md"]["next_commands"] == [
+            f"splendor source lookup {statuses['missing.md']['source_id']}"
+        ]
         assert statuses[external.resolve().as_posix()]["status"] == "unsupported"
         assert statuses[external.resolve().as_posix()]["next_commands"] == []
     finally:
         external.unlink(missing_ok=True)
         external_dir.rmdir()
+
+
+def test_cli_source_freshness_marks_old_versions_historical_when_current_manifest_exists(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    refreshed_id = next(
+        path.stem
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if path.stem != original_id
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "freshness", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["changed"] == 0
+    assert payload["unchanged"] == 1
+    assert payload["historical"] == 1
+    statuses = {source["source_id"]: source for source in payload["sources"]}
+    assert statuses[original_id]["status"] == "historical"
+    assert statuses[original_id]["next_commands"] == []
+    assert statuses[refreshed_id]["status"] == "unchanged"
 
 
 def test_cli_source_freshness_report_writes_only_explicit_report(tmp_path: Path, capsys) -> None:
@@ -806,14 +839,14 @@ def test_cli_source_freshness_report_writes_only_explicit_report(tmp_path: Path,
             "source",
             "freshness",
             "--report",
-            "reports/source-freshness.json",
+            str(tmp_path / "reports" / "source-freshness.json"),
             "--json",
         ]
     )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["report_path"] == "reports/source-freshness.json"
+    assert payload["report_path"] == (tmp_path / "reports" / "source-freshness.json").as_posix()
     report_payload = json.loads((tmp_path / "reports" / "source-freshness.json").read_text())
     assert report_payload["unchanged"] == 1
     assert (

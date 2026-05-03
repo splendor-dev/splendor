@@ -147,6 +147,7 @@ derived state. Registration requires `repo scan --apply` plus `--class ...` or `
 source files to their manifest checksums, reports unchanged/changed/missing/unsupported sources,
 and prints exact `source refresh`/`ingest --pending` next commands for stale paths. `--json` emits
 the same preview for machine handoff, and `--report PATH` writes only an explicit freshness report.
+Relative report paths use the current working directory.
 
 Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
 `derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
@@ -231,7 +232,8 @@ writing manifests or derived state, `--json` emits the preview, and `--report PA
 explicit discovery report. Registration moved behind `--apply` plus `--class ...` or `--all`, with
 large candidate sets refused unless `--allow-large-apply` is passed after review.
 
-`M13-P2.3` adds `splendor source freshness`, a safe diff-since-ingest preview for curated sources.
-It reports path-first freshness state for workspace-backed manifests, includes manifest/current
-checksums, supports JSON/report output, and does not update manifests, wiki pages, derived
-artifacts, queue records, run records, or reports unless `--report PATH` is provided.
+`M13-P2.3` adds `splendor source freshness`, a safe manifest-drift preview for curated sources. It
+reports path-first freshness state for workspace-backed manifests, includes manifest/current
+checksums, separates historical source versions from actionable stale paths, supports JSON/report
+output, and does not update manifests, wiki pages, derived artifacts, queue records, run records, or
+reports unless `--report PATH` is provided.
