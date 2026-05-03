@@ -397,6 +397,9 @@ Current runtime behavior:
 - Source freshness, suggest-next, and agent briefing use existing records as read-only signals.
 - Richer lifecycle fields for stable logical source identities and supersession-aware history are
   deferred so they can be designed without breaking the v1 manifest contract.
+- The final v1 handoff in `docs/v1_release_handoff.md` treats schema version `1`, legacy manifest
+  compatibility, and deferred source-lifecycle fields as release checklist items rather than
+  implicit assumptions.
 
 ## Review config
 

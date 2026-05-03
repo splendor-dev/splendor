@@ -319,6 +319,11 @@ source identities, supersession-aware pruning, a one-command full workspace refr
 `splendor pr-summary --since main`. Those belong to later source-lifecycle or PR-summary slices,
 not the M13-P3.1 release-hardening pass.
 
+For the M13-P3.2 release handoff, `docs/v1_release_handoff.md` is the checklist that connects local
+validation, GitHub PR metadata, issue state, and known non-blockers. GitHub automation remains
+supporting infrastructure around the local CLI, not a substitute for the explicit validation
+commands named in that handoff.
+
 ## Planning update rule for PRs
 
 When a pull request is opened against work that came from a tracked plan, the PR should update the

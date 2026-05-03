@@ -334,17 +334,17 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M13-P2.5`
+- Previous completed PR sub-slice: `M13-P3.1`
 - Current planned slice: `M13-P3`
-- Current PR sub-slice: `M13-P3.1`
+- Current PR sub-slice: `M13-P3.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M13-P3`
-- Next planned PR sub-slice: `M13-P3.2`
+- Next planned slice: `M14-P0`
+- Next planned PR sub-slice: `M14-P0.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
 shifting agent-facing value toward freshness, contested knowledge, planning state, and next
-actions. The lifecycle marker means `M13-P3.1` is in progress on feature branches and merged once
+actions. The lifecycle marker means `M13-P3.2` is in progress on feature branches and merged once
 the same committed state is observed on `main`.
 
 ---
@@ -790,6 +790,7 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 - `M13-P2.4` Agent handoff brief and suggest-next
 - `M13-P2.5` Source-summary policy and path-first UX
 - `M13-P3.1` Release hardening and v1 readiness
+- `M13-P3.2` Final release checklist and post-v1 handoff
 
 ### Deliverables
 - v1 schema versions
@@ -824,6 +825,12 @@ threads. It does not add SQLite, vector search, background workers, mutating web
 lifecycle machinery, stable logical source identities, supersedes/superseded_by source semantics,
 pruning, or PR-summary tooling.
 
+`M13-P3.2` is the final release checklist and post-v1 handoff. It keeps runtime behavior stable,
+adds the concise release handoff in `docs/v1_release_handoff.md`, and makes the post-v1 queue
+explicit: #72 owns source lifecycle and agent workflow follow-up; #47 owns ingest run durations;
+#79 owns the deferred mutating compile/update path from #41; #30 and #37 remain independent
+performance/scaling follow-ups.
+
 ### M13-P3 v1 release-readiness checklist
 
 - [x] M13-P2 safe discovery, source freshness, agent handoff, and path-first source-summary UX have
@@ -832,13 +839,17 @@ pruning, or PR-summary tooling.
   pages and explain which generated state is reviewer-significant.
 - [x] The quickstart demonstrates the queue-backed `add-source -> ingest --pending -> lookup`
   loop instead of requiring users to copy long IDs for the first ingest.
-- [x] Issue #70 remains the parent feedback loop for agent usefulness; the release notes identify
-  which parts are addressed by M13-P2 and which remain follow-up work.
+- [x] Issue #70 is closed after the M13-P2/M13-P3.1 response for agent usefulness; release notes
+  identify that #72 now owns remaining source lifecycle and agent-workflow follow-up.
 - [x] Issue #72 remains the parent feedback loop for source-refresh lifecycle and agent workflow;
   stable logical source identities, source supersession, full workspace refresh, pruning, and
-  `pr-summary` remain later M13-P3 or post-v1 work.
-- [ ] Final release handoff should re-run the full validation suite, confirm open issue metadata,
-  and publish a release-note summary before tagging.
+  `pr-summary` remain post-v1 work.
+- [x] Issue #79 tracks the deferred mutating compile/update path from #41 so #41 can stay closed for
+  the shipped v1 briefing and non-mutating compile-contract scope.
+- [x] Final release handoff records validation commands, docs state, issue state, GitHub metadata,
+  known non-blockers, and the post-v1 queue.
+- [ ] Tagging should happen only after the full validation suite, green CI on `main`, and release
+  notes that call out completed M13 work plus the explicit post-v1 queue.
 
 ### Exit criteria
 - the product is stable enough for sustained real-world use
@@ -847,6 +858,36 @@ pruning, or PR-summary tooling.
 - broad discovery cannot accidentally create large manifest/wiki churn
 - generated artifacts add value beyond readable source files
 - the difference between core and optional features is very clear
+
+## Candidate Milestone 14 — Post-v1 source lifecycle and agent workflow
+
+### Goal
+Turn the #72 feedback loop into small source-lifecycle and agent-workflow improvements without
+breaking the v1 file contracts.
+
+### Scope
+- stable logical source identity design
+- source supersession semantics
+- full workspace refresh workflow
+- superseded generated-state pruning and topic-ref migration
+- PR-oriented summary output
+- planning-doc authority and staleness metadata
+
+### Candidate PR slices
+- `M14-P0` Post-v1 planning intake
+- `M14-P1` Source lifecycle design
+
+### Candidate PR sub-slices
+- `M14-P0.1` Split #72 into child issues and assign release metadata
+- `M14-P1.1` Stable logical source identity and supersession design
+
+### Boundaries
+- Promote these candidates to committed roadmap slices only after the child issues and GitHub
+  milestone metadata exist.
+- Keep schema version `1` compatibility unless a future migration plan is explicit.
+- Preserve curated source manifests as the durable registry.
+- Keep #30 and #37 independent performance/scaling follow-ups unless real repository use makes
+  either one urgent.
 
 ---
 

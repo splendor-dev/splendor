@@ -828,7 +828,11 @@ Release-readiness boundary:
   reports can remain local.
 - issue #72's desired stable logical source identities, `supersedes`/`superseded_by` source
   lifecycle, one-command workspace refresh, superseded-state pruning, and `pr-summary` surface are
-  post-v1 or later M13-P3 follow-ups unless a future roadmap slice explicitly pulls them forward.
+  post-v1 follow-ups unless a future roadmap slice explicitly pulls them forward.
+- issue #79 tracks the deferred mutating compile/update workflow from #41; v1 ships briefing and
+  the non-mutating compile contract only.
+- `docs/v1_release_handoff.md` is the v1 handoff checklist for final validation, GitHub metadata,
+  issue state, known non-blockers, and the conservative post-v1 queue.
 
 Later optional support:
 - additional OCR providers
@@ -1270,7 +1274,7 @@ Splendor should be considered successful at the product-spec level if it can do 
 
 These are not blockers to the spec, but should remain visible:
 
-1. exact branch/review strategy for the initial release
+1. exact branch/review strategy for release tags after the initial v1 handoff
 2. whether source manifests live alongside raw files or centrally in `state/`
 3. exact page taxonomy naming
 4. whether code files are ingested directly or via projection/snapshot policies
