@@ -114,7 +114,8 @@ Implemented today:
   `splendor add-source --dir path`
 - `splendor source list`, `splendor source lookup [query]`, `splendor source freshness`, and
   `splendor source refresh <source-id|title|path>`
-- `splendor workspace refresh --changed` with optional `--ingest` and `--rebuild-index`
+- `splendor workspace refresh --changed` with optional `--ingest`, `--rebuild-index`,
+  `--prune-superseded`, and `--update-topic-refs`
 - `splendor ingest <source-id>` and `splendor ingest --pending`
 - `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
 - `splendor repair ingest <source-id>`
@@ -140,7 +141,6 @@ Not implemented yet:
 - mutating review-gated `splendor wiki compile`
 - heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
-- supersession-aware pruning and topic-ref migration
 - PR-oriented generated-state summaries such as `splendor pr-summary --since main`
 
 `splendor repo scan` is safe by default: it previews candidates without writing manifests or
@@ -154,8 +154,13 @@ Relative report paths use the current working directory.
 supersession-aware refresh path for changed curated workspace-backed sources. Add `--ingest` to
 ingest only queue jobs created or reused for the refreshed sources, and add `--rebuild-index` to
 regenerate `wiki/index.md` after that targeted ingest succeeds. JSON output reports both initial
-and final freshness counts. The command does not discover or register uncurated files, prune
-superseded generated state, migrate topic refs, or mutate maintained synthesis pages.
+and final freshness counts. Add `--prune-superseded` to delete superseded generated
+`wiki/sources/<source-id>.md` summaries once a current successor summary exists, while keeping
+historical source manifests and run records. Add `--update-topic-refs` to rewrite maintained wiki
+page `source_refs` and generated source-reference list bullets from superseded source IDs to the
+active source version ID. Prune JSON reports skipped unsafe candidates with reasons rather than
+deleting ambiguous state. The command does not discover or register uncurated files or mutate
+maintained synthesis content beyond that explicit source-ref migration.
 
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
@@ -184,12 +189,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.2`
+- Previous completed PR sub-slice: `M14-P1.3`
 - Current planned slice: `M14-P1`
-- Current PR sub-slice: `M14-P1.3`
+- Current PR sub-slice: `M14-P1.4`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M14-P1`
-- Next planned PR sub-slice: `M14-P1.4`
+- Next planned slice: `M14-P2`
+- Next planned PR sub-slice: `M14-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -279,15 +284,13 @@ visibility as represented in current behavior. It still calls out #41's mutating
 workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Issues #30 and #37
 remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
 stays open as the parent feedback loop; stable logical source identities, supersession lifecycle,
-and safe workspace refresh have landed, while pruning, topic-ref migration, and PR-summary ideas
-remain post-v1 planning work.
+safe workspace refresh, superseded summary pruning, and topic-ref migration have landed, while
+PR-summary ideas remain post-v1 planning work.
 Issue #79 tracks the deferred mutating compile/update path from #41.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
 workspace-backed manifests now persist `source:<workspace-path>` logical IDs and path aliases while
-keeping `src-...` IDs as the compatibility contract. Safe workspace refresh, pruning/topic-ref
-migration, and PR-oriented generated-state summary/review handoff remain later slices before the
-SynthBanshee Claude retry.
+keeping `src-...` IDs as the compatibility contract.
 
 `M14-P1.2` makes source refresh supersession-aware: changed workspace-backed sources keep their
 stable logical ID, register a new content-addressed `src-...` version, and link the previous and
@@ -297,8 +300,13 @@ versions as historical provenance instead of active current-byte targets.
 `M14-P1.3` adds the safe workspace refresh path:
 `splendor workspace refresh --changed --ingest --rebuild-index` detects changed curated
 workspace-backed sources, refreshes them through the supersession-aware source lifecycle, drains
-only the refreshed sources' ingest jobs, and rebuilds the wiki index. Pruning/topic-ref migration
-and PR-summary support remain later slices before the retry.
+only the refreshed sources' ingest jobs, and rebuilds the wiki index.
+
+`M14-P1.4` adds explicit superseded generated-state cleanup to workspace refresh:
+`--prune-superseded` removes old generated source-summary pages only after a successor summary
+exists, and `--update-topic-refs` migrates maintained wiki source references to the active
+content-addressed source version while schema version `1` continues to validate `source_refs`
+against source manifests. Historical manifests and run records remain valid.
 
 ### v1 readiness checklist
 
@@ -310,5 +318,4 @@ and PR-summary support remain later slices before the retry.
 - [x] CLI, schema, quickstart, automation, and dogfooding docs describe the same current behavior.
 - [x] Final release handoff names validation, issue state, GitHub metadata, known non-blockers,
   and the post-v1 queue.
-- [ ] Full refresh lifecycle, supersession/pruning, topic-ref migration, and PR-summary tooling are
-  planned follow-ups after the initial stable logical source identity layer.
+- [ ] PR-summary tooling remains the next planned source-lifecycle handoff follow-up.

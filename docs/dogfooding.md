@@ -77,7 +77,7 @@ candidate preview unless the operator explicitly applies a reviewed class or all
 Use `source freshness`, `brief --agent-context`, and `suggest-next` before deciding whether a
 workspace needs ingest, synthesis review, queue repair, or planning follow-up.
 
-Do not expect the current workflow to provide stable logical source identities, source
-supersession/pruning, one-command full workspace refresh, or PR-summary generation yet. Those are
-tracked from issue #72 as later lifecycle improvements. For v1 release work, use
+The current workflow now provides stable logical source identities, source supersession, explicit
+workspace refresh, and explicit superseded-summary pruning/topic-ref migration. Do not expect
+PR-summary generation yet; it remains tracked from issue #72 as later lifecycle work. For v1 release work, use
 `docs/v1_release_handoff.md` to separate release-blocking validation from the post-v1 dogfood queue.

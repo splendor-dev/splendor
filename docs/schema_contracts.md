@@ -202,9 +202,15 @@ Implemented fields:
   created or reused for those refreshed sources with `--ingest`.
 - `splendor workspace refresh --changed --ingest --rebuild-index` rebuilds `wiki/index.md` only
   after the targeted refreshed-source ingest succeeds. JSON output reports both initial and final
-  freshness counts. The command does not perform broad repo discovery,
-  register uncurated files, prune superseded generated state, migrate topic refs, or run mutating
-  synthesis compile/update workflows.
+  freshness counts. `--prune-superseded` deletes superseded generated source-summary pages after a
+  current successor summary exists, removes the pruned generated-page link from the superseded
+  source manifest, and preserves historical source manifests and run records. Health treats run
+  page refs for those exact pruned superseded workspace summaries as valid historical provenance
+  without exempting unrelated broken run refs. Prune JSON reports skipped unsafe candidates with
+  reasons. `--update-topic-refs` rewrites maintained wiki page `source_refs` and generated
+  source-reference list bullets from superseded source IDs to the active content-addressed source
+  version, leaving prose and code-fence mentions untouched. The command does not perform broad repo
+  discovery, register uncurated files, or run mutating synthesis compile/update workflows.
 - `splendor suggest-next [goal]` is a read-only handoff view over existing deterministic state. It
   does not create planning records, queue jobs, manifests, wiki pages, run records, or reports.
   Human output is path-first where possible; `--json` emits ranked action objects with category,
@@ -261,10 +267,11 @@ In this release:
 - source IDs remain content-addressed canonical IDs; stable logical source aliases and
   `supersedes`/`superseded_by` lifecycle fields now describe workspace-backed refresh history
   without changing schema version `1`
-- automated pruning of superseded source summaries and topic-ref migration are not part of the
-  current schema contract
-- safe workspace refresh composes existing source, queue, ingest, and wiki-index records without
-  changing schema version `1`
+- explicit pruning of superseded source-summary pages and maintained-page source-ref migration are
+  workspace maintenance operations over existing schema version `1` fields, not a manifest schema
+  rewrite
+- safe workspace refresh composes existing source, queue, ingest, wiki-index, and wiki-frontmatter
+  records without changing schema version `1`
 
 ## Knowledge page frontmatter
 

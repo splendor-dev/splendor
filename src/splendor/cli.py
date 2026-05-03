@@ -367,6 +367,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rebuild wiki/index.md after a successful pending ingest drain.",
     )
     workspace_refresh_parser.add_argument(
+        "--prune-superseded",
+        action="store_true",
+        help="Delete superseded generated source-summary pages after a successor exists.",
+    )
+    workspace_refresh_parser.add_argument(
+        "--update-topic-refs",
+        action="store_true",
+        help="Rewrite maintained wiki source_refs from superseded source IDs to active versions.",
+    )
+    workspace_refresh_parser.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
@@ -1317,6 +1327,8 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
             changed=args.changed,
             ingest=args.ingest,
             rebuild_index=args.rebuild_index,
+            prune_superseded=args.prune_superseded,
+            update_topic_refs=args.update_topic_refs,
         )
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
@@ -1363,6 +1375,24 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
     if result.index is not None:
         print(f"Rebuilt index: {result.index.path}")
         print(f"Pages indexed: {result.index.page_count}")
+    if result.pruning is not None:
+        if not result.pruning.pruned and not result.pruning.skipped:
+            print("Pruned superseded source summaries: none")
+        for item in result.pruning.pruned:
+            print(f"Pruned superseded source summary: {item.path}")
+            print(f"  Source ID: {item.source_id}")
+            print(f"  Superseded by: {item.superseded_by}")
+        for item in result.pruning.skipped:
+            print(f"Skipped superseded source summary: {item.path}")
+            print(f"  Source ID: {item.source_id}")
+            print(f"  Reason: {item.reason}")
+    if result.topic_ref_migration is not None:
+        if not result.topic_ref_migration.updated:
+            print("Updated topic source refs: none")
+        for item in result.topic_ref_migration.updated:
+            replacement_text = ", ".join(f"{old}->{new}" for old, new in item.replacements.items())
+            print(f"Updated topic source refs: {item.path}")
+            print(f"  Replacements: {replacement_text}")
     print(
         "Final freshness: "
         f"total={result.final_freshness.total} "
