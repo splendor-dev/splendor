@@ -82,6 +82,8 @@ Implemented fields:
 - `materialized_at`
 - `logical_id`
 - `aliases`
+- `supersedes`
+- `superseded_by`
 - `source_commit`
 - `source_class`
 - `source_labels`
@@ -131,6 +133,14 @@ Implemented fields:
   - Workspace-backed registrations include the repo-relative path alias, and lookup/freshness JSON
     also exposes the effective logical ID as an alias for agent handoff.
   - External and legacy manifests may leave this empty.
+- `supersedes`
+  - Source version IDs this record supersedes.
+  - Refresh writes the previous active content-addressed `src-...` ID here when a changed
+    workspace-backed source creates a new source version.
+- `superseded_by`
+  - Source version ID that replaced this record for the same logical source.
+  - Health treats superseded workspace-backed records as historical version records instead of
+    active current-byte targets, so old run/page provenance remains valid after refresh.
 - `source_commit_capture`
   - Nullable persisted intent for git provenance capture:
     - `true` means commit capture was explicitly requested for registration and refresh
@@ -169,10 +179,11 @@ Implemented fields:
 - Mutating source commands resolve source selectors strictly. Direct ingest accepts exact source
   IDs, exact logical IDs, exact path aliases/source refs, or exact unambiguous titles; substring
   matches remain limited to read-only lookup surfaces.
-- `splendor source refresh <source-id|title|path>` resolves the tracked workspace or external path,
-  compares current bytes to the manifest checksum, registers changed content as a new canonical
-  source version, preserves `source_commit_capture` intent, and queues ingest through the same queue
-  handoff used by `add-source`.
+- `splendor source refresh <source-id|logical-id|title|path>` resolves the tracked workspace or
+  external path, compares current bytes to the manifest checksum, registers changed content as a
+  new canonical source version, preserves `source_commit_capture` intent, links the old and new
+  versions with `supersedes` / `superseded_by`, and queues ingest through the same queue handoff
+  used by `add-source`.
 - `splendor source freshness` is a non-mutating preview over curated source manifests. It reports
   path-first freshness state for workspace-backed canonical source refs, including unchanged,
   changed, missing, and unsupported statuses, manifest/current checksums where available, source
@@ -237,9 +248,11 @@ In this release:
 - copied sources still use `path` as the stored artifact path
 - workspace-backed sources temporarily mirror `source_ref` into `path`
 - no automatic manifest rewrite or schema-version bump is performed yet
-- source IDs remain content-addressed canonical IDs; stable logical source aliases,
-  `supersedes`/`superseded_by` source fields, automated pruning of superseded source summaries, and
-  topic-ref migration are not part of the current schema contract
+- source IDs remain content-addressed canonical IDs; stable logical source aliases and
+  `supersedes`/`superseded_by` lifecycle fields now describe workspace-backed refresh history
+  without changing schema version `1`
+- automated pruning of superseded source summaries and topic-ref migration are not part of the
+  current schema contract
 
 ## Knowledge page frontmatter
 

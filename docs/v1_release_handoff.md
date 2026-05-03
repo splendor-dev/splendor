@@ -54,9 +54,6 @@ For this handoff:
 
 These items are intentionally not v1 release blockers:
 
-- supersession-aware lifecycle use of the stable logical source identities above content-addressed
-  source IDs
-- `supersedes` / `superseded_by` source lifecycle semantics
 - one-command full workspace refresh
 - superseded generated-state pruning and topic-ref migration
 - `splendor pr-summary --since main`
@@ -70,10 +67,10 @@ These items are intentionally not v1 release blockers:
 
 The conservative next queue is:
 
-1. Continue #72 implementation after the initial workspace-backed `source:<path>` logical ID layer,
-   beginning with supersession-aware source refresh.
-2. Add the smallest source lifecycle slice that keeps `source freshness`, `source refresh`, topic
-   refs, runs, and health checks coherent without breaking schema version `1` compatibility.
+1. Continue #72 implementation after the workspace-backed `source:<path>` logical ID layer and
+   supersession-aware source refresh.
+2. Add the smallest full-workspace refresh slice that keeps changed-source detection, refresh,
+   ingest, index rebuild, and health coherent without breaking schema version `1` compatibility.
 3. Add `splendor pr-summary --since main` only after source lifecycle churn is explicit enough to
    summarize reliably.
 4. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
@@ -87,8 +84,8 @@ bundle is:
 
 1. `M14-P0.1` Split #72 into child issues and assign release metadata.
 2. `M14-P1.1` Stable logical source identities above content-addressed source IDs.
-3. `M14-P1.2` Supersession-aware source refresh, so changed files do not leave stale runs, topic
-   refs, or health failures for agents to clean manually.
+3. `M14-P1.2` Supersession-aware source refresh, so changed files do not leave stale runs or
+   health failures for agents to clean manually.
 4. `M14-P1.3` Safe workspace refresh path covering changed-source detection, refresh, ingest,
    index rebuild, and a health-clean end state.
 5. `M14-P1.4` Superseded generated-state pruning and topic-ref migration.

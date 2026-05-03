@@ -265,6 +265,75 @@ def test_run_lint_checks_accepts_ocr_derived_artifact_links(tmp_path: Path) -> N
     assert result.issues == []
 
 
+def test_run_lint_checks_validates_source_supersession_refs(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    refreshed = add_source(tmp_path, source)
+    original = load_source_record(added.manifest_path).model_copy(
+        update={"superseded_by": refreshed.source_id}
+    )
+    updated = load_source_record(refreshed.manifest_path).model_copy(
+        update={"supersedes": [added.source_id]}
+    )
+    write_source_record(added.manifest_path, original)
+    write_source_record(refreshed.manifest_path, updated)
+
+    result = _run_lint(tmp_path)
+
+    assert result.issues == []
+
+
+def test_run_lint_checks_reports_broken_source_supersession_refs(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={"supersedes": ["src-missing"], "superseded_by": "src-also-missing"}
+    )
+    write_source_record(added.manifest_path, source_record)
+
+    result = _run_lint(tmp_path)
+
+    assert {issue.code for issue in result.issues} == {
+        "missing-source-superseded-by-ref",
+        "missing-source-supersedes-ref",
+    }
+
+
+def test_run_lint_checks_reports_one_way_source_supersession_refs(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    refreshed = add_source(tmp_path, source)
+    original = load_source_record(added.manifest_path).model_copy(
+        update={"superseded_by": refreshed.source_id}
+    )
+    write_source_record(added.manifest_path, original)
+
+    result = _run_lint(tmp_path)
+
+    assert any(issue.code == "invalid-source-supersession-link" for issue in result.issues)
+
+
+def test_run_lint_checks_reports_multiple_active_source_versions(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    add_source(tmp_path, source)
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    add_source(tmp_path, source)
+
+    result = _run_lint(tmp_path)
+
+    assert any(issue.code == "multiple-active-source-versions" for issue in result.issues)
+
+
 def test_run_lint_checks_reports_missing_wiki_refs_and_related_pages(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     _write_wiki_page(

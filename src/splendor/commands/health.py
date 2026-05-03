@@ -48,6 +48,14 @@ def _validate_storage_policy(source: SourceRecord) -> None:
         raise ValueError("Copied source is missing path")
 
 
+def _should_resolve_source_content(source: SourceRecord) -> bool:
+    if source.superseded_by is None:
+        return True
+    return not (
+        source.source_ref_kind == "workspace_path" and effective_storage_mode(source) == "none"
+    )
+
+
 def _append_issue(
     issues: list[MaintenanceIssue],
     *,
@@ -118,7 +126,8 @@ def _load_source_records(
         try:
             source = load_source_record(manifest_path)
             _validate_storage_policy(source)
-            resolve_source_content(root, source, layout.raw_sources_dir)
+            if _should_resolve_source_content(source):
+                resolve_source_content(root, source, layout.raw_sources_dir)
         except Exception as exc:
             invalid_ids.add(source_id)
             _append_issue(

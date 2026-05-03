@@ -63,6 +63,48 @@ def test_run_health_checks_accepts_ocr_derived_artifact_links(tmp_path: Path) ->
     assert result.issues == []
 
 
+def test_run_health_checks_accepts_superseded_workspace_source_versions(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    refreshed = add_source(tmp_path, source)
+    original = load_source_record(added.manifest_path).model_copy(
+        update={"superseded_by": refreshed.source_id}
+    )
+    updated = load_source_record(refreshed.manifest_path).model_copy(
+        update={"supersedes": [added.source_id]}
+    )
+    write_source_record(added.manifest_path, original)
+    write_source_record(refreshed.manifest_path, updated)
+
+    result = _run_health(tmp_path)
+
+    assert result.issues == []
+
+
+def test_run_health_checks_still_validates_superseded_copied_source_artifacts(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="copy")
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={"superseded_by": "src-next"}
+    )
+    write_source_record(added.manifest_path, source_record)
+    assert added.stored_path is not None
+    added.stored_path.unlink()
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["source-health-check-failed"]
+
+
 def test_run_health_checks_reports_invalid_queue_and_run_records(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     (tmp_path / "state" / "queue" / "ingest-bad.json").write_text("{bad json}\n", encoding="utf-8")

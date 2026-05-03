@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P0.1`
+- Previous completed PR sub-slice: `M14-P1.1`
 - Current planned slice: `M14-P1`
-- Current PR sub-slice: `M14-P1.1`
+- Current PR sub-slice: `M14-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M14-P1`
-- Next planned PR sub-slice: `M14-P1.2`
+- Next planned PR sub-slice: `M14-P1.3`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -896,8 +896,8 @@ post-#72 lifecycle loop is substantially implemented. The intended sequence befo
    compatibility. The first implementation persists `source:<workspace-path>` logical IDs and
    aliases for workspace-backed source manifests without changing `src-...` manifest IDs,
    generated source-summary page IDs, queue IDs, or run provenance.
-3. `M14-P1.2` makes source refresh supersession-aware, so changed sources do not leave stale runs,
-   topic refs, or health failures for agents to clean manually.
+3. `M14-P1.2` makes source refresh supersession-aware, so changed sources do not leave stale runs
+   or health failures for agents to clean manually before later topic-ref migration.
 4. `M14-P1.3` provides one safe workspace refresh path for changed-source detection, refresh,
    ingest, index rebuild, and a health-clean end state.
 5. `M14-P1.4` handles superseded generated-state pruning and topic-ref migration.

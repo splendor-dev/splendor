@@ -50,6 +50,8 @@ class SourceRecord(StrictRecord):
     materialized_at: str | None = None
     logical_id: str | None = None
     aliases: list[str] = Field(default_factory=list)
+    supersedes: list[str] = Field(default_factory=list)
+    superseded_by: str | None = None
     source_commit_capture: bool | None = None
     source_commit: str | None = None
     source_class: SourceClass | None = None
