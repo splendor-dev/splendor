@@ -38,9 +38,10 @@ source-summary key facts during ingest.
 
 Ingest currently creates deterministic source summaries and run/provenance state. The `M10-P0`
 bridge adds `splendor wiki status`, `splendor wiki suggest <source-id>`, `splendor brief [goal]`,
-and a non-mutating `splendor wiki compile <source-id>` contract so users and agents can identify
-affected concept, entity, topic, architecture, or glossary pages before manual review. Mutating
-compile/update workflow support remains planned.
+`splendor suggest-next [goal]`, and a non-mutating `splendor wiki compile <source-id>` contract so
+users and agents can identify affected concept, entity, topic, architecture, or glossary pages and
+rank immediate handoff work before manual review. Mutating compile/update workflow support remains
+planned.
 
 Dogfood runs should record usability friction separately from knowledge gaps. Pay special attention
 to whether each command prints the next useful command, whether long source IDs need to be copied

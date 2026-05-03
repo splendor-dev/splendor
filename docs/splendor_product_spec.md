@@ -805,10 +805,11 @@ M13-P2 repo-discovery contracts:
   checksums where available, historical source-version status for paths already covered by a current
   manifest, and exact next commands. The default command is non-mutating; `--json` emits
   machine-readable output and `--report PATH` writes only an explicit freshness report.
-- `brief --agent-context` should lead with project state, stale/contested/actionable items, and
+- `brief --agent-context` leads with project state, stale/contested/actionable items, and ranked
   next actions before metadata.
-- A future `suggest-next` command should rank work from open tasks, stale sources, failed jobs,
-  missing synthesis, and contradictions.
+- `splendor suggest-next [goal]` ranks work from open tasks, stale sources, failed jobs, missing
+  synthesis, contested/review-needed pages, maintenance reports, and goal matches. `--json` emits a
+  machine-readable handoff payload.
 
 Later optional support:
 - additional OCR providers
@@ -961,7 +962,11 @@ Current implementation:
   reports, the last query snapshot, and likely next actions.
 - `splendor brief --agent-context [goal]` renders the same deterministic state as a compact
   coding-agent handoff with relevant matches, source refs, wiki status, active planning records,
-  recent sources/runs, maintenance reports, warnings, and next actions.
+  recent sources/runs, maintenance reports, warnings, and ranked suggested actions.
+- `splendor suggest-next [goal]` renders the ranked action subset directly. It is read-only and
+  deterministic, and ranks source freshness, queue failures or pending work, stale/contested or
+  review-needed pages, missing synthesis follow-up, active planning records, recent maintenance
+  reports, and query matches for the optional goal.
 - Briefing is read-only and does not replace `splendor query`; query finds records, while briefing
   packages the surrounding project state needed to resume work.
 

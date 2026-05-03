@@ -135,6 +135,16 @@ def test_cli_brief_parser_accepts_agent_context() -> None:
     assert args.json_output is True
 
 
+def test_cli_suggest_next_parser_accepts_goal_and_json() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["suggest-next", "agent", "handoff", "--json"])
+
+    assert args.command == "suggest-next"
+    assert args.goal == ["agent", "handoff"]
+    assert args.json_output is True
+
+
 def test_cli_repo_scan_parser_accepts_preview_apply_and_report_flags() -> None:
     parser = build_parser()
 

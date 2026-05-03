@@ -12,8 +12,10 @@ from splendor.commands.add_source import add_source, expand_source_paths
 from splendor.commands.brief import (
     ProjectBrief,
     build_project_brief,
+    build_suggest_next,
     render_agent_context_json,
     render_project_brief_json,
+    render_suggest_next_json,
 )
 from splendor.commands.file_answer import (
     default_answer_page_id,
@@ -408,6 +410,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit a compact coding-agent handoff over brief state.",
     )
     brief_parser.set_defaults(handler=handle_brief)
+
+    suggest_next_parser = subparsers.add_parser(
+        "suggest-next", help="Rank deterministic next actions for agent handoff"
+    )
+    suggest_next_parser.add_argument("goal", nargs="*", help="Optional goal or search phrase.")
+    suggest_next_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    suggest_next_parser.set_defaults(handler=handle_suggest_next)
 
     serve_parser = subparsers.add_parser("serve", help="Run the read-only local web UI")
     serve_parser.add_argument(
@@ -1476,6 +1490,14 @@ def handle_brief(args: argparse.Namespace) -> int:
 def _print_agent_context(result: ProjectBrief) -> None:
     print("Agent context")
     print(f"Goal: {result.goal or '-'}")
+    if result.suggested_actions:
+        print("Suggested next:")
+        for action in result.suggested_actions[:5]:
+            subject = action.path or action.source_ref or action.record_id or "-"
+            command = f" command={action.command}" if action.command else ""
+            print(
+                f"- [{action.priority}/{action.category}] {action.title} target={subject}{command}"
+            )
     print(
         "Wiki status: "
         f"sources={result.status.source_total} "
@@ -1513,6 +1535,40 @@ def _print_agent_context(result: ProjectBrief) -> None:
     print("Next actions:")
     for action in result.next_actions:
         print(f"- {action}")
+
+
+def handle_suggest_next(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    goal = " ".join(args.goal).strip() or None
+    try:
+        result = build_suggest_next(root, goal)
+    except (OSError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_suggest_next_json(result))
+        return 0
+
+    print("Suggested next actions")
+    print(f"Goal: {result.goal or '-'}")
+    print(
+        "State: "
+        f"changed_sources={result.freshness.changed} "
+        f"missing_sources={result.freshness.missing} "
+        f"queue={result.queue.total} "
+        f"review_needed={result.status.review_needed_pages} "
+        f"contested={result.status.contested_pages} "
+        f"stale={result.status.stale_pages}"
+    )
+    for action in result.actions:
+        target = action.path or action.source_ref or action.record_id or "-"
+        command = f" command={action.command}" if action.command else ""
+        print(
+            f"{action.rank}. [{action.priority}/{action.category}] {action.title} "
+            f"target={target}{command}"
+        )
+        print(f"   Reason: {action.reason}")
+    return 0
 
 
 def handle_serve(args: argparse.Namespace) -> int:

@@ -81,9 +81,10 @@ The next implementation slices should document and then implement these contract
   explicit report output, separates historical source versions from actionable stale paths, and does
   not mutate manifests or derived state by default.
 - `brief --agent-context` leads with actual project state, stale/contested/actionable items, and
-  next actions before metadata.
-- A future `suggest-next` command ranks work from open tasks, stale sources, failed jobs, missing
-  synthesis, and contradictions.
+  ranked next actions before metadata.
+- `splendor suggest-next [goal]` ranks work from source freshness, queue failures or pending work,
+  missing synthesis, stale/contested/review-needed pages, active planning records, maintenance
+  reports, and goal matches without mutating the workspace.
 
 ## Roadmap Impact
 
