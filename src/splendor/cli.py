@@ -79,6 +79,10 @@ from splendor.commands.wiki import (
     render_wiki_suggest_json,
     suggest_source_pages,
 )
+from splendor.commands.workspace import (
+    refresh_workspace,
+    render_workspace_refresh_json,
+)
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import (
@@ -339,6 +343,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     wiki_rebuild_index_parser.set_defaults(handler=handle_wiki_rebuild_index)
+
+    workspace_parser = subparsers.add_parser(
+        "workspace", help="Run safe workspace-level maintenance workflows"
+    )
+    workspace_subparsers = workspace_parser.add_subparsers(dest="workspace_command", required=True)
+    workspace_refresh_parser = workspace_subparsers.add_parser(
+        "refresh", help="Refresh changed curated workspace-backed sources"
+    )
+    workspace_refresh_parser.add_argument(
+        "--changed",
+        action="store_true",
+        help="Refresh only curated workspace-backed sources whose bytes changed.",
+    )
+    workspace_refresh_parser.add_argument(
+        "--ingest",
+        action="store_true",
+        help="Ingest queue jobs created or reused for refreshed sources.",
+    )
+    workspace_refresh_parser.add_argument(
+        "--rebuild-index",
+        action="store_true",
+        help="Rebuild wiki/index.md after a successful pending ingest drain.",
+    )
+    workspace_refresh_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    workspace_refresh_parser.set_defaults(handler=handle_workspace_refresh)
 
     materialize_parser = subparsers.add_parser(
         "materialize-source", help="Create or refresh a source storage artifact"
@@ -1272,6 +1306,82 @@ def handle_wiki_rebuild_index(args: argparse.Namespace) -> int:
             "Sections: "
             + " ".join(f"{section}={count}" for section, count in result.sections.items())
         )
+    return 0
+
+
+def handle_workspace_refresh(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = refresh_workspace(
+            root,
+            changed=args.changed,
+            ingest=args.ingest,
+            rebuild_index=args.rebuild_index,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_workspace_refresh_json(root, result))
+        return 1 if result.ingest is not None and result.ingest.failed else 0
+
+    print("Workspace refresh")
+    print(
+        "Initial freshness: "
+        f"total={result.initial_freshness.total} "
+        f"unchanged={result.initial_freshness.unchanged} "
+        f"changed={result.initial_freshness.changed} "
+        f"missing={result.initial_freshness.missing} "
+        f"unsupported={result.initial_freshness.unsupported} "
+        f"historical={result.initial_freshness.historical}"
+    )
+    if not result.refreshed:
+        print("No changed curated workspace-backed sources found.")
+    for refresh in result.refreshed:
+        source_ref = canonical_source_ref(refresh.refreshed.record)
+        print(f"- {source_ref}: refreshed source_id={refresh.refreshed.record.source_id}")
+        print(f"  Previous source ID: {refresh.requested.source_id}")
+        logical_id = effective_logical_id(refresh.refreshed.record)
+        if logical_id is not None:
+            print(f"  Logical ID: {logical_id}")
+        if refresh.queued and refresh.queue_path is not None:
+            print(f"  Queued ingest: {refresh.queue_path}")
+        else:
+            print(f"  Refresh skipped: {refresh.message}")
+
+    if result.ingest is not None:
+        for item in result.ingest.items:
+            print(f"  Ingest {item.source_id}: {item.outcome} ({item.message})")
+        print(
+            "Ingest summary: "
+            f"processed={result.ingest.processed} "
+            f"succeeded={result.ingest.succeeded} "
+            f"failed={result.ingest.failed} "
+            f"skipped={result.ingest.skipped}"
+        )
+
+    if result.index is not None:
+        print(f"Rebuilt index: {result.index.path}")
+        print(f"Pages indexed: {result.index.page_count}")
+    print(
+        "Final freshness: "
+        f"total={result.final_freshness.total} "
+        f"unchanged={result.final_freshness.unchanged} "
+        f"changed={result.final_freshness.changed} "
+        f"missing={result.final_freshness.missing} "
+        f"unsupported={result.final_freshness.unsupported} "
+        f"historical={result.final_freshness.historical}"
+    )
+
+    if result.ingest is not None and result.ingest.failed:
+        print("Next: splendor queue inspect")
+        return 1
+    if result.index is None and result.ingest is None and result.refreshed:
+        print("Next: splendor ingest --pending")
+    elif result.index is None and result.ingest is not None and result.ingest.succeeded:
+        print("Next: splendor wiki rebuild-index")
+    else:
+        print("Next: splendor source freshness")
     return 0
 
 

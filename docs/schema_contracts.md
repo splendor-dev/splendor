@@ -195,6 +195,16 @@ Implemented fields:
   artifacts, queue records, run records, or reports.
 - Refresh uses the queue ledger directly, so active leases remain protected and dead-lettered jobs
   still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
+- `splendor workspace refresh --changed` is the safe workspace-level mutating path over curated
+  workspace-backed source manifests. It uses `source freshness` to select changed active manifests,
+  refuses to continue when active curated workspace sources are missing, refreshes each changed
+  source through the supersession-aware source refresh path, and can ingest only the queue records
+  created or reused for those refreshed sources with `--ingest`.
+- `splendor workspace refresh --changed --ingest --rebuild-index` rebuilds `wiki/index.md` only
+  after the targeted refreshed-source ingest succeeds. JSON output reports both initial and final
+  freshness counts. The command does not perform broad repo discovery,
+  register uncurated files, prune superseded generated state, migrate topic refs, or run mutating
+  synthesis compile/update workflows.
 - `splendor suggest-next [goal]` is a read-only handoff view over existing deterministic state. It
   does not create planning records, queue jobs, manifests, wiki pages, run records, or reports.
   Human output is path-first where possible; `--json` emits ranked action objects with category,
@@ -253,6 +263,8 @@ In this release:
   without changing schema version `1`
 - automated pruning of superseded source summaries and topic-ref migration are not part of the
   current schema contract
+- safe workspace refresh composes existing source, queue, ingest, and wiki-index records without
+  changing schema version `1`
 
 ## Knowledge page frontmatter
 

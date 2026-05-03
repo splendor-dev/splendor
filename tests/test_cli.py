@@ -110,6 +110,21 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert freshness.json_output is True
 
 
+def test_cli_workspace_refresh_parser_accepts_safe_refresh_flags() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        ["workspace", "refresh", "--changed", "--ingest", "--rebuild-index", "--json"]
+    )
+
+    assert args.command == "workspace"
+    assert args.workspace_command == "refresh"
+    assert args.changed is True
+    assert args.ingest is True
+    assert args.rebuild_index is True
+    assert args.json_output is True
+
+
 def test_cli_query_parser_accepts_filters_and_no_question() -> None:
     parser = build_parser()
 
@@ -1040,6 +1055,146 @@ def test_cli_source_freshness_relative_report_uses_current_working_directory(
     assert payload["report_path"] == expected_report.as_posix()
     assert expected_report.exists()
     assert not (root / "reports" / "source-freshness.json").exists()
+
+
+def test_cli_workspace_refresh_requires_explicit_changed_flag(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh"])
+
+    assert exit_code == 1
+    assert "Error: workspace refresh requires --changed in this release" in capsys.readouterr().out
+
+
+def test_cli_workspace_refresh_rebuild_index_requires_ingest(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--rebuild-index"]
+    )
+
+    assert exit_code == 1
+    assert "Error: workspace refresh --rebuild-index requires --ingest" in capsys.readouterr().out
+
+
+def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--rebuild-index",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["initial_freshness"]["changed"] == 1
+    assert payload["final_freshness"]["changed"] == 0
+    assert payload["ingest"]["failed"] == 0
+    assert payload["ingest"]["succeeded"] == 1
+    assert payload["index"]["path"] == "wiki/index.md"
+    refreshed = payload["refreshed"][0]
+    assert refreshed["path"] == "brief.md"
+    assert refreshed["requested_source_id"] == original_id
+    assert refreshed["logical_id"] == "source:brief.md"
+    refreshed_id = refreshed["source_id"]
+    assert refreshed_id != original_id
+    assert refreshed["supersedes"] == [original_id]
+    assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
+    index_text = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+    assert f"sources/{refreshed_id}.md" in index_text
+
+    assert main(["--root", str(tmp_path), "lint"]) == 0
+    assert main(["--root", str(tmp_path), "health"]) == 0
+
+
+def test_cli_workspace_refresh_ingests_only_refreshed_sources(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    changed_source = tmp_path / "changed.md"
+    pending_source = tmp_path / "pending.md"
+    changed_source.write_text("# Changed\n\nOriginal.\n", encoding="utf-8")
+    pending_source.write_text("# Pending\n\nQueued separately.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(changed_source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "add-source", str(pending_source)])
+    pending_id = next(
+        load_source_record(path).source_id
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if load_source_record(path).source_ref == "pending.md"
+    )
+    changed_source.write_text("# Changed\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--ingest", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ingest"]["total"] == 1
+    assert payload["ingest"]["succeeded"] == 1
+    assert load_queue_item(tmp_path / "state" / "queue" / f"ingest-{pending_id}.json").status == (
+        "pending"
+    )
+    assert not (tmp_path / "wiki" / "sources" / f"{pending_id}.md").exists()
+
+
+def test_cli_workspace_refresh_fails_when_active_curated_source_is_missing(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "missing.md"
+    source.write_text("# Missing\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source.unlink()
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed"])
+
+    assert exit_code == 1
+    assert (
+        "Error: workspace refresh cannot continue with missing curated sources: missing.md"
+        in capsys.readouterr().out
+    )
+
+
+def test_cli_workspace_refresh_human_output_is_path_first(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Workspace refresh" in out
+    assert "Initial freshness:" in out
+    assert "Final freshness:" in out
+    assert "changed=1" in out
+    assert "changed=0" in out
+    assert re.search(r"- brief\.md: refreshed source_id=src-[a-f0-9]{16}", out)
+    assert f"Previous source ID: {original_id}" in out
+    assert "Next: splendor ingest --pending" in out
 
 
 def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, capsys) -> None:
