@@ -168,11 +168,13 @@ Readable in-repo markdown/text/code summaries default to concise excerpts, while
 parsed PDF, and OCR-derived sources keep fuller extracts because the generated artifact may be the
 most convenient review surface.
 
-After ingest, use the source ID from the command output to inspect likely synthesis follow-up:
+After ingest, use the source ID from the ingest output or look it up by readable title/path before
+inspecting likely synthesis follow-up:
 
 ```bash
 uv run splendor --root /tmp/demo-repo source lookup product-note
 uv run splendor --root /tmp/demo-repo wiki status
+# Use the source_id printed by source lookup here.
 uv run splendor --root /tmp/demo-repo wiki suggest <source-id>
 ```
 

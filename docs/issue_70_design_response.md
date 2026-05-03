@@ -64,9 +64,8 @@ M13-P2 documented and implemented these contracts:
 - `repo scan --json` emits the same preview as machine-readable JSON to stdout. Persisting a
   discovery report requires an explicit output flag such as `--report PATH`, and that flag writes
   only the report, not source manifests.
-- Mutating registration from scan requires `--apply`. This is an intentional safety-breaking
-  change from the current mutating default: the old behavior moves behind `--apply`, and the bare
-  command should clearly say that it is preview-only and print the exact apply command.
+- Mutating registration from scan requires `--apply`. This replaced the old mutating default: the
+  bare command now reports preview-only behavior and prints an explicit apply command.
 - Broad registration requires explicit class/all opt-in and should refuse huge candidate sets
   without confirmation flags.
 - `repo scan` supports class filtering, such as `--class documentation`, `--class code`, and
@@ -109,7 +108,18 @@ after the scan safety, freshness, handoff, and path-first UX gaps were substanti
 - #72 is a separate parent feedback loop for source-refresh lifecycle and agent workflow. Its stable
   logical source identities, `supersedes`/`superseded_by`, full workspace refresh, pruning, and
   `pr-summary` requests remain later M13-P3 or post-v1 work.
-- #41-#46 are substantially implemented through M10-P0.2, M10-P0.3, and M13-P2.5. Remaining work,
-  if any, is polish, verification, or future mutating compile workflow rather than a v1 blocker.
+- #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
+  `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
+  deferred.
+- #42 has shipped restrained next-action hints around add-source, ingest, query/file-answer,
+  briefing, and suggest-next flows.
+- #43 has shipped pending ingest queue handoff for CLI-created sources, and docs now show the
+  `add-source -> ingest --pending -> source lookup` path so users do not need to copy long source
+  IDs for the first ingest.
+- #44 has shipped claim-bearing query snippets for generated source-summary pages.
+- #45 has shipped read-only web status and source-detail surfaces; mutating web actions remain out
+  of scope.
+- #46 has shipped clearer generated-versus-maintained page-state visibility across docs,
+  status/query output, source summaries, and web/status surfaces.
 - #47 remains open as an ingest/run-state timing follow-up.
 - #30 and #37 remain post-v1 performance/scaling follow-ups.

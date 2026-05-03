@@ -62,6 +62,7 @@ EOF
 uv run splendor --root /tmp/demo-repo add-source /tmp/demo-repo/product-note.md
 uv run splendor --root /tmp/demo-repo ingest --pending
 uv run splendor --root /tmp/demo-repo source lookup product-note
+# Use the source_id printed by source lookup in the next command.
 uv run splendor --root /tmp/demo-repo task create "Publish MVP docs" --priority high --source-ref <source-id>
 uv run splendor --root /tmp/demo-repo query "durable wiki"
 uv run splendor --root /tmp/demo-repo lint
@@ -259,12 +260,14 @@ fuller extracts when the generated artifact is the practical review surface. Hum
 leads with source paths or refs before canonical source IDs where practical.
 
 `M13-P3.1` is the release-hardening pass. It reconciles the release-facing docs with the current
-CLI, clarifies generated-state review policy, and records the v1 readiness audit. Issues #41-#46
-are substantially implemented by M10-P0.2, M10-P0.3, and M13-P2.5; any remaining work there is
-polish or follow-up verification rather than core v1 scope. Issue #47 remains an ingest/run-state
-follow-up. Issues #30 and #37 remain post-v1 performance work. Issues #70 and #72 stay open as
-parent feedback loops, with #72's stable logical source identities, supersession lifecycle, full
-workspace refresh, pruning, and PR-summary ideas deferred to later M13-P3 or post-v1 planning.
+CLI, clarifies generated-state review policy, and records the v1 readiness audit. The audit treats
+issue #41's briefing and non-mutating compile contract, #42's next-action hints, #43's pending
+ingest handoff, #44's query snippets, #45's web status/source detail pages, and #46's page-state
+visibility as represented in current behavior. It still calls out #41's mutating compile/update
+workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Issues #30 and #37
+remain post-v1 performance work. Issues #70 and #72 stay open as parent feedback loops, with #72's
+stable logical source identities, supersession lifecycle, full workspace refresh, pruning, and
+PR-summary ideas deferred to later M13-P3 or post-v1 planning.
 
 ### v1 readiness checklist
 

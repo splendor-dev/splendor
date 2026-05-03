@@ -819,10 +819,10 @@ frontmatter, manifests, and run records continue to use canonical IDs for compat
 
 `M13-P3.1` is the release-hardening and v1 readiness audit. It keeps the implementation surface
 stable, reconciles README, quickstart, schema/product docs, roadmap, CI/GitHub automation docs, and
-dogfooding guidance with the current product, and records which open feedback issues are already
-substantially implemented. It does not add SQLite, vector search, background workers, mutating web
-UI, broad refresh lifecycle machinery, stable logical source identities, supersedes/superseded_by
-source semantics, pruning, or PR-summary tooling.
+dogfooding guidance with the current product, and records per-issue status for the open feedback
+threads. It does not add SQLite, vector search, background workers, mutating web UI, broad refresh
+lifecycle machinery, stable logical source identities, supersedes/superseded_by source semantics,
+pruning, or PR-summary tooling.
 
 ### M13-P3 v1 release-readiness checklist
 
