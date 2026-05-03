@@ -1277,6 +1277,20 @@ def test_cli_ingest_command_accepts_stable_logical_id(tmp_path: Path, capsys) ->
     assert "Source ref: docs/brief.md" in captured.out
 
 
+def test_cli_ingest_command_rejects_fuzzy_source_match(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "docs" / "brief.md"
+    source.parent.mkdir()
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "doc"])
+
+    assert exit_code == 1
+    assert "Unknown source: doc" in capsys.readouterr().out
+
+
 def test_cli_ingest_command_reports_stored_artifact_for_copied_workspace_source(
     tmp_path: Path, capsys
 ) -> None:

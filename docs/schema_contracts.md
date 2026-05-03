@@ -166,6 +166,9 @@ Implemented fields:
 - `splendor source list` and `splendor source lookup [query]` provide a readable title/path/logical
   ID to `source_id` mapping. They are lookup surfaces only and do not rename canonical source IDs or
   generated `wiki/sources/src-...md` pages.
+- Mutating source commands resolve source selectors strictly. Direct ingest accepts exact source
+  IDs, exact logical IDs, exact path aliases/source refs, or exact unambiguous titles; substring
+  matches remain limited to read-only lookup surfaces.
 - `splendor source refresh <source-id|title|path>` resolves the tracked workspace or external path,
   compares current bytes to the manifest checksum, registers changed content as a new canonical
   source version, preserves `source_commit_capture` intent, and queues ingest through the same queue
@@ -411,6 +414,9 @@ Current runtime behavior:
 - Stable logical source identities are schema-version-1-compatible optional fields above the
   content-addressed `source_id` compatibility contract. Supersession-aware history remains deferred
   so it can be designed without breaking the v1 manifest contract.
+- Lint validates present workspace-backed logical identity fields: `logical_id` must match
+  `source:<source_ref>`, persisted aliases must stay scoped to the canonical workspace path, and
+  exact identities must not point at conflicting canonical source refs.
 - The final v1 handoff in `docs/v1_release_handoff.md` treats schema version `1`, legacy manifest
   compatibility, and deferred source-lifecycle fields as release checklist items rather than
   implicit assumptions.

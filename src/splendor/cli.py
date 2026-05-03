@@ -63,7 +63,7 @@ from splendor.commands.source import (
     render_source_freshness_json,
     render_source_lookup_json,
     render_source_refresh_json,
-    resolve_source_query,
+    resolve_source_query_exact,
     scan_source_freshness,
     write_source_freshness_report,
 )
@@ -982,7 +982,7 @@ def handle_ingest(args: argparse.Namespace) -> int:
         return 1 if result.failed else 0
 
     try:
-        source = resolve_source_query(root, args.source_id).source
+        source = resolve_source_query_exact(root, args.source_id).source
         result = ingest_source(root, source.source_id)
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return _print_error(exc)

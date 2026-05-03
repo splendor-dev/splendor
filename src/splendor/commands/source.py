@@ -118,6 +118,34 @@ def resolve_source_query(root: Path, query: str) -> SourceLookupResult:
     return _select_source_query_candidate(root, query)
 
 
+def resolve_source_query_exact(root: Path, query: str) -> SourceLookupResult:
+    matches = list_sources(root)
+    exact_id_matches = [match for match in matches if match.source.source_id == query]
+    if exact_id_matches:
+        return exact_id_matches[0]
+
+    exact_identity_matches = [
+        match
+        for match in matches
+        if canonical_source_ref(match.source) == query
+        or (match.source.original_path is not None and match.source.original_path == query)
+        or effective_logical_id(match.source) == query
+        or query in effective_aliases(match.source)
+    ]
+    if exact_identity_matches:
+        return _select_refresh_candidate(query, exact_identity_matches)
+
+    exact_title_matches = [
+        match for match in matches if match.source.title.casefold() == query.casefold()
+    ]
+    if exact_title_matches:
+        return _select_refresh_candidate(query, exact_title_matches)
+
+    label = "source ID" if query.startswith("src-") else "source"
+    msg = f"Unknown {label}: {query}"
+    raise FileNotFoundError(msg)
+
+
 def resolve_source_query_matches(root: Path, query: str) -> list[SourceLookupResult]:
     matches = lookup_sources(root, query)
     if not matches:

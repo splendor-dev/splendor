@@ -766,6 +766,9 @@ Current implementation:
   deterministic path order with filename-derived titles.
 - `splendor source list` and `splendor source lookup [query]` map human-readable titles, paths, and
   stable logical IDs back to canonical source IDs without renaming existing source-summary pages.
+- Mutating source commands use stricter selector resolution than lookup. Direct ingest accepts exact
+  source IDs, exact logical IDs, exact path aliases/source refs, or exact unambiguous titles, not
+  substring matches that can silently select the wrong source.
 - `splendor source refresh <source-id|title|path>` detects changed source content, registers the
   current bytes as a new canonical source version when the checksum changed, and queues ingest via
   the existing queue ledger while preserving active-lease and dead-letter protections.
@@ -835,6 +838,8 @@ Release-readiness boundary:
 - readable paths, titles, source refs, and logical IDs are lookup and display aids above that
   compatibility contract; generated source-summary pages and run provenance still use `src-...`
   identifiers.
+- lint checks present workspace-backed logical IDs and aliases so stale or hand-edited manifests do
+  not create conflicting exact source identities.
 - generated source-summary pages, queue records, run records, derived artifacts, and explicit
   reports are committed when they explain a reviewed workspace update; failed or exploratory local
   reports can remain local.
