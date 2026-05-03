@@ -80,6 +80,24 @@ The conservative next queue is:
 5. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
+Do not ask the SynthBanshee Claude agent for the major "try Splendor again" re-evaluation until
+the source-lifecycle and generated-state review loop is materially improved. The planned retry
+bundle is:
+
+1. `M14-P0.1` Split #72 into child issues and assign release metadata.
+2. `M14-P1.1` Stable logical source identities above content-addressed source IDs.
+3. `M14-P1.2` Supersession-aware source refresh, so changed files do not leave stale runs, topic
+   refs, or health failures for agents to clean manually.
+4. `M14-P1.3` Safe workspace refresh path covering changed-source detection, refresh, ingest,
+   index rebuild, and a health-clean end state.
+5. `M14-P1.4` Superseded generated-state pruning and topic-ref migration.
+6. `M14-P2.1` PR summary and lower-noise generated-state review handoff, including
+   `splendor pr-summary --since main` or an equivalent reviewed output.
+
+After those slices land, ask the SynthBanshee Claude agent to retry a comparable real planning or
+repo-maintenance workflow and compare against the original #72 report. Before then, any retry
+should be framed narrowly around safe discovery, freshness, and handoff only.
+
 ## Tagging Readiness
 
 After the release PR merges, v1 tagging is ready when `main` has:
