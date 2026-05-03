@@ -112,7 +112,7 @@ Implemented today:
 - `splendor init`
 - `splendor add-source <path>`, `splendor add-source --glob "pattern"`, and
   `splendor add-source --dir path`
-- `splendor source list`, `splendor source lookup [query]`, and
+- `splendor source list`, `splendor source lookup [query]`, `splendor source freshness`, and
   `splendor source refresh <source-id|title|path>`
 - `splendor ingest <source-id>` and `splendor ingest --pending`
 - `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
@@ -143,6 +143,10 @@ Not implemented yet:
 
 `splendor repo scan` is safe by default: it previews candidates without writing manifests or
 derived state. Registration requires `repo scan --apply` plus `--class ...` or `--all`.
+`splendor source freshness` is also non-mutating by default: it compares workspace-backed curated
+source files to their manifest checksums, reports unchanged/changed/missing/unsupported sources,
+and prints exact `source refresh`/`ingest --pending` next commands for stale paths. `--json` emits
+the same preview for machine handoff, and `--report PATH` writes only an explicit freshness report.
 
 Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
 `derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
@@ -163,12 +167,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P2.1`
+- Previous completed PR sub-slice: `M13-P2.2`
 - Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.2`
+- Current PR sub-slice: `M13-P2.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.3`
+- Next planned PR sub-slice: `M13-P2.4`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -226,3 +230,8 @@ candidate reports, curated source manifests, source freshness, and higher-signal
 writing manifests or derived state, `--json` emits the preview, and `--report PATH` writes only an
 explicit discovery report. Registration moved behind `--apply` plus `--class ...` or `--all`, with
 large candidate sets refused unless `--allow-large-apply` is passed after review.
+
+`M13-P2.3` adds `splendor source freshness`, a safe diff-since-ingest preview for curated sources.
+It reports path-first freshness state for workspace-backed manifests, includes manifest/current
+checksums, supports JSON/report output, and does not update manifests, wiki pages, derived
+artifacts, queue records, run records, or reports unless `--report PATH` is provided.

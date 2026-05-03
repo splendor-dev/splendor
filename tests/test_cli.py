@@ -94,6 +94,9 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
 
     lookup = parser.parse_args(["source", "lookup", "brief", "--json"])
     refresh = parser.parse_args(["source", "refresh", "docs/brief.md", "--json"])
+    freshness = parser.parse_args(
+        ["source", "freshness", "--report", "reports/freshness.json", "--json"]
+    )
 
     assert lookup.command == "source"
     assert lookup.source_command == "lookup"
@@ -102,6 +105,9 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert refresh.source_command == "refresh"
     assert refresh.query == "docs/brief.md"
     assert refresh.json_output is True
+    assert freshness.source_command == "freshness"
+    assert freshness.report == Path("reports/freshness.json")
+    assert freshness.json_output is True
 
 
 def test_cli_query_parser_accepts_filters_and_no_question() -> None:
@@ -705,6 +711,127 @@ def test_cli_source_refresh_by_path_uses_latest_matching_source_ref(tmp_path: Pa
     out = capsys.readouterr().out
     assert "ambiguous" not in out
     assert "No source content change detected" in out
+
+
+def test_cli_source_freshness_reports_changed_workspace_sources_without_mutating(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source_id = manifest_path.stem
+    before_manifest = manifest_path.read_text(encoding="utf-8")
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "freshness"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Source freshness preview" in out
+    assert "changed=1" in out
+    assert f"- brief.md: changed title=brief source_id={source_id}" in out
+    assert "Manifest checksum:" in out
+    assert "Current checksum:" in out
+    assert "Next: splendor source refresh brief.md" in out
+    assert "Next: splendor ingest --pending" in out
+    assert manifest_path.read_text(encoding="utf-8") == before_manifest
+    assert len(list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))) == 1
+    assert not list((tmp_path / "reports").glob("**/*.json"))
+
+
+def test_cli_source_freshness_json_reports_unchanged_missing_and_unsupported(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    unchanged = tmp_path / "unchanged.md"
+    missing = tmp_path / "missing.md"
+    external_dir = tmp_path.parent / f"{tmp_path.name}-external"
+    external_dir.mkdir()
+    external = external_dir / "outside.md"
+    unchanged.write_text("# Unchanged\n", encoding="utf-8")
+    missing.write_text("# Missing\n", encoding="utf-8")
+    external.write_text("# Outside\n", encoding="utf-8")
+    try:
+        main(["--root", str(tmp_path), "add-source", str(unchanged)])
+        main(["--root", str(tmp_path), "add-source", str(missing)])
+        main(["--root", str(tmp_path), "add-source", str(external)])
+        missing.unlink()
+        capsys.readouterr()
+
+        exit_code = main(["--root", str(tmp_path), "source", "freshness", "--json"])
+
+        assert exit_code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["total"] == 3
+        assert payload["unchanged"] == 1
+        assert payload["missing"] == 1
+        assert payload["unsupported"] == 1
+        statuses = {source["path"]: source for source in payload["sources"]}
+        assert statuses["unchanged.md"]["status"] == "unchanged"
+        assert (
+            statuses["unchanged.md"]["current_checksum"]
+            == statuses["unchanged.md"]["manifest_checksum"]
+        )
+        assert statuses["missing.md"]["status"] == "missing"
+        assert statuses["missing.md"]["current_checksum"] is None
+        assert statuses[external.resolve().as_posix()]["status"] == "unsupported"
+        assert statuses[external.resolve().as_posix()]["next_commands"] == []
+    finally:
+        external.unlink(missing_ok=True)
+        external_dir.rmdir()
+
+
+def test_cli_source_freshness_report_writes_only_explicit_report(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    manifest_paths_before = sorted(
+        path.relative_to(tmp_path).as_posix()
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    )
+    queue_paths_before = sorted(
+        path.relative_to(tmp_path).as_posix()
+        for path in (tmp_path / "state" / "queue").glob("*.json")
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "source",
+            "freshness",
+            "--report",
+            "reports/source-freshness.json",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["report_path"] == "reports/source-freshness.json"
+    report_payload = json.loads((tmp_path / "reports" / "source-freshness.json").read_text())
+    assert report_payload["unchanged"] == 1
+    assert (
+        sorted(
+            path.relative_to(tmp_path).as_posix()
+            for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        )
+        == manifest_paths_before
+    )
+    assert (
+        sorted(
+            path.relative_to(tmp_path).as_posix()
+            for path in (tmp_path / "state" / "queue").glob("*.json")
+        )
+        == queue_paths_before
+    )
+    assert not list((tmp_path / "wiki").glob("sources/*.md"))
+    assert not list((tmp_path / "state" / "runs").glob("*.json"))
 
 
 def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, capsys) -> None:

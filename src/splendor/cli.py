@@ -58,8 +58,11 @@ from splendor.commands.source import (
     list_sources,
     lookup_sources,
     refresh_source,
+    render_source_freshness_json,
     render_source_lookup_json,
     render_source_refresh_json,
+    scan_source_freshness,
+    write_source_freshness_report,
 )
 from splendor.commands.wiki import (
     add_topic_page,
@@ -214,6 +217,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     source_refresh_parser.set_defaults(handler=handle_source_refresh)
+    source_freshness_parser = source_subparsers.add_parser(
+        "freshness", help="Preview changed workspace-backed source content without mutating"
+    )
+    source_freshness_parser.add_argument(
+        "--report",
+        type=Path,
+        help="Write the freshness report JSON to this explicit path.",
+    )
+    source_freshness_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    source_freshness_parser.set_defaults(handler=handle_source_freshness)
 
     ingest_parser = subparsers.add_parser("ingest", help="Ingest registered sources into the wiki")
     ingest_parser.add_argument(
@@ -850,6 +868,53 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
     else:
         print(f"Refresh skipped: {result.message}")
         print(f"Next: splendor wiki suggest {result.refreshed.record.source_id}")
+    return 0
+
+
+def handle_source_freshness(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = scan_source_freshness(root)
+        if args.report is not None:
+            result = write_source_freshness_report(root, result, args.report)
+    except (FileNotFoundError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_source_freshness_json(root, result))
+        return 0
+
+    print("Source freshness preview")
+    print(
+        "Summary: "
+        f"total={result.total} "
+        f"unchanged={result.unchanged} "
+        f"changed={result.changed} "
+        f"missing={result.missing} "
+        f"unsupported={result.unsupported}"
+    )
+    if result.report_path is not None:
+        print(f"Report: {result.report_path}")
+    if not result.sources:
+        print("No source manifests found.")
+        return 0
+    for item in result.sources:
+        source = item.source
+        print(
+            f"- {item.canonical_path}: {item.status} "
+            f"title={source.title} source_id={source.source_id}"
+        )
+        print(f"  Manifest: {item.manifest_path}")
+        print(f"  Manifest checksum: {item.manifest_checksum}")
+        if item.current_checksum is not None:
+            print(f"  Current checksum: {item.current_checksum}")
+        print(f"  Message: {item.message}")
+        for command in item.next_commands:
+            print(f"  Next: {command}")
+    if result.changed or result.missing:
+        print("Next: splendor source refresh <path>")
+    else:
+        print("Next: splendor source lookup")
     return 0
 
 

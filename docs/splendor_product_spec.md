@@ -800,8 +800,10 @@ M13-P2 repo-discovery contracts:
 - `splendor.yaml` supports `sources.include_patterns`, `sources.exclude_patterns`, and
   `sources.repo_scan_default_classes`; the default class policy favors documentation/curated
   knowledge over all supported files.
-- A freshness workflow should report curated sources whose canonical file content differs from the
-  manifest checksum and should include source IDs, titles, paths, status, and exact next commands.
+- `splendor source freshness` reports curated sources whose canonical file content differs from the
+  manifest checksum and includes source IDs, titles, paths, freshness status, manifest/current
+  checksums where available, and exact next commands. The default command is non-mutating; `--json`
+  emits machine-readable output and `--report PATH` writes only an explicit freshness report.
 - `brief --agent-context` should lead with project state, stale/contested/actionable items, and
   next actions before metadata.
 - A future `suggest-next` command should rank work from open tasks, stale sources, failed jobs,

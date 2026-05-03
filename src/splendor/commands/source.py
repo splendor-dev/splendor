@@ -1,9 +1,9 @@
-"""Source lifecycle and lookup command helpers."""
+"""Source lifecycle, lookup, and freshness command helpers."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current
@@ -42,6 +42,29 @@ class SourceRefreshResult:
     message: str
 
 
+@dataclass(frozen=True)
+class SourceFreshnessItem:
+    source: SourceRecord
+    manifest_path: Path
+    canonical_path: str
+    status: str
+    manifest_checksum: str
+    current_checksum: str | None
+    message: str
+    next_commands: list[str]
+
+
+@dataclass(frozen=True)
+class SourceFreshnessResult:
+    total: int
+    unchanged: int
+    changed: int
+    missing: int
+    unsupported: int
+    sources: list[SourceFreshnessItem]
+    report_path: str | None = None
+
+
 def list_sources(root: Path) -> list[SourceLookupResult]:
     layout = resolve_layout(root, load_config(root))
     results = [
@@ -49,6 +72,18 @@ def list_sources(root: Path) -> list[SourceLookupResult]:
         for path in sorted(layout.source_records_dir.glob("*.json"))
     ]
     return sorted(results, key=_lookup_sort_key)
+
+
+def scan_source_freshness(root: Path) -> SourceFreshnessResult:
+    items = [_freshness_item(root, result) for result in list_sources(root)]
+    return SourceFreshnessResult(
+        total=len(items),
+        unchanged=sum(1 for item in items if item.status == "unchanged"),
+        changed=sum(1 for item in items if item.status == "changed"),
+        missing=sum(1 for item in items if item.status == "missing"),
+        unsupported=sum(1 for item in items if item.status == "unsupported"),
+        sources=items,
+    )
 
 
 def lookup_sources(root: Path, query: str | None = None) -> list[SourceLookupResult]:
@@ -186,6 +221,38 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
     )
 
 
+def write_source_freshness_report(
+    root: Path, result: SourceFreshnessResult, report_path: Path
+) -> SourceFreshnessResult:
+    resolved_report_path = report_path if report_path.is_absolute() else root / report_path
+    resolved_report_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        report_value = resolved_report_path.relative_to(root).as_posix()
+    except ValueError:
+        report_value = resolved_report_path.as_posix()
+    result_with_report_path = replace(result, report_path=report_value)
+    resolved_report_path.write_text(
+        render_source_freshness_json(root, result_with_report_path) + "\n",
+        encoding="utf-8",
+    )
+    return result_with_report_path
+
+
+def render_source_freshness_json(root: Path, result: SourceFreshnessResult) -> str:
+    return json.dumps(
+        {
+            "total": result.total,
+            "unchanged": result.unchanged,
+            "changed": result.changed,
+            "missing": result.missing,
+            "unsupported": result.unsupported,
+            "report_path": result.report_path,
+            "sources": [_freshness_payload(root, item) for item in result.sources],
+        },
+        indent=2,
+    )
+
+
 def _lookup_sort_key(result: SourceLookupResult) -> tuple[str, str, str]:
     return (
         result.source.title.casefold(),
@@ -222,6 +289,93 @@ def _refreshable_source_path(root: Path, source: SourceRecord) -> Path:
         "with `splendor add-source <path>` to create a refreshable source_ref."
     )
     raise ValueError(msg)
+
+
+def _freshness_item(root: Path, result: SourceLookupResult) -> SourceFreshnessItem:
+    source = result.source
+    canonical_path = canonical_source_ref(source)
+    if source.source_ref_kind != "workspace_path" or not source.source_ref:
+        return SourceFreshnessItem(
+            source=source,
+            manifest_path=result.manifest_path,
+            canonical_path=canonical_path,
+            status="unsupported",
+            manifest_checksum=source.checksum,
+            current_checksum=None,
+            message=(
+                "freshness preview supports only workspace-backed canonical source refs in this "
+                "release"
+            ),
+            next_commands=[],
+        )
+
+    source_path = resolve_workspace_path(root, source.source_ref, context="Workspace source")
+    if not source_path.exists():
+        return SourceFreshnessItem(
+            source=source,
+            manifest_path=result.manifest_path,
+            canonical_path=source.source_ref,
+            status="missing",
+            manifest_checksum=source.checksum,
+            current_checksum=None,
+            message="canonical workspace source file is missing",
+            next_commands=[],
+        )
+    if not source_path.is_file():
+        return SourceFreshnessItem(
+            source=source,
+            manifest_path=result.manifest_path,
+            canonical_path=source.source_ref,
+            status="unsupported",
+            manifest_checksum=source.checksum,
+            current_checksum=None,
+            message="canonical workspace source ref does not resolve to a file",
+            next_commands=[],
+        )
+
+    current_checksum = sha256_file(source_path)
+    if current_checksum == source.checksum:
+        return SourceFreshnessItem(
+            source=source,
+            manifest_path=result.manifest_path,
+            canonical_path=source.source_ref,
+            status="unchanged",
+            manifest_checksum=source.checksum,
+            current_checksum=current_checksum,
+            message="canonical workspace source matches manifest checksum",
+            next_commands=[f"splendor wiki suggest {source.source_id}"],
+        )
+
+    return SourceFreshnessItem(
+        source=source,
+        manifest_path=result.manifest_path,
+        canonical_path=source.source_ref,
+        status="changed",
+        manifest_checksum=source.checksum,
+        current_checksum=current_checksum,
+        message="canonical workspace source differs from manifest checksum",
+        next_commands=[
+            f"splendor source refresh {source.source_ref}",
+            "splendor ingest --pending",
+        ],
+    )
+
+
+def _freshness_payload(root: Path, item: SourceFreshnessItem) -> dict[str, object]:
+    source = item.source
+    return {
+        "path": item.canonical_path,
+        "status": item.status,
+        "source_id": source.source_id,
+        "title": source.title,
+        "source_ref": canonical_source_ref(source),
+        "source_ref_kind": source.source_ref_kind,
+        "manifest_checksum": item.manifest_checksum,
+        "current_checksum": item.current_checksum,
+        "manifest_path": item.manifest_path.relative_to(root).as_posix(),
+        "message": item.message,
+        "next_commands": item.next_commands,
+    }
 
 
 def _source_payload(root: Path, result: SourceLookupResult) -> dict[str, object]:
