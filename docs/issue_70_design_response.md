@@ -10,9 +10,10 @@ not just a bug report. The accepted direction is the middle-ground redesign:
 - make broad repo discovery safe before it can create manifest or wiki churn
 - focus agent-facing value on freshness, contested knowledge, planning state, and next actions
 
-This note began as the planning contract for the M13-P2 implementation sequence. As of M13-P3.1,
-the safe-discovery, freshness, handoff, and path-first source-summary parts have landed; the issue
-remains open as the parent agent-usefulness feedback loop.
+This note began as the planning contract for the M13-P2 implementation sequence. As of M13-P3.2,
+the safe-discovery, freshness, handoff, path-first source-summary, and final release-handoff parts
+have landed; issue #70 is closed while #72 remains open as the source-refresh lifecycle and
+agent-workflow feedback loop.
 
 ## What Went Wrong
 
@@ -98,19 +99,20 @@ M13-P2 owns the Issue #70 agent-usefulness redesign. Release finalization moved 
 because Splendor was not v1-ready while a reasonable agent could accidentally register thousands of
 files from a broad scan.
 
-Issue #70 remains open as the parent product-feedback issue for residual agent-usefulness feedback
-after the scan safety, freshness, handoff, and path-first UX gaps were substantially addressed.
+Issue #70 is closed after the scan safety, freshness, handoff, and path-first UX gaps were
+substantially addressed. Residual source-refresh lifecycle and agent-workflow feedback is tracked
+in issue #72.
 
-## M13-P3.1 Issue Audit
+## M13-P3 Issue Audit
 
-- #70 is substantially addressed for scan safety, curated curation, source freshness, ranked
-  handoff, and path-first source-summary UX, but it remains open as the parent feedback loop.
+- #70 is closed after the M13-P2/M13-P3.1 response for scan safety, curated curation, source
+  freshness, ranked handoff, and path-first source-summary UX.
 - #72 is a separate parent feedback loop for source-refresh lifecycle and agent workflow. Its stable
   logical source identities, `supersedes`/`superseded_by`, full workspace refresh, pruning, and
-  `pr-summary` requests remain later M13-P3 or post-v1 work.
+  `pr-summary` requests remain post-v1 work.
 - #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
   `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
-  deferred.
+  deferred and is tracked by #79.
 - #42 has shipped restrained next-action hints around add-source, ingest, query/file-answer,
   briefing, and suggest-next flows.
 - #43 has shipped pending ingest queue handoff for CLI-created sources, and docs now show the

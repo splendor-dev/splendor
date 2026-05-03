@@ -79,4 +79,5 @@ workspace needs ingest, synthesis review, queue repair, or planning follow-up.
 
 Do not expect the current workflow to provide stable logical source identities, source
 supersession/pruning, one-command full workspace refresh, or PR-summary generation yet. Those are
-tracked from issue #72 as later lifecycle improvements.
+tracked from issue #72 as later lifecycle improvements. For v1 release work, use
+`docs/v1_release_handoff.md` to separate release-blocking validation from the post-v1 dogfood queue.

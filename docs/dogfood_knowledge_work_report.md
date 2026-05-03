@@ -131,10 +131,11 @@ Follow-up issues opened:
 
 ## Current Status Note
 
-As of M13-P3.1, the core dogfood issues from #41-#46 are substantially represented in shipped
-behavior: project briefing and the non-mutating compile contract landed in M10-P0.2; next-action
-hints, query snippets, web status/source-detail views, and generated-versus-maintained page-state
-visibility landed across M10-P0.3 and M13-P2.5. #47 remains a runtime-record timing follow-up.
-The newer #70 and #72 field reports should be read as parent feedback loops: #70 drove M13-P2's
-safe discovery and agent handoff redesign, while #72's stable logical source identity and full
-workspace refresh lifecycle remain later work.
+As of M13-P3.2, the core dogfood issues from #41-#46 are represented in shipped behavior: project
+briefing and the non-mutating compile contract landed in M10-P0.2; next-action hints, query
+snippets, web status/source-detail views, and generated-versus-maintained page-state visibility
+landed across M10-P0.3 and M13-P2.5. The deferred mutating compile/update path from #41 is tracked
+by #79. #47 remains a runtime-record timing follow-up. #70 is closed after M13-P2's safe discovery
+and agent handoff redesign, while #72 remains the parent source lifecycle and agent-workflow
+feedback loop for stable logical source identity, full workspace refresh, generated-state pruning,
+and PR-summary work.

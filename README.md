@@ -174,15 +174,16 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md)
 - [docs/schema_contracts.md](docs/schema_contracts.md)
 - [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
+- [docs/v1_release_handoff.md](docs/v1_release_handoff.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P2.5`
+- Previous completed PR sub-slice: `M13-P3.1`
 - Current planned slice: `M13-P3`
-- Current PR sub-slice: `M13-P3.1`
+- Current PR sub-slice: `M13-P3.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M13-P3`
-- Next planned PR sub-slice: `M13-P3.2`
+- Next planned slice: `M14-P0`
+- Next planned PR sub-slice: `M14-P0.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -228,6 +229,11 @@ filters for tags/source refs and a compact agent-context handoff mode.
 first real agent-experience report in issue #70 by redesigning repo discovery around safe
 candidate reports, curated source manifests, source freshness, and higher-signal agent handoffs.
 
+`M13-P3.1` is implemented: release-facing docs, schema notes, automation guidance, and dogfooding
+guidance are reconciled with current behavior. `M13-P3.2` is the final release handoff slice: it
+records the v1 validation commands, issue state, GitHub metadata expectations, known non-blockers,
+and conservative post-v1 queue in [docs/v1_release_handoff.md](docs/v1_release_handoff.md).
+
 `M13-P2.1` is a docs/planning-only reset:
 
 - [x] record the accepted Issue #70 design response
@@ -265,9 +271,10 @@ issue #41's briefing and non-mutating compile contract, #42's next-action hints,
 ingest handoff, #44's query snippets, #45's web status/source detail pages, and #46's page-state
 visibility as represented in current behavior. It still calls out #41's mutating compile/update
 workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Issues #30 and #37
-remain post-v1 performance work. Issues #70 and #72 stay open as parent feedback loops, with #72's
-stable logical source identities, supersession lifecycle, full workspace refresh, pruning, and
-PR-summary ideas deferred to later M13-P3 or post-v1 planning.
+remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
+stays open as the parent feedback loop for stable logical source identities, supersession
+lifecycle, full workspace refresh, pruning, and PR-summary ideas deferred to post-v1 planning.
+Issue #79 tracks the deferred mutating compile/update path from #41.
 
 ### v1 readiness checklist
 
@@ -277,5 +284,7 @@ PR-summary ideas deferred to later M13-P3 or post-v1 planning.
 - [x] Agent handoff surfaces rank next actions before metadata.
 - [x] Generated source-summary pages have a clear review policy and path-first display.
 - [x] CLI, schema, quickstart, automation, and dogfooding docs describe the same current behavior.
+- [x] Final release handoff names validation, issue state, GitHub metadata, known non-blockers,
+  and the post-v1 queue.
 - [ ] Full refresh lifecycle, stable logical source IDs, supersession/pruning, and PR-summary
   tooling are planned follow-ups, not v1 blockers.

@@ -151,4 +151,6 @@ Optional, external-activation, or secret-gated pieces:
 For v1, GitHub automation remains additive around the local CLI. Required release confidence comes
 from local validation plus CI, while generated-change and review automations are convenience
 layers. The current architecture intentionally stops short of PR-summary generation, automatic
-source supersession cleanup, or mutating web/hosted workflows.
+source supersession cleanup, or mutating web/hosted workflows. The final release checklist lives in
+`docs/v1_release_handoff.md`; it names the validation commands, PR metadata, issue state, and
+post-v1 queue that should be checked before tagging.
