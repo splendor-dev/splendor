@@ -54,7 +54,8 @@ For this handoff:
 
 These items are intentionally not v1 release blockers:
 
-- stable logical source identities above content-addressed source IDs
+- supersession-aware lifecycle use of the stable logical source identities above content-addressed
+  source IDs
 - `supersedes` / `superseded_by` source lifecycle semantics
 - one-command full workspace refresh
 - superseded generated-state pruning and topic-ref migration
@@ -69,8 +70,8 @@ These items are intentionally not v1 release blockers:
 
 The conservative next queue is:
 
-1. Split #72 into child slices when implementation starts, beginning with stable logical source
-   identity and source-supersession design.
+1. Continue #72 implementation after the initial workspace-backed `source:<path>` logical ID layer,
+   beginning with supersession-aware source refresh.
 2. Add the smallest source lifecycle slice that keeps `source freshness`, `source refresh`, topic
    refs, runs, and health checks coherent without breaking schema version `1` compatibility.
 3. Add `splendor pr-summary --since main` only after source lifecycle churn is explicit enough to

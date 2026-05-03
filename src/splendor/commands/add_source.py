@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
 
+from splendor.schemas import SourceRecord
 from splendor.schemas.types import StorageMode
 from splendor.state.source_registry import register_source
 
 
 @dataclass(frozen=True)
 class AddSourceResult:
+    record: SourceRecord
     source_id: str
     manifest_path: Path
     stored_path: Path | None
@@ -84,6 +86,7 @@ def add_source(
         capture_source_commit=capture_source_commit,
     )
     return AddSourceResult(
+        record=registered.record,
         source_id=registered.record.source_id,
         manifest_path=registered.manifest_path,
         stored_path=registered.stored_path,

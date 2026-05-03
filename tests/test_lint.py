@@ -571,6 +571,57 @@ def test_run_lint_checks_requires_expected_provenance_roles_for_source_summary(
     ]
 
 
+def test_run_lint_checks_rejects_stale_workspace_source_identity(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source_path = tmp_path / "docs" / "brief.md"
+    source_path.parent.mkdir()
+    source_path.write_text("hello\n", encoding="utf-8")
+    added = add_source(tmp_path, source_path)
+    manifest = load_source_record(added.manifest_path)
+    write_source_record(
+        added.manifest_path,
+        manifest.model_copy(
+            update={
+                "logical_id": "source:docs/other.md",
+                "aliases": ["docs/brief.md", "docs/other.md"],
+            }
+        ),
+    )
+
+    result = _run_lint(tmp_path)
+
+    source_identity_issues = {
+        issue.code for issue in result.issues if issue.check_name == "source-identity"
+    }
+    assert source_identity_issues == {
+        "invalid-source-logical-id",
+        "invalid-source-alias",
+    }
+
+
+def test_run_lint_checks_rejects_source_identity_conflicts(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    first_path = tmp_path / "docs" / "first.md"
+    second_path = tmp_path / "docs" / "second.md"
+    first_path.parent.mkdir()
+    first_path.write_text("first\n", encoding="utf-8")
+    second_path.write_text("second\n", encoding="utf-8")
+    first = add_source(tmp_path, first_path)
+    second = add_source(tmp_path, second_path)
+    second_manifest = load_source_record(second.manifest_path)
+    write_source_record(
+        second.manifest_path,
+        second_manifest.model_copy(update={"logical_id": "source:docs/first.md"}),
+    )
+
+    result = _run_lint(tmp_path)
+
+    conflict_records = {
+        issue.record_id for issue in result.issues if issue.code == "conflicting-source-identity"
+    }
+    assert conflict_records == {first.source_id, second.source_id}
+
+
 def test_run_lint_checks_ignores_markdown_target_resolution_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

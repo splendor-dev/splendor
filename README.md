@@ -178,12 +178,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P3.2`
-- Current planned slice: `M14-P0`
-- Current PR sub-slice: `M14-P0.1`
+- Previous completed PR sub-slice: `M14-P0.1`
+- Current planned slice: `M14-P1`
+- Current PR sub-slice: `M14-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M14-P1`
-- Next planned PR sub-slice: `M14-P1.1`
+- Next planned PR sub-slice: `M14-P1.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -276,10 +276,11 @@ stays open as the parent feedback loop for stable logical source identities, sup
 lifecycle, full workspace refresh, pruning, and PR-summary ideas deferred to post-v1 planning.
 Issue #79 tracks the deferred mutating compile/update path from #41.
 
-`M14-P0.1` is the post-v1 planning intake before asking the SynthBanshee Claude agent for a full
-retry. It records the detailed sequence needed to make that retry meaningful: stable logical source
-identities, supersession-aware refresh, a safe workspace refresh path, superseded-state cleanup,
-topic-ref migration, and PR-oriented generated-state summary/review handoff.
+`M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
+workspace-backed manifests now persist `source:<workspace-path>` logical IDs and path aliases while
+keeping `src-...` IDs as the compatibility contract. Supersession-aware refresh, safe workspace
+refresh, pruning/topic-ref migration, and PR-oriented generated-state summary/review handoff remain
+later slices before the SynthBanshee Claude retry.
 
 ### v1 readiness checklist
 
@@ -291,5 +292,5 @@ topic-ref migration, and PR-oriented generated-state summary/review handoff.
 - [x] CLI, schema, quickstart, automation, and dogfooding docs describe the same current behavior.
 - [x] Final release handoff names validation, issue state, GitHub metadata, known non-blockers,
   and the post-v1 queue.
-- [ ] Full refresh lifecycle, stable logical source IDs, supersession/pruning, and PR-summary
-  tooling are planned follow-ups, not v1 blockers.
+- [ ] Full refresh lifecycle, supersession/pruning, topic-ref migration, and PR-summary tooling are
+  planned follow-ups after the initial stable logical source identity layer.

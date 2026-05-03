@@ -63,6 +63,7 @@ from splendor.commands.source import (
     render_source_freshness_json,
     render_source_lookup_json,
     render_source_refresh_json,
+    resolve_source_query_exact,
     scan_source_freshness,
     write_source_freshness_report,
 )
@@ -91,7 +92,7 @@ from splendor.schemas import (
 )
 from splendor.schemas.types import STORAGE_MODES
 from splendor.state.query_snapshot import last_query_path_for, write_query_snapshot
-from splendor.state.source_compat import canonical_source_ref
+from splendor.state.source_compat import canonical_source_ref, effective_logical_id
 from splendor.utils.provenance import summarize_provenance_links
 from splendor.utils.time import utc_now_iso
 
@@ -242,7 +243,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument(
         "source_id",
         nargs="?",
-        help="Registered source identifier to ingest",
+        help="Registered source ID, title, path, or logical ID to ingest",
     )
     ingest_parser.add_argument(
         "--pending",
@@ -777,6 +778,9 @@ def handle_add_source(args: argparse.Namespace) -> int:
         return _print_error(exc)
     action = "Already registered" if result.already_registered else "Registered"
     print(f"Source ref: {result.source_ref}")
+    logical_id = effective_logical_id(result.record)
+    if logical_id is not None:
+        print(f"Logical ID: {logical_id}")
     print(f"{action} source {result.source_id}")
     print(f"Manifest: {result.manifest_path}")
     print(f"Storage mode: {result.storage_mode}")
@@ -885,6 +889,9 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
         print(f"No source content change detected for {canonical_source_ref(result.requested)}")
         print(f"Source ID: {result.requested.source_id}")
     print(f"Source ref: {result.refreshed.source_ref}")
+    logical_id = effective_logical_id(result.refreshed.record)
+    if logical_id is not None:
+        print(f"Logical ID: {logical_id}")
     if result.queued and result.queue_path is not None:
         print(f"Queued ingest: {result.queue_path}")
         print("Next: splendor ingest --pending")
@@ -926,7 +933,9 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
         source = item.source
         print(
             f"- {item.canonical_path}: {item.status} "
-            f"title={source.title} source_id={source.source_id}"
+            f"title={source.title} "
+            f"logical_id={effective_logical_id(source) or '-'} "
+            f"source_id={source.source_id}"
         )
         print(f"  Manifest: {item.manifest_path}")
         print(f"  Manifest checksum: {item.manifest_checksum}")
@@ -973,7 +982,8 @@ def handle_ingest(args: argparse.Namespace) -> int:
         return 1 if result.failed else 0
 
     try:
-        result = ingest_source(root, args.source_id)
+        source = resolve_source_query_exact(root, args.source_id).source
+        result = ingest_source(root, source.source_id)
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
 
@@ -1120,9 +1130,11 @@ def _print_source_lookup_results(results: list[SourceLookupResult]) -> None:
         return
     for result in results:
         source = result.source
+        logical_id = effective_logical_id(source)
         print(
             f"- {canonical_source_ref(source)} [{source.status}] {source.title} "
-            f"source_id={source.source_id} ref={canonical_source_ref(source)}"
+            f"logical_id={logical_id or '-'} source_id={source.source_id} "
+            f"ref={canonical_source_ref(source)}"
         )
         print(f"  Manifest: {result.manifest_path}")
     print("Next: splendor source refresh <source-id|title|path>")

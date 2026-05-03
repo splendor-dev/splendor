@@ -20,6 +20,7 @@ from splendor.schemas import (
     TaskRecord,
 )
 from splendor.state.paths import resolve_workspace_path
+from splendor.state.source_compat import canonical_source_ref, logical_source_id_for_ref
 from splendor.state.source_registry import load_source_record
 from splendor.utils.planning import iter_planning_paths, parse_planning_document, planning_directory
 from splendor.utils.wiki import parse_wiki_markdown
@@ -273,6 +274,13 @@ def _run_reference_integrity_checks(
         if manifest.record is None:
             continue
         source_by_id.setdefault(manifest.record.source_id, []).append(manifest)
+    source_refs_by_identity: dict[str, set[str]] = {}
+    for manifest in inventory.source_manifests:
+        if manifest.record is None:
+            continue
+        source = manifest.record
+        for identity in _source_identity_values(source):
+            source_refs_by_identity.setdefault(identity, set()).add(canonical_source_ref(source))
 
     for code, values in (
         ("duplicate-page-id", wiki_by_id),
@@ -393,6 +401,8 @@ def _run_reference_integrity_checks(
     for manifest in inventory.source_manifests:
         if manifest.record is None:
             continue
+        checked_count += 1 + len(manifest.record.aliases)
+        issues.extend(_source_identity_issues(root, manifest, source_refs_by_identity))
         checked_count += len(manifest.record.derived_artifacts)
         issues.extend(_derived_artifact_issues(root, layout, manifest))
         checked_count += len(manifest.record.linked_pages)
@@ -415,6 +425,75 @@ def _run_reference_integrity_checks(
     issues.extend(planning_state_issues)
 
     return _LintCheckResult(checked_count=checked_count, issues=issues)
+
+
+def _source_identity_values(source: SourceRecord) -> set[str]:
+    values = {source.source_id, canonical_source_ref(source)}
+    if source.original_path is not None:
+        values.add(source.original_path)
+    if source.logical_id is not None:
+        values.add(source.logical_id)
+    values.update(source.aliases)
+    return values
+
+
+def _source_identity_issues(
+    root: Path,
+    manifest: _SourceInventory,
+    source_refs_by_identity: dict[str, set[str]],
+) -> list[MaintenanceIssue]:
+    if manifest.record is None:
+        return []
+    source = manifest.record
+    manifest_relpath = workspace_relative_path(root, manifest.manifest_path)
+    issues: list[MaintenanceIssue] = []
+
+    if source.source_ref_kind == "workspace_path":
+        expected_logical_id = logical_source_id_for_ref(source.source_ref, source.source_ref_kind)
+        if source.logical_id is not None and source.logical_id != expected_logical_id:
+            issues.append(
+                MaintenanceIssue(
+                    code="invalid-source-logical-id",
+                    message=(
+                        "Workspace source logical_id must match source_ref: "
+                        f"expected {expected_logical_id}, got {source.logical_id}"
+                    ),
+                    path=manifest_relpath,
+                    record_id=source.source_id,
+                    check_name="source-identity",
+                )
+            )
+        allowed_aliases = {source.source_ref} if source.source_ref is not None else set()
+    else:
+        allowed_aliases = set()
+
+    for alias in source.aliases:
+        if alias in allowed_aliases:
+            continue
+        issues.append(
+            MaintenanceIssue(
+                code="invalid-source-alias",
+                message=f"Source alias is not valid for this source manifest: {alias}",
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-identity",
+            )
+        )
+
+    for identity in _source_identity_values(source):
+        source_refs = source_refs_by_identity.get(identity, set())
+        if len(source_refs) <= 1:
+            continue
+        issues.append(
+            MaintenanceIssue(
+                code="conflicting-source-identity",
+                message=(f"Source identity resolves to multiple canonical source refs: {identity}"),
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-identity",
+            )
+        )
+    return issues
 
 
 def _derived_artifact_issues(

@@ -15,6 +15,8 @@ from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import ingest_job_id
 from splendor.state.source_compat import (
     canonical_source_ref,
+    effective_aliases,
+    effective_logical_id,
     effective_materialized_path,
     effective_storage_mode,
 )
@@ -116,6 +118,34 @@ def resolve_source_query(root: Path, query: str) -> SourceLookupResult:
     return _select_source_query_candidate(root, query)
 
 
+def resolve_source_query_exact(root: Path, query: str) -> SourceLookupResult:
+    matches = list_sources(root)
+    exact_id_matches = [match for match in matches if match.source.source_id == query]
+    if exact_id_matches:
+        return exact_id_matches[0]
+
+    exact_identity_matches = [
+        match
+        for match in matches
+        if canonical_source_ref(match.source) == query
+        or (match.source.original_path is not None and match.source.original_path == query)
+        or effective_logical_id(match.source) == query
+        or query in effective_aliases(match.source)
+    ]
+    if exact_identity_matches:
+        return _select_refresh_candidate(query, exact_identity_matches)
+
+    exact_title_matches = [
+        match for match in matches if match.source.title.casefold() == query.casefold()
+    ]
+    if exact_title_matches:
+        return _select_refresh_candidate(query, exact_title_matches)
+
+    label = "source ID" if query.startswith("src-") else "source"
+    msg = f"Unknown {label}: {query}"
+    raise FileNotFoundError(msg)
+
+
 def resolve_source_query_matches(root: Path, query: str) -> list[SourceLookupResult]:
     matches = lookup_sources(root, query)
     if not matches:
@@ -132,6 +162,8 @@ def resolve_source_query_matches(root: Path, query: str) -> list[SourceLookupRes
         for match in matches
         if canonical_source_ref(match.source) == query
         or (match.source.original_path is not None and match.source.original_path == query)
+        or effective_logical_id(match.source) == query
+        or query in effective_aliases(match.source)
     ]
     if exact_ref_matches:
         return sorted(exact_ref_matches, key=_latest_source_sort_key, reverse=True)
@@ -156,6 +188,8 @@ def _select_source_query_candidate(root: Path, query: str) -> SourceLookupResult
         or match.source.title.casefold() == query.casefold()
         or canonical_source_ref(match.source) == query
         or (match.source.original_path is not None and match.source.original_path == query)
+        or effective_logical_id(match.source) == query
+        or query in effective_aliases(match.source)
     ]
     candidates = exact_matches or matches
     if not candidates:
@@ -265,7 +299,9 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
     return json.dumps(
         {
             "requested_source_id": result.requested.source_id,
+            "requested_logical_id": effective_logical_id(result.requested),
             "source_id": result.refreshed.record.source_id,
+            "logical_id": effective_logical_id(result.refreshed.record),
             "changed": result.changed,
             "queued": result.queued,
             "queue_path": (
@@ -329,6 +365,8 @@ def _matches_source(source: SourceRecord, needle: str) -> bool:
         canonical_source_ref(source),
         legacy_path,
         source.original_path or "",
+        effective_logical_id(source) or "",
+        *effective_aliases(source),
     ]
     return any(needle in value.casefold() for value in haystacks)
 
@@ -496,6 +534,8 @@ def _freshness_payload(root: Path, item: SourceFreshnessItem) -> dict[str, objec
         "path": item.canonical_path,
         "status": item.status,
         "source_id": source.source_id,
+        "logical_id": effective_logical_id(source),
+        "aliases": effective_aliases(source),
         "title": source.title,
         "source_ref": canonical_source_ref(source),
         "source_ref_kind": source.source_ref_kind,
@@ -511,6 +551,8 @@ def _source_payload(root: Path, result: SourceLookupResult) -> dict[str, object]
     source = result.source
     return {
         "source_id": source.source_id,
+        "logical_id": effective_logical_id(source),
+        "aliases": effective_aliases(source),
         "title": source.title,
         "source_type": source.source_type,
         "status": source.status,

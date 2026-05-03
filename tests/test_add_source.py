@@ -62,6 +62,8 @@ def test_add_source_registers_workspace_file_without_copy_by_default(tmp_path: P
     assert manifest.storage_mode == "none"
     assert manifest.storage_path is None
     assert manifest.materialized_at is None
+    assert manifest.logical_id == "source:note.md"
+    assert manifest.aliases == ["note.md"]
     assert manifest.source_commit_capture is None
     assert manifest.source_class is None
     assert manifest.source_labels == []
@@ -145,6 +147,8 @@ def test_add_source_stores_workspace_relative_source_ref_for_nested_sources(tmp_
     manifest = load_source_record(result.manifest_path)
     assert result.source_ref == "docs/note.md"
     assert manifest.source_ref == "docs/note.md"
+    assert manifest.logical_id == "source:docs/note.md"
+    assert manifest.aliases == ["docs/note.md"]
     assert manifest.original_path == "docs/note.md"
 
 
@@ -165,6 +169,8 @@ def test_add_source_registers_external_sources_as_copies_by_default(tmp_path: Pa
         assert manifest.source_ref == str(source.resolve())
         assert manifest.source_ref_kind == "external_path"
         assert manifest.storage_mode == "copy"
+        assert manifest.logical_id is None
+        assert manifest.aliases == []
         assert manifest.original_path == str(source)
         assert manifest.materialized_at is not None
     finally:

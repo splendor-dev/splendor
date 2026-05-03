@@ -187,6 +187,18 @@ Optional repo-relative path, usually under `raw/sources/`, used when a source is
 
 Timestamp capturing when the storage artifact was created or refreshed.
 
+### `logical_id`
+
+Optional stable logical identity above the content-addressed `source_id`. Workspace-backed sources
+use `source:<workspace-path>`, for example `source:docs/spec.md`, while generated source-summary
+pages, queue records, and run provenance continue to use `src-...` IDs for compatibility.
+
+### `aliases`
+
+Optional stable lookup aliases for source resolution. Workspace-backed registrations persist the
+repo-relative path alias; lookup and freshness payloads also expose the effective logical ID as an
+alias for agent handoff.
+
 ### `source_commit_capture`
 
 Nullable intent flag controlling whether refresh should attempt source commit capture again:

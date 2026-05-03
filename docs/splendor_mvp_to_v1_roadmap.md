@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M13-P3.2`
-- Current planned slice: `M14-P0`
-- Current PR sub-slice: `M14-P0.1`
+- Previous completed PR sub-slice: `M14-P0.1`
+- Current planned slice: `M14-P1`
+- Current PR sub-slice: `M14-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M14-P1`
-- Next planned PR sub-slice: `M14-P1.1`
+- Next planned PR sub-slice: `M14-P1.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -880,7 +880,7 @@ breaking the v1 file contracts.
 
 ### Candidate PR sub-slices
 - `M14-P0.1` Split #72 into child issues and assign release metadata
-- `M14-P1.1` Stable logical source identity and supersession design
+- `M14-P1.1` Stable logical source identities
 - `M14-P1.2` Supersession-aware source refresh
 - `M14-P1.3` Safe workspace refresh path
 - `M14-P1.4` Superseded-state pruning and topic-ref migration
@@ -893,7 +893,9 @@ post-#72 lifecycle loop is substantially implemented. The intended sequence befo
 
 1. `M14-P0.1` splits #72 into child issues and assigns release metadata.
 2. `M14-P1.1` adds stable logical source identities while preserving content-addressed IDs for
-   compatibility.
+   compatibility. The first implementation persists `source:<workspace-path>` logical IDs and
+   aliases for workspace-backed source manifests without changing `src-...` manifest IDs,
+   generated source-summary page IDs, queue IDs, or run provenance.
 3. `M14-P1.2` makes source refresh supersession-aware, so changed sources do not leave stale runs,
    topic refs, or health failures for agents to clean manually.
 4. `M14-P1.3` provides one safe workspace refresh path for changed-source detection, refresh,
