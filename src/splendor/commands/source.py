@@ -242,7 +242,12 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
 def write_source_freshness_report(
     root: Path, result: SourceFreshnessResult, report_path: Path
 ) -> SourceFreshnessResult:
-    resolved_report_path = report_path if report_path.is_absolute() else root / report_path
+    expanded_report_path = report_path.expanduser()
+    resolved_report_path = (
+        expanded_report_path
+        if expanded_report_path.is_absolute()
+        else Path.cwd() / expanded_report_path
+    )
     resolved_report_path.parent.mkdir(parents=True, exist_ok=True)
     result_with_report_path = replace(result, report_path=resolved_report_path.as_posix())
     resolved_report_path.write_text(
@@ -365,16 +370,33 @@ def _workspace_freshness_items(
             for result in results
         ]
 
+    layout = resolve_layout(root, load_config(root))
     current_checksum = sha256_file(source_path)
-    matching_source_ids = {
-        result.source.source_id for result in results if result.source.checksum == current_checksum
-    }
-    changed_candidate = None if matching_source_ids else max(results, key=_latest_source_sort_key)
+    latest_result = max(results, key=_latest_source_sort_key)
 
     items = []
     for result in results:
         source = result.source
-        if source.source_id in matching_source_ids:
+        if source.source_id != latest_result.source.source_id:
+            items.append(
+                SourceFreshnessItem(
+                    source=source,
+                    manifest_path=result.manifest_path,
+                    canonical_path=source_ref,
+                    status="historical",
+                    manifest_checksum=source.checksum,
+                    current_checksum=current_checksum,
+                    message=(
+                        "older source version for this workspace path; "
+                        "latest manifest is freshness target"
+                    ),
+                    next_commands=[],
+                )
+            )
+            continue
+
+        if source.checksum == current_checksum:
+            ingest_current = is_ingest_current(root, layout, source)
             items.append(
                 SourceFreshnessItem(
                     source=source,
@@ -383,25 +405,20 @@ def _workspace_freshness_items(
                     status="unchanged",
                     manifest_checksum=source.checksum,
                     current_checksum=current_checksum,
-                    message="canonical workspace source matches manifest checksum",
-                    next_commands=[f"splendor wiki suggest {source.source_id}"],
-                )
-            )
-            continue
-
-        if changed_candidate is not None and source.source_id == changed_candidate.source.source_id:
-            items.append(
-                SourceFreshnessItem(
-                    source=source,
-                    manifest_path=result.manifest_path,
-                    canonical_path=source_ref,
-                    status="changed",
-                    manifest_checksum=source.checksum,
-                    current_checksum=current_checksum,
-                    message="canonical workspace source differs from manifest checksum",
+                    message=(
+                        "canonical workspace source matches manifest checksum"
+                        if ingest_current
+                        else (
+                            "canonical workspace source matches manifest checksum "
+                            "but ingest is not current"
+                        )
+                    ),
                     next_commands=[
-                        _source_refresh_command(source_ref),
-                        "splendor ingest --pending",
+                        (
+                            f"splendor wiki suggest {source.source_id}"
+                            if ingest_current
+                            else _source_ingest_command(source.source_id)
+                        )
                     ],
                 )
             )
@@ -412,14 +429,21 @@ def _workspace_freshness_items(
                 source=source,
                 manifest_path=result.manifest_path,
                 canonical_path=source_ref,
-                status="historical",
+                status="changed",
                 manifest_checksum=source.checksum,
                 current_checksum=current_checksum,
-                message="older source version for this workspace path; current path is covered",
-                next_commands=[],
+                message="canonical workspace source differs from latest manifest checksum",
+                next_commands=[
+                    _source_refresh_command(source_ref),
+                    "splendor ingest --pending",
+                ],
             )
         )
     return items
+
+
+def _source_ingest_command(source_id: str) -> str:
+    return f"splendor ingest {shlex.quote(source_id)}"
 
 
 def _source_refresh_command(source_ref: str) -> str:

@@ -737,6 +737,7 @@ def test_cli_source_freshness_reports_changed_workspace_sources_without_mutating
     assert "Current checksum:" in out
     assert "Next: splendor source refresh brief.md" in out
     assert "Next: splendor ingest --pending" in out
+    assert "Next: splendor source refresh <path>" not in out
     assert manifest_path.read_text(encoding="utf-8") == before_manifest
     assert len(list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))) == 1
     assert not list((tmp_path / "reports").glob("**/*.json"))
@@ -802,11 +803,34 @@ def test_cli_source_freshness_json_reports_unchanged_missing_and_unsupported(
         assert statuses["missing.md"]["next_commands"] == [
             f"splendor source lookup {statuses['missing.md']['source_id']}"
         ]
+        assert statuses["unchanged.md"]["next_commands"] == [
+            f"splendor ingest {statuses['unchanged.md']['source_id']}"
+        ]
         assert statuses[external.resolve().as_posix()]["status"] == "unsupported"
         assert statuses[external.resolve().as_posix()]["next_commands"] == []
     finally:
         external.unlink(missing_ok=True)
         external_dir.rmdir()
+
+
+def test_cli_source_freshness_suggests_wiki_work_only_after_current_ingest(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nCurrent.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "freshness", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    item = payload["sources"][0]
+    assert item["status"] == "unchanged"
+    assert item["next_commands"] == [f"splendor wiki suggest {source_id}"]
 
 
 def test_cli_source_freshness_marks_old_versions_historical_when_current_manifest_exists(
@@ -837,6 +861,41 @@ def test_cli_source_freshness_marks_old_versions_historical_when_current_manifes
     assert statuses[original_id]["status"] == "historical"
     assert statuses[original_id]["next_commands"] == []
     assert statuses[refreshed_id]["status"] == "unchanged"
+
+
+def test_cli_source_freshness_targets_latest_manifest_when_file_reverts(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    original_text = "# Brief\n\nOriginal.\n"
+    source.write_text(original_text, encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    refreshed_id = next(
+        path.stem
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if path.stem != original_id
+    )
+    source.write_text(original_text, encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "freshness", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["changed"] == 1
+    assert payload["unchanged"] == 0
+    assert payload["historical"] == 1
+    statuses = {source["source_id"]: source for source in payload["sources"]}
+    assert statuses[original_id]["status"] == "historical"
+    assert statuses[refreshed_id]["status"] == "changed"
+    assert statuses[refreshed_id]["next_commands"] == [
+        "splendor source refresh brief.md",
+        "splendor ingest --pending",
+    ]
 
 
 def test_cli_source_freshness_report_writes_only_explicit_report(tmp_path: Path, capsys) -> None:
@@ -887,6 +946,40 @@ def test_cli_source_freshness_report_writes_only_explicit_report(tmp_path: Path,
     )
     assert not list((tmp_path / "wiki").glob("sources/*.md"))
     assert not list((tmp_path / "state" / "runs").glob("*.json"))
+
+
+def test_cli_source_freshness_relative_report_uses_current_working_directory(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    root = tmp_path / "workspace"
+    cwd = tmp_path / "caller"
+    root.mkdir()
+    cwd.mkdir()
+    main(["--root", str(root), "init"])
+    source = root / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(root), "add-source", str(source)])
+    monkeypatch.chdir(cwd)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(root),
+            "source",
+            "freshness",
+            "--report",
+            "reports/source-freshness.json",
+            "--json",
+        ]
+    )
+
+    expected_report = cwd / "reports" / "source-freshness.json"
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["report_path"] == expected_report.as_posix()
+    assert expected_report.exists()
+    assert not (root / "reports" / "source-freshness.json").exists()
 
 
 def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, capsys) -> None:

@@ -879,7 +879,7 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
     try:
         result = scan_source_freshness(root)
         if args.report is not None:
-            result = write_source_freshness_report(root, result, args.report.resolve())
+            result = write_source_freshness_report(root, result, args.report)
     except (FileNotFoundError, ValueError) as exc:
         return _print_error(exc)
 
@@ -915,11 +915,9 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
         print(f"  Message: {item.message}")
         for command in item.next_commands:
             print(f"  Next: {command}")
-    if result.changed:
-        print("Next: splendor source refresh <path>")
-    elif result.missing:
+    if result.missing:
         print("Next: restore missing source files or inspect the listed source manifests")
-    else:
+    elif not result.changed:
         print("Next: splendor source lookup")
     return 0
 
