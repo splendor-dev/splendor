@@ -49,8 +49,10 @@ For this handoff:
 - #47 remains open as the real ingest run-duration bug
 - #30 remains open as post-v1 repo-scan registration performance work
 - #37 remains open as post-v1 web document-list scaling work
-- #72 is unblocked for the planned SynthBanshee re-evaluation once `M14-P2.1` lands; do not close
-  the parent issue before the external retry is recorded
+- #72 is unblocked after `M14-P2.1`; the `M14-P3.1` source-lifecycle re-evaluation gate records
+  that the source-refresh lifecycle pain is materially addressed and recommends closing #72 once
+  maintainers accept the gate result
+- #86 tracks the narrower remaining planning-document authority and task-oriented agent brief gap
 
 ## Known Non-Blockers
 
@@ -63,20 +65,19 @@ These items are intentionally not v1 release blockers:
 
 ## Post-v1 Queue
 
-The conservative next queue is:
+The conservative next queue after the `M14-P3.1` gate is:
 
-1. Continue #72 implementation after the workspace-backed `source:<path>` logical ID layer,
-   supersession-aware source refresh, safe workspace refresh path, superseded generated-state
-   pruning, and topic-ref migration.
-2. Use `splendor pr-summary --since main` during review handoff to explain source lifecycle,
-   maintained wiki, source-summary, and mechanical generated-state changes.
-3. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
+1. Close #72 once maintainers accept the gate PR, because its broad source-refresh lifecycle and PR
+   handoff asks have landed and been re-evaluated.
+2. Continue with #86 for planning-document authority metadata and task-oriented agent briefs.
+3. Keep using `splendor pr-summary --since main` during review handoff to explain source
+   lifecycle, maintained wiki, source-summary, and mechanical generated-state changes.
+4. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
    scope.
-4. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
+5. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
-Do not ask the SynthBanshee Claude agent for the major "try Splendor again" re-evaluation until
-the source-lifecycle and generated-state review loop is materially improved. The planned retry
+The internal source-lifecycle re-evaluation gate is now complete in `M14-P3.1`. The completed retry
 bundle is:
 
 1. `M14-P0.1` Split #72 into child issues and assign release metadata.
@@ -88,10 +89,12 @@ bundle is:
 5. `M14-P1.4` Superseded generated-state pruning and topic-ref migration.
 6. `M14-P2.1` PR summary and lower-noise generated-state review handoff, including
    `splendor pr-summary --since main`.
+7. `M14-P3.1` Re-evaluate the comparable source-lifecycle workflow against the current command set,
+   including a controlled changed-source exercise, and record the close-or-split recommendation for
+   #72.
 
-After those slices land, ask the SynthBanshee Claude agent to retry a comparable real planning or
-repo-maintenance workflow and compare against the original #72 report. Before then, any retry
-should be framed narrowly around safe discovery, freshness, and handoff only.
+The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. Future work should start
+from #86 unless a new real-agent run reopens a source-lifecycle regression.
 
 ## Tagging Readiness
 

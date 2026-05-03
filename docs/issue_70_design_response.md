@@ -110,7 +110,10 @@ in issue #72.
 - #72 is a separate parent feedback loop for source-refresh lifecycle and agent workflow. Stable
   workspace-backed `source:<path>` aliases, `supersedes`/`superseded_by`, safe workspace refresh,
   superseded source-summary pruning, topic-ref migration, and `splendor pr-summary --since main`
-  have landed; the parent issue remains open for the planned external-agent retry.
+  have landed. The `M14-P3.1` source-lifecycle re-evaluation records that the broad #72 lifecycle
+  loop can close once maintainers accept the gate result.
+- #86 tracks the narrower remaining planning-document authority metadata and task-oriented agent
+  brief gap found by the `M14-P3.1` re-evaluation.
 - #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
   `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
   deferred and is tracked by #79.
