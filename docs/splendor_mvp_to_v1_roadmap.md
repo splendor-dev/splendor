@@ -334,17 +334,17 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M13-P2.4`
-- Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.5`
+- Previous completed PR sub-slice: `M13-P2.5`
+- Current planned slice: `M13-P3`
+- Current PR sub-slice: `M13-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P3`
-- Next planned PR sub-slice: `M13-P3.1`
+- Next planned PR sub-slice: `M13-P3.2`
 
-`M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The current M13-P2 sequence
+`M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
 shifting agent-facing value toward freshness, contested knowledge, planning state, and next
-actions. The lifecycle marker means `M13-P2.4` is in progress on feature branches and merged once
+actions. The lifecycle marker means `M13-P3.1` is in progress on feature branches and merged once
 the same committed state is observed on `main`.
 
 ---
@@ -789,6 +789,7 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 - `M13-P2.3` Source freshness / manifest-drift workflow
 - `M13-P2.4` Agent handoff brief and suggest-next
 - `M13-P2.5` Source-summary policy and path-first UX
+- `M13-P3.1` Release hardening and v1 readiness
 
 ### Deliverables
 - v1 schema versions
@@ -811,10 +812,33 @@ are read-only and draw from source freshness, queue failures or pending work,
 stale/contested/review-needed pages, missing synthesis follow-up, active planning records, recent
 maintenance reports, and optional goal matches.
 
-`M13-P2.5` is in progress: generated source-summary pages stay deterministic while readable
+`M13-P2.5` is implemented: generated source-summary pages stay deterministic while readable
 in-repo markdown/text/code sources default to concise, claim-bearing excerpts. Human CLI surfaces
-should lead with source paths or source refs before canonical source IDs, while persisted
+lead with source paths or source refs before canonical source IDs where practical, while persisted
 frontmatter, manifests, and run records continue to use canonical IDs for compatibility.
+
+`M13-P3.1` is the release-hardening and v1 readiness audit. It keeps the implementation surface
+stable, reconciles README, quickstart, schema/product docs, roadmap, CI/GitHub automation docs, and
+dogfooding guidance with the current product, and records which open feedback issues are already
+substantially implemented. It does not add SQLite, vector search, background workers, mutating web
+UI, broad refresh lifecycle machinery, stable logical source identities, supersedes/superseded_by
+source semantics, pruning, or PR-summary tooling.
+
+### M13-P3 v1 release-readiness checklist
+
+- [x] M13-P2 safe discovery, source freshness, agent handoff, and path-first source-summary UX have
+  landed.
+- [x] Release-facing docs distinguish generated source-summary artifacts from maintained synthesis
+  pages and explain which generated state is reviewer-significant.
+- [x] The quickstart demonstrates the queue-backed `add-source -> ingest --pending -> lookup`
+  loop instead of requiring users to copy long IDs for the first ingest.
+- [x] Issue #70 remains the parent feedback loop for agent usefulness; the release notes identify
+  which parts are addressed by M13-P2 and which remain follow-up work.
+- [x] Issue #72 remains the parent feedback loop for source-refresh lifecycle and agent workflow;
+  stable logical source identities, source supersession, full workspace refresh, pruning, and
+  `pr-summary` remain later M13-P3 or post-v1 work.
+- [ ] Final release handoff should re-run the full validation suite, confirm open issue metadata,
+  and publish a release-note summary before tagging.
 
 ### Exit criteria
 - the product is stable enough for sustained real-world use

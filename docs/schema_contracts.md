@@ -221,6 +221,9 @@ In this release:
 - copied sources still use `path` as the stored artifact path
 - workspace-backed sources temporarily mirror `source_ref` into `path`
 - no automatic manifest rewrite or schema-version bump is performed yet
+- source IDs remain content-addressed canonical IDs; stable logical source aliases,
+  `supersedes`/`superseded_by` source fields, automated pruning of superseded source summaries, and
+  topic-ref migration are not part of the current schema contract
 
 ## Knowledge page frontmatter
 
@@ -384,6 +387,16 @@ Current runtime behavior:
 - update the wiki index and log idempotently
 - mutating scan registration requires `repo refresh --apply-scan` plus `--class ...` or `--all`;
   large apply runs also require `--allow-large-apply`
+
+## v1 readiness notes
+
+- The current schema version remains `1`; M13-P3.1 does not introduce a migration or rewrite
+  existing manifests.
+- The release-ready core is file-based, deterministic, and compatible with legacy `path`-only
+  source manifests.
+- Source freshness, suggest-next, and agent briefing use existing records as read-only signals.
+- Richer lifecycle fields for stable logical source identities and supersession-aware history are
+  deferred so they can be designed without breaking the v1 manifest contract.
 
 ## Review config
 

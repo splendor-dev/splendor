@@ -145,3 +145,10 @@ Optional, external-activation, or secret-gated pieces:
 - `pre-commit.ci` SaaS activation
 - `OPENAI_API_KEY` for weekly repo review automation
 - any future token override for label application in autofix-trigger
+
+## Release-readiness status
+
+For v1, GitHub automation remains additive around the local CLI. Required release confidence comes
+from local validation plus CI, while generated-change and review automations are convenience
+layers. The current architecture intentionally stops short of PR-summary generation, automatic
+source supersession cleanup, or mutating web/hosted workflows.

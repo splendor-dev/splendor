@@ -171,6 +171,7 @@ most convenient review surface.
 After ingest, use the source ID from the command output to inspect likely synthesis follow-up:
 
 ```bash
+uv run splendor --root /tmp/demo-repo source lookup product-note
 uv run splendor --root /tmp/demo-repo wiki status
 uv run splendor --root /tmp/demo-repo wiki suggest <source-id>
 ```
@@ -221,6 +222,19 @@ uv run splendor --root /tmp/demo-repo serve
 ```
 
 Then open `/status` or `/sources/<source-id>` on the local server.
+
+## Release-ready review policy
+
+For v1-style PRs, treat source-summary pages, linked manifests, derived parsed/OCR artifacts, queue
+records, run records, and explicit scan/freshness/lint/health reports as reviewer-significant when
+they support the workspace update under review. They are deterministic state, not hand-written
+analysis. Failed or exploratory local reports do not need to be committed unless the report itself
+is the artifact being reviewed.
+
+`source refresh` currently creates a new canonical content-addressed source version when bytes
+change. Stable logical source identities, source supersession fields, automated pruning, topic-ref
+migration, and a one-command full workspace refresh remain planned follow-ups rather than required
+v1 behavior.
 
 ## 5. Add a planning record
 
