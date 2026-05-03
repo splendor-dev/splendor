@@ -85,6 +85,12 @@ The next implementation slices should document and then implement these contract
 - `splendor suggest-next [goal]` ranks work from source freshness, queue failures or pending work,
   missing synthesis, stale/contested/review-needed pages, active planning records, maintenance
   reports, and goal matches without mutating the workspace.
+- Source-summary rendering defaults readable in-repo sources to concise claim-bearing excerpts,
+  keeps fuller extracts for copied/external/transformed sources, and prints source paths before
+  source IDs in human-facing source-summary and CLI surfaces.
+- CLI guidance distinguishes reviewer-significant generated state from mechanical queue/run/report
+  churn so PR authors can explain what should be reviewed rather than asking reviewers to decode
+  every generated record equally.
 
 ## Roadmap Impact
 

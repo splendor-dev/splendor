@@ -8,6 +8,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from splendor.commands.source import resolve_source_query, resolve_source_query_matches
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord, SourceRecord
@@ -115,6 +116,7 @@ class WikiSuggestion:
 @dataclass(frozen=True)
 class WikiSuggestResult:
     source_id: str
+    source_ids: list[str]
     source_title: str
     source_ref: str
     source_status: str
@@ -604,28 +606,56 @@ def _score_page(
     )
 
 
+def _score_page_for_sources(
+    *,
+    sources: list[SourceRecord],
+    page: WikiPageSnapshot,
+    source_terms: set[str],
+) -> WikiSuggestion | None:
+    scored = [
+        suggestion
+        for source in sources
+        for suggestion in [_score_page(source=source, page=page, source_terms=source_terms)]
+        if suggestion is not None
+    ]
+    if not scored:
+        return None
+    best = max(scored, key=lambda suggestion: (suggestion.score, -len(suggestion.reasons)))
+    reasons = sorted({reason for suggestion in scored for reason in suggestion.reasons})
+    return WikiSuggestion(
+        path=best.path,
+        page_id=best.page_id,
+        title=best.title,
+        kind=best.kind,
+        score=max(suggestion.score for suggestion in scored),
+        reasons=reasons,
+    )
+
+
 def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
     config = load_config(root)
     layout = resolve_layout(root, config)
-    manifest_path = layout.source_records_dir / f"{source_id}.json"
-    if not manifest_path.exists():
-        msg = f"Unknown source ID: {source_id}"
-        raise FileNotFoundError(msg)
-
-    source = load_source_record(manifest_path)
+    source_matches = resolve_source_query_matches(root, source_id)
+    sources = [match.source for match in source_matches]
+    source = sources[0]
     pages, _invalid_pages = load_wiki_pages(root, layout)
-    summaries = _source_summary_pages(pages, source_id)
-    source_terms = _source_terms(source, summaries)
+    source_terms: set[str] = set()
+    for matched_source in sources:
+        summaries = _source_summary_pages(pages, matched_source.source_id)
+        source_terms.update(_source_terms(matched_source, summaries))
     suggestions = [
         suggestion
         for page in pages
         if page.frontmatter.kind in SYNTHESIS_KINDS
-        for suggestion in [_score_page(source=source, page=page, source_terms=source_terms)]
+        for suggestion in [
+            _score_page_for_sources(sources=sources, page=page, source_terms=source_terms)
+        ]
         if suggestion is not None
     ]
     suggestions.sort(key=lambda suggestion: (-suggestion.score, suggestion.path))
     return WikiSuggestResult(
         source_id=source.source_id,
+        source_ids=[matched_source.source_id for matched_source in sources],
         source_title=source.title,
         source_ref=canonical_source_ref(source),
         source_status=source.status,
@@ -634,14 +664,7 @@ def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
 
 
 def describe_wiki_compile_contract(root: Path, source_id: str) -> WikiCompileContract:
-    config = load_config(root)
-    layout = resolve_layout(root, config)
-    manifest_path = layout.source_records_dir / f"{source_id}.json"
-    if not manifest_path.exists():
-        msg = f"Unknown source ID: {source_id}"
-        raise FileNotFoundError(msg)
-
-    source = load_source_record(manifest_path)
+    source = resolve_source_query(root, source_id).source
     return WikiCompileContract(
         source_id=source.source_id,
         source_title=source.title,
@@ -695,6 +718,7 @@ def render_wiki_suggest_json(result: WikiSuggestResult) -> str:
     return json.dumps(
         {
             "source_id": result.source_id,
+            "source_ids": result.source_ids,
             "source_title": result.source_title,
             "source_ref": result.source_ref,
             "source_status": result.source_status,

@@ -456,12 +456,55 @@ def test_wiki_suggest_text_output_reports_top_suggestion(tmp_path: Path, capsys)
     )
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "wiki", "suggest", added.source_id])
+    exit_code = main(["--root", str(tmp_path), "wiki", "suggest", "wiki-maintenance.md"])
 
     assert exit_code == 0
     out = capsys.readouterr().out
+    assert "Source ref: wiki-maintenance.md" in out
+    assert f"Source ID: {added.source_id}" in out
     assert "Suggested pages:" in out
     assert "wiki/topics/wiki-maintenance.md" in out
+
+
+def test_wiki_suggest_path_includes_all_versions_for_that_path(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "docs" / "wiki-maintenance.md"
+    source.parent.mkdir()
+    source.write_text("# Wiki maintenance\n\nOriginal source version.\n", encoding="utf-8")
+    original = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", original.source_id])
+    source.write_text("# Wiki maintenance\n\nUpdated source version.\n", encoding="utf-8")
+    updated = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", updated.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "original.md",
+        kind="topic",
+        title="Original maintenance",
+        page_id="topic-original-maintenance",
+        source_refs=[original.source_id],
+        body="Original source-impact suggestions.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "updated.md",
+        kind="topic",
+        title="Updated maintenance",
+        page_id="topic-updated-maintenance",
+        source_refs=[updated.source_id],
+        body="Updated source-impact suggestions.",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "suggest", "docs/wiki-maintenance.md"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    resolved_line = next(
+        line for line in out.splitlines() if line.startswith("Resolved source IDs:")
+    )
+    assert updated.source_id in resolved_line
+    assert original.source_id in resolved_line
+    assert "wiki/topics/original.md" in out
+    assert "wiki/topics/updated.md" in out
 
 
 def test_wiki_suggest_reports_unknown_source(tmp_path: Path, capsys) -> None:
@@ -605,7 +648,8 @@ def test_wiki_compile_text_reports_review_gated_contract_without_mutating(
 
     assert exit_code == 0
     out = capsys.readouterr().out
-    assert f"Source: {added.source_id}" in out
+    assert "Source ref: compile-contract.md" in out
+    assert f"Source ID: {added.source_id}" in out
     assert "Compile contract" in out
     assert "Mutates wiki: no" in out
     assert "Next steps:" in out

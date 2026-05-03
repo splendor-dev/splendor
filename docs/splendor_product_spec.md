@@ -703,6 +703,9 @@ Recommended default behavior:
 Current implementation:
 
 - workspace-backed in-repo text sources default to `excerpt`
+- excerpt mode prefers claim-bearing sections such as `Core Claims`, `Design Implications`,
+  `Product Experience Notes`, and `Summary`; if no such section exists, it falls back to a bounded
+  opening excerpt
 - copied or external text sources default to `full`
 - text-bearing PDF sources are parsed through source-type dispatch, with extracted text written to
   `derived/parsed/<source-id>.txt` and linked from the source manifest via `derived_artifacts`
@@ -714,6 +717,8 @@ Current implementation:
 - projects may set either class to `none`, `excerpt`, or `full` through
   `sources.summarize_in_repo_extracts_as` and `sources.summarize_external_extracts_as`
 - when the mode is `none`, the `## Extract` section is omitted entirely
+- generated source-summary pages render the registered path/source file before the canonical source
+  ID so reviewers can inspect the readable source first
 
 ## 14.6 Wiki compile/update workflow
 
@@ -722,9 +727,9 @@ can be conservative and review-oriented:
 
 - `splendor wiki status` reports source counts, page counts, queue state, recent runs,
   machine-generated pages, stale pages, contested pages, orphan pages, and pages needing review
-- `splendor wiki suggest <source-id>` identifies concept, topic, architecture, comparison, or
+- `splendor wiki suggest <source-id|title|path>` identifies concept, topic, architecture, comparison, or
   overview pages likely affected by a source
-- `splendor wiki compile <source-id>` or an equivalent reviewed operation updates synthesis pages
+- `splendor wiki compile <source-id|title|path>` or an equivalent reviewed operation updates synthesis pages
   with auditable provenance and run state
 
 This workflow should start with text-native sources and deterministic page-impact suggestions. The
@@ -759,7 +764,8 @@ Current implementation:
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.
 - `splendor ingest <source-id>` prints the generated source-summary page/run records and the next
-  `splendor wiki suggest <source-id>` command.
+  `splendor wiki suggest <source-id>` command, plus generated-state guidance for reviewing source
+  manifests, source-summary pages, queue records, run records, and explicit reports.
 - PDF ingest first uses deterministic local extraction for text-bearing PDFs. Image-only PDFs and
   image sources only enter OCR when `sources.ocr_enabled` is true; the current local provider reads
   adjacent sidecar text files named with `sources.ocr_sidecar_suffix` and writes normalized output
@@ -769,10 +775,10 @@ Current implementation:
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
   machine-generated, invalid-page, actionable synthesis-review, and missing
   synthesis-follow-up counts, with optional JSON output.
-- `splendor wiki suggest <source-id>` deterministically ranks existing synthesis pages using source
+- `splendor wiki suggest <source-id|title|path>` deterministically ranks existing synthesis pages using source
   metadata, source-summary text, frontmatter source refs, tags, source refs, and page content, with
   optional JSON output.
-- `splendor wiki compile <source-id>` exposes the review-gated compile-loop contract, validates the
+- `splendor wiki compile <source-id|title|path>` exposes the review-gated compile-loop contract, validates the
   source, and reports that it does not mutate synthesis pages yet.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
@@ -936,9 +942,11 @@ machine-generated labels.
 
 Current query output includes any active deterministic filters. `splendor query --tag <tag>`
 restricts matches to wiki pages carrying all requested tags, and
-`splendor query --source <source-id>` validates the canonical source ID before returning wiki or
-planning records whose `source_refs` include that ID. Filter-only source lookup is allowed so
-agents can ask which pages reference a known source without inventing a search phrase.
+`splendor query --source <source-id|title|path>` resolves the source filter to canonical source
+IDs before returning wiki or planning records whose `source_refs` intersect those IDs. Exact
+readable path filters include all known content-addressed versions for that path until stable
+logical source identities exist. Filter-only source lookup is allowed so agents can ask which pages
+reference a known source without inventing a search phrase.
 
 ### 17.3 Project briefing
 
@@ -1256,7 +1264,8 @@ These are not blockers to the spec, but should remain visible:
 5. how aggressively to auto-update central synthesis pages
 6. exact level of provenance granularity at the paragraph/claim level
 7. whether a companion-repo linking model needs a first-class schema element
-8. exact generated source-summary policy for readable in-repo markdown and code files
+8. post-v1 refinements to generated source-summary policy for readable in-repo markdown and code
+   files, after the v1 default of concise claim-bearing excerpts has been exercised in real repos
 
 ## 31. Summary Product Statement
 

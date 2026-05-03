@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from splendor.commands.source import resolve_source_query_matches
 from splendor.config import load_config
 from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.schemas import ProvenanceLink
@@ -60,10 +61,11 @@ class QueryValidationError(ValueError):
 class QueryFilters:
     tags: list[str]
     source_id: str | None = None
+    source_ids: list[str] | None = None
 
     @property
     def active(self) -> bool:
-        return bool(self.tags or self.source_id)
+        return bool(self.tags or self.source_id or self.source_ids)
 
 
 @dataclass(frozen=True)
@@ -205,16 +207,25 @@ def run_query(
 def _normalize_filters(root: Path, *, tags: list[str], source_id: str | None) -> QueryFilters:
     normalized_tags = _normalize_tags(tags)
     normalized_source_id = source_id.strip() if source_id is not None else None
+    normalized_source_ids: list[str] | None = None
     if normalized_source_id:
-        manifest_path = manifest_path_for(root, normalized_source_id)
-        if not manifest_path.exists():
-            msg = f"Unknown source ID: {normalized_source_id}"
-            raise FileNotFoundError(msg)
-        source = load_source_record(manifest_path)
-        if source.source_id != normalized_source_id:
-            msg = f"Source manifest ID does not match requested source: {normalized_source_id}"
-            raise ValueError(msg)
-    return QueryFilters(tags=normalized_tags, source_id=normalized_source_id)
+        resolved_sources = resolve_source_query_matches(root, normalized_source_id)
+        normalized_source_ids = [match.source.source_id for match in resolved_sources]
+        normalized_source_id = normalized_source_ids[0]
+        for resolved_source_id in normalized_source_ids:
+            manifest_path = manifest_path_for(root, resolved_source_id)
+            if not manifest_path.exists():
+                msg = f"Unknown source ID: {resolved_source_id}"
+                raise FileNotFoundError(msg)
+            source = load_source_record(manifest_path)
+            if source.source_id != resolved_source_id:
+                msg = f"Source manifest ID does not match requested source: {resolved_source_id}"
+                raise ValueError(msg)
+    return QueryFilters(
+        tags=normalized_tags,
+        source_id=normalized_source_id,
+        source_ids=normalized_source_ids,
+    )
 
 
 def _normalize_tags(tags: list[str]) -> list[str]:
@@ -233,7 +244,9 @@ def _normalize_tags(tags: list[str]) -> list[str]:
 
 
 def _matches_filters(document: _QueryDocument, filters: QueryFilters) -> bool:
-    if filters.source_id is not None and filters.source_id not in document.source_refs:
+    if filters.source_ids is not None and not set(filters.source_ids).intersection(
+        document.source_refs
+    ):
         return False
     if filters.tags:
         document_tags = {tag.casefold() for tag in document.tags}

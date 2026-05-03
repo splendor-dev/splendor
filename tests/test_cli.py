@@ -375,6 +375,7 @@ def test_cli_source_lookup_maps_readable_path_to_source_id(tmp_path: Path, capsy
     assert "Sources: 1" in out
     assert "Audio Quality Feedback" in out or "audio quality feedback" in out
     assert "docs/audio-quality-feedback.md" in out
+    assert out.index("docs/audio-quality-feedback.md") < out.index("source_id=src-")
 
 
 def test_cli_source_list_reports_registered_sources(tmp_path: Path, capsys) -> None:
@@ -475,11 +476,12 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
 
     assert exit_code == 0
     out = capsys.readouterr().out
-    assert f"Detected changed source content for {original_id}" in out
+    assert "Detected changed source content for brief.md" in out
+    assert f"Requested source ID: {original_id}" in out
     manifests = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
     assert len(manifests) == 2
     refreshed_id = [path.stem for path in manifests if path.stem != original_id][0]
-    assert f"Registered refreshed source {refreshed_id}" in out
+    assert f"Registered refreshed source ID: {refreshed_id}" in out
     assert (tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").exists()
 
 
@@ -498,7 +500,7 @@ def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsy
 
     assert exit_code == 0
     out = capsys.readouterr().out
-    assert f"Matched existing source version {original_id}" in out
+    assert f"Matched existing source version: {original_id}" in out
     assert f"Registered refreshed source {original_id}" not in out
 
 
@@ -1749,7 +1751,11 @@ def test_cli_query_command_json_reports_active_filters(tmp_path: Path, capsys) -
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["query"] == ""
-    assert payload["filters"] == {"tags": ["preprocessing"], "source_id": source_id}
+    assert payload["filters"] == {
+        "tags": ["preprocessing"],
+        "source_id": source_id,
+        "source_ids": [source_id],
+    }
     assert payload["match_count"] == 1
     assert payload["matches"][0]["path"] == "wiki/topics/preprocessing.md"
 

@@ -11,6 +11,7 @@ from splendor.schemas.provenance import ProvenanceLink
 class QueryFilterSnapshot(StrictRecord):
     tags: list[str] = Field(default_factory=list)
     source_id: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
 
 
 class QueryMatchSnapshot(StrictRecord):

@@ -70,7 +70,11 @@ _CLAIM_SECTION_HEADINGS = {
     "key facts",
     "claims",
     "findings",
+    "product experience notes",
+    "summary",
 }
+_EXCERPT_CHAR_LIMIT = 1600
+_EXCERPT_LINE_LIMIT = 36
 
 
 @dataclass(frozen=True)
@@ -125,6 +129,10 @@ def _page_path_for(layout_root: Path, source_id: str) -> Path:
 
 
 def _build_extract(text: str) -> str:
+    claim_excerpt = _build_claim_excerpt(text)
+    if claim_excerpt:
+        return claim_excerpt
+
     lines = text.splitlines()
     start_index = 0
     for index, line in enumerate(lines):
@@ -134,14 +142,53 @@ def _build_extract(text: str) -> str:
 
     extract_lines: list[str] = []
     char_count = 0
-    for line in lines[start_index : start_index + 80]:
+    for line in lines[start_index : start_index + _EXCERPT_LINE_LIMIT]:
         projected_count = char_count + len(line) + 1
-        if projected_count > 4000 and extract_lines:
+        if projected_count > _EXCERPT_CHAR_LIMIT and extract_lines:
             break
         extract_lines.append(line)
         char_count = projected_count
 
     return "\n".join(extract_lines).rstrip()
+
+
+def _build_claim_excerpt(text: str) -> str | None:
+    lines = text.splitlines()
+    excerpt_lines: list[str] = []
+    active = False
+    in_fence = False
+    char_count = 0
+    for raw_line in lines:
+        line = raw_line.strip()
+        if line.startswith("```") or line.startswith("~~~"):
+            if active:
+                break
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        heading_match = _MARKDOWN_HEADING_PATTERN.match(line)
+        if heading_match:
+            heading = _strip_markdown_inline(heading_match.group("title")).lower()
+            if active and excerpt_lines:
+                break
+            active = heading in _CLAIM_SECTION_HEADINGS
+            if active:
+                excerpt_lines.append(raw_line)
+                char_count += len(raw_line) + 1
+            continue
+        if not active:
+            continue
+        projected_count = char_count + len(raw_line) + 1
+        if projected_count > _EXCERPT_CHAR_LIMIT and excerpt_lines:
+            break
+        excerpt_lines.append(raw_line)
+        char_count = projected_count
+        if len(excerpt_lines) >= _EXCERPT_LINE_LIMIT:
+            break
+
+    excerpt = "\n".join(excerpt_lines).strip()
+    return excerpt or None
 
 
 def _summary_mode_for(config, source: SourceRecord) -> SummaryMode:
@@ -159,6 +206,14 @@ def _rendered_extract(text: str, mode: SummaryMode) -> str | None:
     if mode == "excerpt":
         return _build_extract(text)
     return text
+
+
+def _extract_policy_note(mode: SummaryMode) -> str:
+    if mode == "none":
+        return "Extract policy: `none` (source text omitted from this generated page)"
+    if mode == "excerpt":
+        return "Extract policy: `excerpt` (claim-bearing section or bounded opening excerpt)"
+    return "Extract policy: `full` (full resolved text rendered for local review)"
 
 
 def _build_summary(source: SourceRecord, source_text: str) -> str:
@@ -945,10 +1000,11 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         )
         source_section = "\n".join(
             [
-                f"- Source ID: `{source.source_id}`",
-                f"- Source type: `{source.source_type}`",
                 f"- Registered path: `{registered_path}`",
                 f"- Source file: `{resolved_source.resolved_ref}`",
+                f"- Source ID: `{source.source_id}`",
+                f"- Source type: `{source.source_type}`",
+                f"- {_extract_policy_note(extract_mode)}",
             ]
             + (
                 [f"- {dispatched_content.derived_artifact_label}: `{derived_artifact_ref}`"]

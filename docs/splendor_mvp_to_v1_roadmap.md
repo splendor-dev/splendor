@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M13-P2.3`
+- Previous completed PR sub-slice: `M13-P2.4`
 - Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.4`
+- Current PR sub-slice: `M13-P2.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.5`
+- Next planned slice: `M13-P3`
+- Next planned PR sub-slice: `M13-P3.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The current M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -810,6 +810,11 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 are read-only and draw from source freshness, queue failures or pending work,
 stale/contested/review-needed pages, missing synthesis follow-up, active planning records, recent
 maintenance reports, and optional goal matches.
+
+`M13-P2.5` is in progress: generated source-summary pages stay deterministic while readable
+in-repo markdown/text/code sources default to concise, claim-bearing excerpts. Human CLI surfaces
+should lead with source paths or source refs before canonical source IDs, while persisted
+frontmatter, manifests, and run records continue to use canonical IDs for compatibility.
 
 ### Exit criteria
 - the product is stable enough for sustained real-world use
