@@ -153,11 +153,13 @@ def scan_repo(
             continue
 
         curated_for_path = curated_sources.get(relative_path, [])
-        current_checksum = sha256_file(path)
-        current_curated = next(
-            (source for source in curated_for_path if source.checksum == current_checksum),
-            None,
-        )
+        current_curated = None
+        if curated_for_path:
+            current_checksum = sha256_file(path)
+            current_curated = next(
+                (source for source in curated_for_path if source.checksum == current_checksum),
+                None,
+            )
         previous_curated = _latest_curated_source(curated_for_path)
         status = (
             "already_curated"
@@ -354,14 +356,24 @@ def _discover_supported_paths(
     for dirpath, dirnames, filenames in os.walk(root, topdown=True):
         current_dir = Path(dirpath)
         filtered_dirnames = []
+        gitignore_dir_candidates: dict[str, str] = {}
         for dirname in sorted(dirnames):
             path = current_dir / dirname
             reason = _ignored_dir_reason(path, root, layout)
-            if reason is None and _is_git_ignored_path(path, gitignore, is_dir=True):
-                reason = "gitignore"
             if reason is not None:
                 continue
+            repo_relative = _repo_relative_path(path, gitignore, is_dir=True)
+            if repo_relative is not None:
+                gitignore_dir_candidates[repo_relative] = dirname
             filtered_dirnames.append(dirname)
+        gitignored_dirs = _git_ignored_repo_paths(gitignore_dir_candidates, gitignore)
+        if gitignored_dirs:
+            filtered_dirnames = [
+                dirname
+                for dirname in filtered_dirnames
+                if dirname
+                not in {gitignore_dir_candidates[repo_path] for repo_path in gitignored_dirs}
+            ]
         dirnames[:] = filtered_dirnames
         for filename in sorted(filenames):
             path = current_dir / filename
@@ -491,14 +503,26 @@ def _git_ignored_paths(root: Path, paths: list[Path], gitignore: GitIgnoreContex
         return set()
     repo_paths_by_workspace_path: dict[str, str] = {}
     for path in paths:
-        try:
-            repo_relative = path.resolve().relative_to(gitignore.repo_root).as_posix()
-        except ValueError:
+        repo_relative = _repo_relative_path(path, gitignore)
+        if repo_relative is None:
             continue
         repo_paths_by_workspace_path[repo_relative] = path.relative_to(root).as_posix()
     if not repo_paths_by_workspace_path:
         return set()
 
+    ignored_repo_paths = _git_ignored_repo_paths(repo_paths_by_workspace_path, gitignore)
+    return {
+        workspace_relative
+        for repo_relative, workspace_relative in repo_paths_by_workspace_path.items()
+        if repo_relative in ignored_repo_paths
+    }
+
+
+def _git_ignored_repo_paths(
+    repo_paths_by_value: dict[str, str], gitignore: GitIgnoreContext
+) -> set[str]:
+    if not repo_paths_by_value or gitignore.repo_root is None:
+        return set()
     try:
         result = subprocess.run(
             [
@@ -508,7 +532,7 @@ def _git_ignored_paths(root: Path, paths: list[Path], gitignore: GitIgnoreContex
                 "check-ignore",
                 "--stdin",
             ],
-            input="\n".join(repo_paths_by_workspace_path) + "\n",
+            input="\n".join(repo_paths_by_value) + "\n",
             text=True,
             capture_output=True,
             check=False,
@@ -519,43 +543,29 @@ def _git_ignored_paths(root: Path, paths: list[Path], gitignore: GitIgnoreContex
         return set()
 
     ignored: set[str] = set()
+    normalized_repo_paths = {path.rstrip("/"): path for path in repo_paths_by_value}
     for line in result.stdout.splitlines():
         repo_relative = line.strip()
         if not repo_relative:
             continue
-        workspace_relative = repo_paths_by_workspace_path.get(repo_relative)
-        if workspace_relative is not None:
-            ignored.add(workspace_relative)
+        original_repo_path = normalized_repo_paths.get(repo_relative.rstrip("/"))
+        if original_repo_path is not None:
+            ignored.add(original_repo_path)
     return ignored
 
 
-def _is_git_ignored_path(path: Path, gitignore: GitIgnoreContext, *, is_dir: bool = False) -> bool:
+def _repo_relative_path(
+    path: Path, gitignore: GitIgnoreContext, *, is_dir: bool = False
+) -> str | None:
     if gitignore.repo_root is None:
-        return False
+        return None
     try:
         repo_relative = path.resolve().relative_to(gitignore.repo_root).as_posix()
     except ValueError:
-        return False
+        return None
     if is_dir:
         repo_relative = f"{repo_relative.rstrip('/')}/"
-    try:
-        result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(gitignore.repo_root),
-                "check-ignore",
-                "--quiet",
-                "--",
-                repo_relative,
-            ],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    except OSError:
-        return False
-    return result.returncode == 0
+    return repo_relative
 
 
 def _matches_include_patterns(relative_path: str, patterns: list[str]) -> bool:

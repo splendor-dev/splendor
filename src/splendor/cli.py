@@ -1515,7 +1515,7 @@ def handle_repo_scan(args: argparse.Namespace) -> int:
         print("Candidate sources:")
         for item in result.candidate_sources:
             labels = ", ".join(item.source_labels) if item.source_labels else "-"
-            curated = item.source_id if item.already_curated and item.source_id else "-"
+            curated = item.source_id if item.source_id else "-"
             print(
                 f"- {item.path}: {item.status} "
                 f"(class={item.source_class} labels={labels} source_id={curated})"

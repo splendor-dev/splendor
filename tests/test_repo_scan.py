@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -23,6 +24,11 @@ def _manifest_paths(root: Path) -> list[Path]:
 
 def _remove_workspace_config(root: Path) -> None:
     (root / "splendor.yaml").unlink(missing_ok=True)
+
+
+def _require_git() -> None:
+    if shutil.which("git") is None:
+        pytest.skip("git executable is required for gitignore scan tests")
 
 
 def _write_mixed_repo(root: Path) -> None:
@@ -154,6 +160,25 @@ def test_repo_scan_reports_unsupported_files(tmp_path: Path) -> None:
 
     assert result.scanned == 1
     assert result.unsupported == 1
+
+
+def test_repo_scan_preview_does_not_hash_new_candidates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+
+    def fail_hash(path: Path) -> str:
+        raise AssertionError(f"unexpected preview hash for {path}")
+
+    monkeypatch.setattr("splendor.commands.repo_scan.sha256_file", fail_hash)
+
+    result = scan_repo(tmp_path)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
+    assert result.candidate_sources[0].status == "candidate"
 
 
 def test_repo_scan_preview_is_non_mutating_for_existing_workspace_metadata(
@@ -411,6 +436,7 @@ def test_repo_scan_globstar_matches_zero_or_more_path_segments(tmp_path: Path) -
 
 
 def test_repo_scan_respects_gitignore(tmp_path: Path) -> None:
+    _require_git()
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
     (tmp_path / ".gitignore").write_text("generated.md\n", encoding="utf-8")
@@ -435,6 +461,7 @@ def test_repo_scan_respects_gitignore(tmp_path: Path) -> None:
 def test_repo_scan_respects_gitignore_when_workspace_is_repository_subdirectory(
     tmp_path: Path,
 ) -> None:
+    _require_git()
     repo_root = tmp_path / "project"
     workspace_root = repo_root / "workspace"
     workspace_root.mkdir(parents=True)
@@ -460,6 +487,7 @@ def test_repo_scan_respects_gitignore_when_workspace_is_repository_subdirectory(
 
 
 def test_repo_scan_prunes_gitignored_directories_before_walking(tmp_path: Path) -> None:
+    _require_git()
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
     (tmp_path / ".gitignore").write_text("vendor/\n", encoding="utf-8")

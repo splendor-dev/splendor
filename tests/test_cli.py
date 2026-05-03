@@ -246,6 +246,28 @@ def test_cli_repo_refresh_json_command(tmp_path: Path, capsys) -> None:
     ]
 
 
+def test_cli_repo_scan_preview_shows_source_id_for_new_version_candidate(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    (tmp_path / "splendor.yaml").unlink()
+    source = tmp_path / "README.md"
+    source.write_text("# One\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = load_source_record(
+        next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    ).source_id
+    source.write_text("# Two\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "repo", "scan"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "README.md: new_version_candidate" in captured.out
+    assert f"source_id={source_id}" in captured.out
+
+
 def test_cli_add_source_command_reports_workspace_backed_registration(
     tmp_path: Path, capsys
 ) -> None:
