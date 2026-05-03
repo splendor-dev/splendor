@@ -188,9 +188,19 @@ ingest through the same ledger used by `add-source`. It carries the manifest's
 capture keeps that behavior even if the previous version had no `source_commit` value:
 
 ```bash
+uv run splendor --root /tmp/demo-repo source freshness
+uv run splendor --root /tmp/demo-repo source freshness --json
+uv run splendor --root /tmp/demo-repo source freshness --report /tmp/demo-repo/reports/source-freshness.json
 uv run splendor --root /tmp/demo-repo source refresh product-note.md
 uv run splendor --root /tmp/demo-repo ingest --pending
 ```
+
+`source freshness` is a safe preview. By default it writes nothing and reports unchanged, changed,
+missing, historical, and unsupported source freshness states for curated sources. Workspace-backed
+changed sources include manifest/current checksums and exact next commands; older source versions
+for paths already covered by a current manifest are reported as historical. Non-workspace sources
+are reported as unsupported for this preview. Relative `--report` paths use the current working
+directory.
 
 Refresh does not override active ingest leases or dead-letter protections; use `queue retry` or
 `repair ingest` for those recovery cases.

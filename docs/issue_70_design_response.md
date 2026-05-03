@@ -76,8 +76,10 @@ The next implementation slices should document and then implement these contract
 - M13-P2.2 must update CLI help, README/quickstart guidance, and tests around the new preview
   default, the `--apply` compatibility path, JSON output, report persistence, class filters, and
   large-candidate refusal.
-- A freshness workflow reports curated sources whose current canonical file content differs from
-  the manifest checksum and prints exact next commands.
+- `splendor source freshness` reports curated sources whose current canonical file content differs
+  from the manifest checksum, prints path-first status with exact next commands, supports JSON and
+  explicit report output, separates historical source versions from actionable stale paths, and does
+  not mutate manifests or derived state by default.
 - `brief --agent-context` leads with actual project state, stale/contested/actionable items, and
   next actions before metadata.
 - A future `suggest-next` command ranks work from open tasks, stale sources, failed jobs, missing

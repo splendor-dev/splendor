@@ -334,17 +334,17 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M13-P2.1`
+- Previous completed PR sub-slice: `M13-P2.2`
 - Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.2`
+- Current PR sub-slice: `M13-P2.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.3`
+- Next planned PR sub-slice: `M13-P2.4`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The current M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
 shifting agent-facing value toward freshness, contested knowledge, planning state, and next
-actions. The lifecycle marker means `M13-P2.2` is in progress on feature branches and merged once
+actions. The lifecycle marker means `M13-P2.3` is in progress on feature branches and merged once
 the same committed state is observed on `main`.
 
 ---
@@ -773,7 +773,7 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 - versioned schemas
 - issue #70 design response
 - safe repo discovery and curation controls
-- source freshness and diff-since-ingest reporting
+- source freshness and manifest-drift reporting
 - higher-signal agent handoff and next-action guidance
 - source-summary policy and path-first UX
 - release finalization after the redesign lands
@@ -786,7 +786,7 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 ### Current PR sub-slices
 - `M13-P2.1` Docs-only design reset and roadmap realignment
 - `M13-P2.2` Safe repo scan candidate discovery
-- `M13-P2.3` Source freshness / diff-since-ingest workflow
+- `M13-P2.3` Source freshness / manifest-drift workflow
 - `M13-P2.4` Agent handoff brief and suggest-next
 - `M13-P2.5` Source-summary policy and path-first UX
 
