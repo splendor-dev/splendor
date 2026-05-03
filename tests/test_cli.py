@@ -742,6 +742,28 @@ def test_cli_source_freshness_reports_changed_workspace_sources_without_mutating
     assert not list((tmp_path / "reports").glob("**/*.json"))
 
 
+def test_cli_source_freshness_quotes_changed_source_path_next_command(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief with spaces.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "freshness", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    item = payload["sources"][0]
+    assert item["status"] == "changed"
+    assert item["next_commands"] == [
+        "splendor source refresh 'brief with spaces.md'",
+        "splendor ingest --pending",
+    ]
+
+
 def test_cli_source_freshness_json_reports_unchanged_missing_and_unsupported(
     tmp_path: Path, capsys
 ) -> None:

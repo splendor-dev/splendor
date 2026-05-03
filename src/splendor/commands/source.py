@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -399,7 +400,7 @@ def _workspace_freshness_items(
                     current_checksum=current_checksum,
                     message="canonical workspace source differs from manifest checksum",
                     next_commands=[
-                        f"splendor source refresh {source_ref}",
+                        _source_refresh_command(source_ref),
                         "splendor ingest --pending",
                     ],
                 )
@@ -419,6 +420,10 @@ def _workspace_freshness_items(
             )
         )
     return items
+
+
+def _source_refresh_command(source_ref: str) -> str:
+    return f"splendor source refresh {shlex.quote(source_ref)}"
 
 
 def _freshness_payload(root: Path, item: SourceFreshnessItem) -> dict[str, object]:
