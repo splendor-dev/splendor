@@ -328,10 +328,21 @@ The CLI now includes `splendor repo scan` for deterministic repo-native discover
 
 Current runtime behavior:
 
-- scan supported in-repo text/code files without ingesting them
-- register newly discovered files through the existing source manifest workflow
-- backfill deterministic classification metadata on already-registered workspace-backed sources
-- ignore Splendor-managed directories and transient cache/build directories
+- bare `splendor repo scan` is a non-mutating candidate preview
+- preview mode writes no source manifests, wiki pages, derived artifacts, queue records, run
+  records, or reports
+- `--json` emits machine-readable preview JSON to stdout
+- `--report PATH` writes only an explicit discovery report JSON
+- candidates include repo-relative paths, source classes, labels, status, and already-curated
+  source identity when a workspace-backed source manifest already tracks the path
+- ignored paths include a deterministic reason such as `managed_or_transient`, `gitignore`,
+  `include_patterns`, `exclude_patterns`, or `class_filter`
+- mutating registration requires `--apply` plus `--class ...` or `--all`
+- large apply runs require `--allow-large-apply` after preview review
+- scan honors `sources.include_patterns`, `sources.exclude_patterns`, and
+  `sources.repo_scan_default_classes` from `splendor.yaml`
+- scan skips Git-ignored files, Splendor-managed directories, dependency directories, and
+  transient cache/build directories by default
 
 ## Repo refresh
 
@@ -339,10 +350,13 @@ The CLI now includes `splendor repo refresh` for deterministic repo-aware wiki m
 
 Current runtime behavior:
 
-- run repo discovery using the existing repo-scan registration path
-- write machine-generated architecture and topic pages for repository structure and source linkage
-- link generated pages to discovered source IDs through frontmatter and provenance links
+- run safe repo discovery without registering new source manifests by default
+- write machine-generated architecture and topic pages for repository structure and curated source
+  linkage
+- link generated pages to already-curated source IDs through frontmatter and provenance links
 - update the wiki index and log idempotently
+- mutating scan registration requires `repo refresh --apply-scan` plus `--class ...` or `--all`;
+  large apply runs also require `--allow-large-apply`
 
 ## Review config
 

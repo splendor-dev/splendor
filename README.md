@@ -136,14 +136,13 @@ Implemented today:
 
 Not implemented yet:
 
-- safe-by-default non-mutating `repo scan` candidate discovery
 - mutating review-gated `splendor wiki compile`
 - heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
 - changed-files-driven refresh suggestions
 
-Current `splendor repo scan` is broad and mutating. On real repositories, prefer curated
-`add-source` registration until the M13-P2 safe discovery redesign from issue #70 lands.
+`splendor repo scan` is safe by default: it previews candidates without writing manifests or
+derived state. Registration requires `repo scan --apply` plus `--class ...` or `--all`.
 
 Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
 `derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
@@ -164,12 +163,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P1.1`
+- Previous completed PR sub-slice: `M13-P2.1`
 - Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.1`
+- Current PR sub-slice: `M13-P2.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.2`
+- Next planned PR sub-slice: `M13-P2.3`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -222,3 +221,8 @@ candidate reports, curated source manifests, source freshness, and higher-signal
 - [x] document planned interfaces for `repo scan`, freshness, `brief --agent-context`, and
   `suggest-next`
 - [x] avoid Python, schema, test, and runtime behavior changes
+
+`M13-P2.2` makes `splendor repo scan` safe by default. Bare scan now previews candidates without
+writing manifests or derived state, `--json` emits the preview, and `--report PATH` writes only an
+explicit discovery report. Registration moved behind `--apply` plus `--class ...` or `--all`, with
+large candidate sets refused unless `--allow-large-apply` is passed after review.

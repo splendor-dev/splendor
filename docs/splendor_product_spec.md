@@ -784,20 +784,22 @@ Current implementation:
 - Mutating `splendor wiki compile <source-id>` remains deferred to a later reviewed compile-loop
   slice.
 
-Planned M13-P2 contracts:
+M13-P2 repo-discovery contracts:
 
-- `splendor repo scan` should default to a non-mutating candidate preview that writes no source
-  manifests unless the user passes an explicit apply flag.
-- This preview default is an intentional safety-breaking CLI change. The previous mutating behavior
-  moves to `repo scan --apply`; the bare command should say that it is preview-only and print the
-  exact apply command.
-- Repo scan should support class filters, include/exclude patterns from `splendor.yaml`, and guard
-  against large candidate sets before registration.
-- Broad registration should require explicit all/classes opt-in and should refuse huge candidate
-  sets unless the operator passes documented confirmation flags.
-- `splendor.yaml` should add planned `sources.include_patterns`, `sources.exclude_patterns`, and a
-  repo-scan default class policy that favors documentation/curated knowledge over all supported
-  files.
+- `splendor repo scan` defaults to a non-mutating candidate preview that writes no source manifests,
+  wiki pages, derived artifacts, queue records, run records, or reports.
+- `splendor repo scan --json` emits the same preview to stdout. Persisting a discovery report
+  requires `--report PATH`, and that path writes only report JSON.
+- Mutating registration from scan requires `--apply` plus either `--class ...` or `--all`; the bare
+  command says it is preview-only and prints the explicit apply command.
+- Repo scan supports class filters, include/exclude patterns from `splendor.yaml`, and large
+  candidate-set guards before registration. Exclude patterns win over include patterns, and class
+  filters apply after include/exclude filtering.
+- Broad registration refuses large candidate sets unless the operator passes
+  `--allow-large-apply` after reviewing the preview/report.
+- `splendor.yaml` supports `sources.include_patterns`, `sources.exclude_patterns`, and
+  `sources.repo_scan_default_classes`; the default class policy favors documentation/curated
+  knowledge over all supported files.
 - A freshness workflow should report curated sources whose canonical file content differs from the
   manifest checksum and should include source IDs, titles, paths, status, and exact next commands.
 - `brief --agent-context` should lead with project state, stale/contested/actionable items, and
@@ -1181,14 +1183,12 @@ Current source settings:
 - `sources.ocr_provider`: OCR provider name, currently `sidecar-text`
 - `sources.ocr_sidecar_suffix`: sidecar suffix appended to the resolved source path, default
   `.ocr.txt`
-
-Planned source-discovery settings:
 - `sources.include_patterns`: optional workspace-root-relative POSIX glob patterns that define
   repo-scan candidate inclusion
 - `sources.exclude_patterns`: optional workspace-root-relative POSIX glob patterns that skip
   generated/noisy paths; exclude matches win over include matches
 - `sources.repo_scan_default_classes`: class policy for non-mutating candidate discovery, applied
-  after include/exclude filtering
+  after include/exclude filtering, default `["documentation"]`
 
 Repo scan should skip Git-ignored files, Splendor state/output directories, dependency directories,
 build artifacts, and other generated paths by default unless a future explicit override flag

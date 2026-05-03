@@ -129,23 +129,58 @@ def test_cli_brief_parser_accepts_agent_context() -> None:
     assert args.json_output is True
 
 
-def test_cli_repo_scan_parser_accepts_json_flag() -> None:
+def test_cli_repo_scan_parser_accepts_preview_apply_and_report_flags() -> None:
     parser = build_parser()
 
-    args = parser.parse_args(["repo", "scan", "--json"])
+    args = parser.parse_args(
+        [
+            "repo",
+            "scan",
+            "--apply",
+            "--class",
+            "documentation",
+            "--class",
+            "code",
+            "--all",
+            "--allow-large-apply",
+            "--report",
+            "reports/repo-scan.json",
+            "--json",
+        ]
+    )
 
     assert args.command == "repo"
     assert args.repo_command == "scan"
+    assert args.apply is True
+    assert args.class_filters == ["documentation", "code"]
+    assert args.all_classes is True
+    assert args.allow_large_apply is True
+    assert args.report == Path("reports/repo-scan.json")
     assert args.json_output is True
 
 
-def test_cli_repo_refresh_parser_accepts_json_flag() -> None:
+def test_cli_repo_refresh_parser_accepts_apply_scan_flags() -> None:
     parser = build_parser()
 
-    args = parser.parse_args(["repo", "refresh", "--json"])
+    args = parser.parse_args(
+        [
+            "repo",
+            "refresh",
+            "--apply-scan",
+            "--class",
+            "documentation",
+            "--all",
+            "--allow-large-apply",
+            "--json",
+        ]
+    )
 
     assert args.command == "repo"
     assert args.repo_command == "refresh"
+    assert args.apply_scan is True
+    assert args.class_filters == ["documentation"]
+    assert args.all_classes is True
+    assert args.allow_large_apply is True
     assert args.json_output is True
 
 
@@ -209,6 +244,28 @@ def test_cli_repo_refresh_json_command(tmp_path: Path, capsys) -> None:
         "wiki/architecture/repository-structure.md",
         "wiki/topics/repository-sources.md",
     ]
+
+
+def test_cli_repo_scan_preview_shows_source_id_for_new_version_candidate(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    (tmp_path / "splendor.yaml").unlink()
+    source = tmp_path / "README.md"
+    source.write_text("# One\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = load_source_record(
+        next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    ).source_id
+    source.write_text("# Two\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "repo", "scan"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "README.md: new_version_candidate" in captured.out
+    assert f"source_id={source_id}" in captured.out
 
 
 def test_cli_add_source_command_reports_workspace_backed_registration(

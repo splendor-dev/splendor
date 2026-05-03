@@ -32,11 +32,12 @@ def test_repo_refresh_creates_architecture_and_topic_pages(tmp_path: Path) -> No
     result = refresh_repo(tmp_path)
 
     assert result.scan.scanned == 5
+    assert result.scan.registered == 0
     assert result.generated_page_refs == [
         "wiki/architecture/repository-structure.md",
         "wiki/topics/repository-sources.md",
     ]
-    assert len(result.linked_source_ids) == 5
+    assert result.linked_source_ids == []
 
     architecture = parse_wiki_markdown(tmp_path / result.generated_page_refs[0])
     topic = parse_wiki_markdown(tmp_path / result.generated_page_refs[1])
@@ -47,8 +48,27 @@ def test_repo_refresh_creates_architecture_and_topic_pages(tmp_path: Path) -> No
     assert topic.frontmatter.kind == "topic"
     assert topic.frontmatter.page_id == "topic-repository-sources"
     assert topic.frontmatter.related_pages == ["architecture-repository-structure"]
-    assert "src/main.py" in architecture.body
+    assert "src/main.py" not in architecture.body
     assert "| `README.md` |" in topic.body
+    assert architecture.frontmatter.source_refs == result.linked_source_ids
+    assert topic.frontmatter.source_refs == result.linked_source_ids
+
+
+def test_repo_refresh_apply_scan_requires_explicit_opt_in(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    _write_repo_files(tmp_path)
+
+    result = refresh_repo(tmp_path, apply_scan=True, all_classes=True, allow_large_apply=True)
+
+    assert result.scan.scanned == 5
+    assert result.scan.registered == 5
+    assert len(result.linked_source_ids) == 5
+
+    architecture = parse_wiki_markdown(tmp_path / result.generated_page_refs[0])
+    topic = parse_wiki_markdown(tmp_path / result.generated_page_refs[1])
+    assert "src/main.py" in architecture.body
+    assert "| `src/main.py` |" in topic.body
     assert architecture.frontmatter.source_refs == result.linked_source_ids
     assert topic.frontmatter.source_refs == result.linked_source_ids
 
@@ -78,11 +98,12 @@ def test_render_repo_refresh_json_matches_expected_shape(tmp_path: Path) -> None
     payload = json.loads(render_repo_refresh_json(refresh_repo(tmp_path)))
 
     assert payload["scanned"] == 5
-    assert payload["registered"] == 5
+    assert payload["registered"] == 0
     assert payload["already_registered"] == 0
-    assert payload["class_counts"]["code"] == 2
+    assert payload["class_counts"]["code"] == 0
+    assert payload["class_counts"]["documentation"] == 2
     assert payload["generated_page_refs"] == [
         "wiki/architecture/repository-structure.md",
         "wiki/topics/repository-sources.md",
     ]
-    assert len(payload["linked_source_ids"]) == 5
+    assert payload["linked_source_ids"] == []

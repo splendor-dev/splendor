@@ -11,7 +11,7 @@ from typing import Annotated
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from splendor.schemas.types import StorageMode, SummaryMode
+from splendor.schemas.types import SourceClass, StorageMode, SummaryMode
 
 CONFIG_FILENAME = "splendor.yaml"
 
@@ -45,6 +45,9 @@ class SourcesConfig(BaseModel):
     ocr_enabled: bool = False
     ocr_provider: str = "sidecar-text"
     ocr_sidecar_suffix: str = ".ocr.txt"
+    include_patterns: list[str] = Field(default_factory=list)
+    exclude_patterns: list[str] = Field(default_factory=list)
+    repo_scan_default_classes: list[SourceClass] = Field(default_factory=lambda: ["documentation"])
 
 
 class ContradictionsReviewConfig(BaseModel):
