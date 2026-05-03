@@ -736,7 +736,7 @@ This workflow should start with text-native sources and deterministic page-impac
 compile step may remain human-reviewed or LLM-assisted behind explicit confirmation until the
 contract is trustworthy.
 
-Initial `splendor wiki compile <source-id>` support is intentionally non-mutating. It validates the
+Current `splendor wiki compile <source-id>` support is intentionally non-mutating. It validates the
 source record and prints the review-gated contract: inspect the source summary, run source-impact
 suggestions, propose synthesis-page edits with provenance/run state, keep generated source-summary
 pages separate from maintained synthesis pages, and require human review before wiki synthesis is
@@ -760,6 +760,8 @@ Current implementation:
 - `splendor source refresh <source-id|title|path>` detects changed source content, registers the
   current bytes as a new canonical source version when the checksum changed, and queues ingest via
   the existing queue ledger while preserving active-lease and dead-letter protections.
+  Stable logical source identities, explicit source supersession fields, automated historical
+  pruning, and topic-ref migration remain later lifecycle work.
 - `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.
@@ -816,6 +818,17 @@ M13-P2 repo-discovery contracts:
 - `splendor suggest-next [goal]` ranks work from open tasks, stale sources, failed jobs, missing
   synthesis, contested/review-needed pages, maintenance reports, and goal matches. `--json` emits a
   machine-readable handoff payload.
+
+Release-readiness boundary:
+
+- v1 treats content-addressed source IDs as the persisted compatibility contract.
+- readable paths, titles, and source refs are lookup and display aids, not durable aliases yet.
+- generated source-summary pages, queue records, run records, derived artifacts, and explicit
+  reports are committed when they explain a reviewed workspace update; failed or exploratory local
+  reports can remain local.
+- issue #72's desired stable logical source identities, `supersedes`/`superseded_by` source
+  lifecycle, one-command workspace refresh, superseded-state pruning, and `pr-summary` surface are
+  post-v1 or later M13-P3 follow-ups unless a future roadmap slice explicitly pulls them forward.
 
 Later optional support:
 - additional OCR providers
@@ -1266,6 +1279,8 @@ These are not blockers to the spec, but should remain visible:
 7. whether a companion-repo linking model needs a first-class schema element
 8. post-v1 refinements to generated source-summary policy for readable in-repo markdown and code
    files, after the v1 default of concise claim-bearing excerpts has been exercised in real repos
+9. stable logical source identities, source supersession semantics, pruning policy, and PR-summary
+   tooling for lower-churn agent workflows
 
 ## 31. Summary Product Statement
 

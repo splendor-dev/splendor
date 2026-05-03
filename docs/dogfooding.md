@@ -69,3 +69,14 @@ uv run splendor serve
 Then inspect `/browse`, `/status`, `/sources/<source-id>`, and
 `/search?q=LLM+Wiki+persistent+knowledge` in the local web UI. A sparse workspace should show an
 explicit empty state with next commands instead of appearing broken.
+
+## Current Release-Hardening Notes
+
+M13-P2 addressed the largest issue #70 dogfood failure: broad repo discovery is now a non-mutating
+candidate preview unless the operator explicitly applies a reviewed class or all-class selection.
+Use `source freshness`, `brief --agent-context`, and `suggest-next` before deciding whether a
+workspace needs ingest, synthesis review, queue repair, or planning follow-up.
+
+Do not expect the current workflow to provide stable logical source identities, source
+supersession/pruning, one-command full workspace refresh, or PR-summary generation yet. Those are
+tracked from issue #72 as later lifecycle improvements.

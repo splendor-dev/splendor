@@ -60,9 +60,9 @@ Splendor keeps a durable project wiki in git.
 EOF
 
 uv run splendor --root /tmp/demo-repo add-source /tmp/demo-repo/product-note.md
-# Copy the printed src-... identifier from the command output.
-
-uv run splendor --root /tmp/demo-repo ingest <source-id>
+uv run splendor --root /tmp/demo-repo ingest --pending
+uv run splendor --root /tmp/demo-repo source lookup product-note
+# Use the source_id printed by source lookup in the next command.
 uv run splendor --root /tmp/demo-repo task create "Publish MVP docs" --priority high --source-ref <source-id>
 uv run splendor --root /tmp/demo-repo query "durable wiki"
 uv run splendor --root /tmp/demo-repo lint
@@ -102,7 +102,7 @@ The companion-repo guidance and sample agent instructions live in
 
 - A hosted service
 - A full web UI product beyond the local read-only inspection shell
-- An OCR or image-ingestion pipeline in the current MVP
+- A heavyweight OCR or image-ingestion platform
 - A mandatory GitHub-only workflow
 
 ## Current MVP Surface
@@ -139,7 +139,9 @@ Not implemented yet:
 - mutating review-gated `splendor wiki compile`
 - heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
-- changed-files-driven refresh suggestions
+- stable logical source identities and supersession-aware pruning
+- one-command full workspace refresh for changed sources
+- PR-oriented generated-state summaries such as `splendor pr-summary --since main`
 
 `splendor repo scan` is safe by default: it previews candidates without writing manifests or
 derived state. Registration requires `repo scan --apply` plus `--class ...` or `--all`.
@@ -175,12 +177,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P2.4`
-- Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.5`
+- Previous completed PR sub-slice: `M13-P2.5`
+- Current planned slice: `M13-P3`
+- Current PR sub-slice: `M13-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P3`
-- Next planned PR sub-slice: `M13-P3.1`
+- Next planned PR sub-slice: `M13-P3.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -222,7 +224,7 @@ changing canonical source IDs. `M11-P2.1` is implemented: it adds CLI-first topi
 deterministic templates, and wiki index rebuild support. `M11-P3.1` is implemented: it adds query
 filters for tags/source refs and a compact agent-context handoff mode.
 
-`M12-P1.1`, `M12-P2.1`, and `M13-P1.1` are implemented. The current M13-P2 work responds to the
+`M12-P1.1`, `M12-P2.1`, and `M13-P1.1` are implemented. The M13-P2 sequence responded to the
 first real agent-experience report in issue #70 by redesigning repo discovery around safe
 candidate reports, curated source manifests, source freshness, and higher-signal agent handoffs.
 
@@ -251,3 +253,29 @@ stale/contested/review-needed pages, missing synthesis follow-up, active plannin
 maintenance reports, and query matches for the optional goal. `brief --agent-context` now leads
 with the same suggested work before the lower-level metadata lists. Use `--json` on either command
 for machine handoff.
+
+`M13-P2.5` is implemented: source-summary pages now keep readable in-repo source summaries compact
+and claim-bearing by default, while external, copied, parsed PDF, and OCR-derived sources keep
+fuller extracts when the generated artifact is the practical review surface. Human-facing output
+leads with source paths or refs before canonical source IDs where practical.
+
+`M13-P3.1` is the release-hardening pass. It reconciles the release-facing docs with the current
+CLI, clarifies generated-state review policy, and records the v1 readiness audit. The audit treats
+issue #41's briefing and non-mutating compile contract, #42's next-action hints, #43's pending
+ingest handoff, #44's query snippets, #45's web status/source detail pages, and #46's page-state
+visibility as represented in current behavior. It still calls out #41's mutating compile/update
+workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Issues #30 and #37
+remain post-v1 performance work. Issues #70 and #72 stay open as parent feedback loops, with #72's
+stable logical source identities, supersession lifecycle, full workspace refresh, pruning, and
+PR-summary ideas deferred to later M13-P3 or post-v1 planning.
+
+### v1 readiness checklist
+
+- [x] Safe repo discovery is non-mutating by default and requires explicit apply flags.
+- [x] Curated source manifests remain the durable registry instead of a broad file mirror.
+- [x] Source freshness reports changed curated workspace sources without mutating state.
+- [x] Agent handoff surfaces rank next actions before metadata.
+- [x] Generated source-summary pages have a clear review policy and path-first display.
+- [x] CLI, schema, quickstart, automation, and dogfooding docs describe the same current behavior.
+- [ ] Full refresh lifecycle, stable logical source IDs, supersession/pruning, and PR-summary
+  tooling are planned follow-ups, not v1 blockers.

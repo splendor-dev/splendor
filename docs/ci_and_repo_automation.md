@@ -93,6 +93,8 @@ Reviewed output paths:
 
 - `wiki/**`
 - `raw/sources/**`
+- source manifests, queue/run records, derived artifacts, and explicit reports when they are part
+  of the reviewed generated workspace update
 
 Permissions:
 
@@ -111,6 +113,7 @@ Review expectations:
 
 - confirm generated wiki/source-registry changes match the repository state
 - confirm the generating workflow's Splendor lint job passed
+- distinguish reviewer-significant generated artifacts from mechanical timestamp-only churn
 - manually dispatch or rerun normal CI if repository policy requires checks on the generated PR
 
 ## `planning-validator`
@@ -307,6 +310,14 @@ Required secrets:
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
 - `pre-commit.ci autofix trigger` bridges bot PRs and `pre-commit.ci` label-based autofix behavior.
 - `weekly-repo-review` is scheduled maintenance, not a merge gate.
+
+## v1 release-hardening boundaries
+
+The current automation layer supports CI, maintenance reports, generated-change PRs, PR context
+refresh, review automation, and optional weekly repo review. It does not yet provide stable logical
+source identities, supersession-aware pruning, a one-command full workspace refresh, or
+`splendor pr-summary --since main`. Those belong to later source-lifecycle or PR-summary slices,
+not the M13-P3.1 release-hardening pass.
 
 ## Planning update rule for PRs
 

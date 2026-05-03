@@ -10,8 +10,9 @@ not just a bug report. The accepted direction is the middle-ground redesign:
 - make broad repo discovery safe before it can create manifest or wiki churn
 - focus agent-facing value on freshness, contested knowledge, planning state, and next actions
 
-This note is a planning contract for the M13-P2 implementation sequence. It does not describe
-current runtime behavior where noted as planned.
+This note began as the planning contract for the M13-P2 implementation sequence. As of M13-P3.1,
+the safe-discovery, freshness, handoff, and path-first source-summary parts have landed; the issue
+remains open as the parent agent-usefulness feedback loop.
 
 ## What Went Wrong
 
@@ -53,9 +54,9 @@ Source-summary pages remain useful for opaque, transformed, external, PDF, OCR, 
 hard-to-read sources. For readable in-repo markdown and code, summaries should become policy-driven
 rather than assumed to be the primary value.
 
-## Planned Interface Direction
+## Implemented Interface Direction
 
-The next implementation slices should document and then implement these contracts:
+M13-P2 documented and implemented these contracts:
 
 - `splendor repo scan` defaults to a non-mutating candidate preview. Non-mutating means stdout
   output only by default: no source manifests, wiki pages, derived artifacts, queue records, run
@@ -63,19 +64,18 @@ The next implementation slices should document and then implement these contract
 - `repo scan --json` emits the same preview as machine-readable JSON to stdout. Persisting a
   discovery report requires an explicit output flag such as `--report PATH`, and that flag writes
   only the report, not source manifests.
-- Mutating registration from scan requires `--apply`. This is an intentional safety-breaking
-  change from the current mutating default: the old behavior moves behind `--apply`, and the bare
-  command should clearly say that it is preview-only and print the exact apply command.
+- Mutating registration from scan requires `--apply`. This replaced the old mutating default: the
+  bare command now reports preview-only behavior and prints an explicit apply command.
 - Broad registration requires explicit class/all opt-in and should refuse huge candidate sets
   without confirmation flags.
 - `repo scan` supports class filtering, such as `--class documentation`, `--class code`, and
   `--class configuration`.
-- `splendor.yaml` supports planned `sources.include_patterns` and `sources.exclude_patterns`.
+- `splendor.yaml` supports `sources.include_patterns` and `sources.exclude_patterns`.
 - Scan candidate output includes paths, classes, labels, ignore reasons, and whether a source is
   already curated.
-- M13-P2.2 must update CLI help, README/quickstart guidance, and tests around the new preview
-  default, the `--apply` compatibility path, JSON output, report persistence, class filters, and
-  large-candidate refusal.
+- M13-P2.2 updated CLI help, README/quickstart guidance, and tests around the preview default, the
+  `--apply` compatibility path, JSON output, report persistence, class filters, and large-candidate
+  refusal.
 - `splendor source freshness` reports curated sources whose current canonical file content differs
   from the manifest checksum, prints path-first status with exact next commands, supports JSON and
   explicit report output, separates historical source versions from actionable stale paths, and does
@@ -94,9 +94,32 @@ The next implementation slices should document and then implement these contract
 
 ## Roadmap Impact
 
-M13-P2 now owns the Issue #70 agent-usefulness redesign. Release finalization moves behind that
-work because Splendor is not v1-ready while a reasonable agent can accidentally register thousands
-of files from a broad scan.
+M13-P2 owns the Issue #70 agent-usefulness redesign. Release finalization moved behind that work
+because Splendor was not v1-ready while a reasonable agent could accidentally register thousands of
+files from a broad scan.
 
-Issue #70 remains open as the parent product-feedback issue until the implementation slices
-substantially address the scan safety, freshness, handoff, and path-first UX gaps.
+Issue #70 remains open as the parent product-feedback issue for residual agent-usefulness feedback
+after the scan safety, freshness, handoff, and path-first UX gaps were substantially addressed.
+
+## M13-P3.1 Issue Audit
+
+- #70 is substantially addressed for scan safety, curated curation, source freshness, ranked
+  handoff, and path-first source-summary UX, but it remains open as the parent feedback loop.
+- #72 is a separate parent feedback loop for source-refresh lifecycle and agent workflow. Its stable
+  logical source identities, `supersedes`/`superseded_by`, full workspace refresh, pruning, and
+  `pr-summary` requests remain later M13-P3 or post-v1 work.
+- #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
+  `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
+  deferred.
+- #42 has shipped restrained next-action hints around add-source, ingest, query/file-answer,
+  briefing, and suggest-next flows.
+- #43 has shipped pending ingest queue handoff for CLI-created sources, and docs now show the
+  `add-source -> ingest --pending -> source lookup` path so users do not need to copy long source
+  IDs for the first ingest.
+- #44 has shipped claim-bearing query snippets for generated source-summary pages.
+- #45 has shipped read-only web status and source-detail surfaces; mutating web actions remain out
+  of scope.
+- #46 has shipped clearer generated-versus-maintained page-state visibility across docs,
+  status/query output, source summaries, and web/status surfaces.
+- #47 remains open as an ingest/run-state timing follow-up.
+- #30 and #37 remain post-v1 performance/scaling follow-ups.
