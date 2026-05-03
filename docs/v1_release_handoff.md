@@ -54,7 +54,6 @@ For this handoff:
 
 These items are intentionally not v1 release blockers:
 
-- superseded generated-state pruning and topic-ref migration
 - `splendor pr-summary --since main`
 - authority and staleness metadata for living planning docs
 - lower-noise generated-state review policies beyond the current reviewer-significance guidance
@@ -67,14 +66,13 @@ These items are intentionally not v1 release blockers:
 The conservative next queue is:
 
 1. Continue #72 implementation after the workspace-backed `source:<path>` logical ID layer,
-   supersession-aware source refresh, and safe workspace refresh path.
-2. Add superseded generated-state pruning and topic-ref migration on top of the explicit
-   supersession lifecycle.
-3. Add `splendor pr-summary --since main` only after source lifecycle churn is explicit enough to
+   supersession-aware source refresh, safe workspace refresh path, superseded generated-state
+   pruning, and topic-ref migration.
+2. Add `splendor pr-summary --since main` only after source lifecycle churn is explicit enough to
    summarize reliably.
-4. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
+3. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
    scope.
-5. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
+4. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
 Do not ask the SynthBanshee Claude agent for the major "try Splendor again" re-evaluation until

@@ -1124,6 +1124,145 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
     assert main(["--root", str(tmp_path), "health"]) == 0
 
 
+def test_cli_workspace_refresh_prunes_superseded_summaries_and_updates_topic_refs(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    write_config(tmp_path, config)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "add-topic",
+            "Brief Synthesis",
+            "--source-refs",
+            original_id,
+        ]
+    )
+    topic_path = tmp_path / "wiki" / "topics" / "brief-synthesis.md"
+    topic_path.write_text(
+        topic_path.read_text(encoding="utf-8")
+        + "\nHistorical note: keep old source id in prose "
+        + f"`{original_id}`.\n\n"
+        + "```text\n"
+        + f"`{original_id}`\n"
+        + "```\n\n"
+        + "## Historical\n\n"
+        + f"- `{original_id}`\n",
+        encoding="utf-8",
+    )
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--rebuild-index",
+            "--prune-superseded",
+            "--update-topic-refs",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    refreshed_id = payload["refreshed"][0]["source_id"]
+    assert payload["pruning"]["pruned"] == [
+        {
+            "path": f"wiki/sources/{original_id}.md",
+            "source_id": original_id,
+            "superseded_by": refreshed_id,
+            "manifest_path": f"state/manifests/sources/{original_id}.json",
+        }
+    ]
+    assert payload["topic_ref_migration"]["updated"] == [
+        {
+            "path": "wiki/topics/brief-synthesis.md",
+            "replacements": {original_id: refreshed_id},
+        }
+    ]
+    assert not (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
+    assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
+    original_manifest = load_source_record(
+        tmp_path / "state" / "manifests" / "sources" / f"{original_id}.json"
+    )
+    assert f"wiki/sources/{original_id}.md" not in original_manifest.linked_pages
+
+    topic_text = (tmp_path / "wiki" / "topics" / "brief-synthesis.md").read_text(encoding="utf-8")
+    frontmatter_text = topic_text.removeprefix("---\n").split("\n---\n", maxsplit=1)[0]
+    topic_frontmatter = yaml.safe_load(frontmatter_text)
+    assert topic_frontmatter["source_refs"] == [refreshed_id]
+    assert f"- `{refreshed_id}`" in topic_text
+    assert f"Historical note: keep old source id in prose `{original_id}`." in topic_text
+    assert f"```text\n`{original_id}`\n```" in topic_text
+    assert f"## Historical\n\n- `{original_id}`" in topic_text
+    index_text = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+    assert f"sources/{original_id}.md" not in index_text
+    assert f"sources/{refreshed_id}.md" in index_text
+
+    assert main(["--root", str(tmp_path), "lint"]) == 0
+    assert main(["--root", str(tmp_path), "health"]) == 0
+
+
+def test_cli_workspace_refresh_reports_skipped_superseded_prune_candidates(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--rebuild-index",
+        ]
+    )
+    old_summary = tmp_path / "wiki" / "sources" / f"{original_id}.md"
+    old_summary.write_text("not frontmatter\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--prune-superseded",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["pruning"]["candidates"] == 1
+    assert payload["pruning"]["pruned"] == []
+    assert payload["pruning"]["skipped"][0]["path"] == f"wiki/sources/{original_id}.md"
+    assert payload["pruning"]["skipped"][0]["source_id"] == original_id
+    assert "missing YAML frontmatter" in payload["pruning"]["skipped"][0]["reason"]
+    assert old_summary.exists()
+
+
 def test_cli_workspace_refresh_ingests_only_refreshed_sources(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     changed_source = tmp_path / "changed.md"

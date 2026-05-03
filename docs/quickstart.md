@@ -237,10 +237,10 @@ they support the workspace update under review. They are deterministic state, no
 analysis. Failed or exploratory local reports do not need to be committed unless the report itself
 is the artifact being reviewed.
 
-`source refresh` currently creates a new canonical content-addressed source version when bytes
-change. Stable logical source identities, source supersession fields, automated pruning, topic-ref
-migration, and a one-command full workspace refresh remain planned follow-ups rather than required
-v1 behavior.
+`source refresh` creates a new canonical content-addressed source version when bytes change.
+Workspace-backed sources keep stable logical IDs, and `workspace refresh --changed` can combine
+changed-source refresh, targeted ingest, index rebuild, superseded generated-summary pruning, and
+maintained-page topic-ref migration through explicit flags.
 
 ## 5. Add a planning record
 

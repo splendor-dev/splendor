@@ -775,15 +775,20 @@ Current implementation:
   Stable logical source identities now remain constant for workspace-backed source paths across
   those content-addressed versions. Refresh also links changed versions with `supersedes` and
   `superseded_by` so health treats older workspace-backed manifests as historical records instead
-  of active current-byte targets. Automated historical pruning and topic-ref migration remain later
-  lifecycle work.
+  of active current-byte targets.
 - `splendor workspace refresh --changed` safely refreshes only changed curated workspace-backed
   sources by composing `source freshness` with the supersession-aware `source refresh` path. It
   fails before mutating when active curated workspace sources are missing, can ingest only refreshed
   sources' queue jobs with `--ingest`, and can rebuild `wiki/index.md` after successful targeted
-  ingest with `--rebuild-index`. JSON output reports both initial and final freshness counts. It
-  does not discover or register uncurated files, prune superseded generated state, migrate topic
-  refs, or mutate maintained synthesis pages.
+  ingest with `--rebuild-index`. JSON output reports both initial and final freshness counts.
+  `--prune-superseded` deletes old generated source-summary pages only after a current successor
+  summary exists, removes stale generated-page links from the superseded source manifest, and keeps
+  historical source manifests and run records valid. Unsafe prune candidates are reported with
+  skip reasons instead of silently ignored. `--update-topic-refs` rewrites maintained wiki page
+  `source_refs` and generated source-reference list bullets from superseded source IDs to the
+  active content-addressed source version, while leaving prose and code-fence mentions untouched.
+  It does not discover or register uncurated files or run mutating synthesis compile/update
+  workflows.
 - `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.
@@ -854,9 +859,10 @@ Release-readiness boundary:
   reports can remain local.
 - issue #72's desired stable logical source identity and source-supersession layers have started
   with workspace-backed `source:<path>` aliases plus `supersedes`/`superseded_by` source-version
-  links. The safe workspace refresh path over curated workspace-backed sources has also landed.
-  Superseded-state pruning/topic-ref migration and the `pr-summary` surface remain follow-ups
-  unless a future roadmap slice explicitly pulls them forward.
+  links. The safe workspace refresh path over curated workspace-backed sources has also landed,
+  including explicit superseded source-summary pruning and maintained-page source-ref migration.
+  The `pr-summary` surface remains a follow-up unless a future roadmap slice explicitly pulls it
+  forward.
 - issue #79 tracks the deferred mutating compile/update workflow from #41; v1 ships briefing and
   the non-mutating compile contract only.
 - `docs/v1_release_handoff.md` is the v1 handoff checklist for final validation, GitHub metadata,

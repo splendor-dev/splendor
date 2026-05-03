@@ -11,7 +11,7 @@ from splendor.commands.ingest import enqueue_ingest_job
 from splendor.commands.init import initialize_workspace
 from splendor.config import default_config, load_config, write_config
 from splendor.layout import resolve_layout
-from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
+from splendor.schemas import KnowledgePageFrontmatter, ProvenanceLink, QueueItemRecord, RunRecord
 from splendor.state.runtime import write_queue_item, write_run_record
 from splendor.state.source_registry import load_source_record, write_source_record
 
@@ -84,6 +84,56 @@ def test_run_health_checks_accepts_superseded_workspace_source_versions(
     result = _run_health(tmp_path)
 
     assert result.issues == []
+
+
+def test_run_health_checks_only_exempts_exact_pruned_superseded_summary_refs(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    refreshed = add_source(tmp_path, source)
+    original = load_source_record(added.manifest_path).model_copy(
+        update={"superseded_by": refreshed.source_id}
+    )
+    updated = load_source_record(refreshed.manifest_path).model_copy(
+        update={"supersedes": [added.source_id]}
+    )
+    write_source_record(added.manifest_path, original)
+    write_source_record(refreshed.manifest_path, updated)
+    run = RunRecord(
+        run_id="run-pruned",
+        job_id=f"ingest-{added.source_id}",
+        job_type="ingest_source",
+        started_at="2026-01-01T00:00:00+00:00",
+        finished_at="2026-01-01T00:00:01+00:00",
+        status="succeeded",
+        pipeline_version=__version__,
+        source_ids=[added.source_id],
+        page_ids=[added.source_id, "topic-missing"],
+        page_refs=[f"wiki/sources/{added.source_id}.md", "wiki/topics/missing.md"],
+        provenance_links=[
+            ProvenanceLink(
+                page_id=added.source_id,
+                path_ref=f"wiki/sources/{added.source_id}.md",
+                role="generated-page",
+            ),
+            ProvenanceLink(page_id="topic-missing", role="generated-page"),
+            ProvenanceLink(path_ref="wiki/topics/missing.md", role="generated-page"),
+        ],
+    )
+    write_run_record(tmp_path / "state" / "runs" / "run-pruned.json", run)
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing-run-page-id",
+        "missing-run-page-ref",
+        "missing-run-provenance-page-ref",
+        "missing-run-provenance-path",
+    ]
 
 
 def test_run_health_checks_still_validates_superseded_copied_source_artifacts(

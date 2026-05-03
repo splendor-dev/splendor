@@ -56,6 +56,44 @@ def _should_resolve_source_content(source: SourceRecord) -> bool:
     )
 
 
+def _is_superseded_workspace_source(
+    source_id: str,
+    source_records: dict[str, tuple[Path, SourceRecord]],
+) -> bool:
+    source_entry = source_records.get(source_id)
+    if source_entry is None:
+        return False
+    _, source = source_entry
+    return (
+        source.superseded_by is not None
+        and source.source_ref_kind == "workspace_path"
+        and effective_storage_mode(source) == "none"
+    )
+
+
+def _is_expected_pruned_source_summary_page_id(
+    page_id: str,
+    run_record: RunRecord,
+    source_records: dict[str, tuple[Path, SourceRecord]],
+) -> bool:
+    return page_id in run_record.source_ids and _is_superseded_workspace_source(
+        page_id, source_records
+    )
+
+
+def _is_expected_pruned_source_summary_ref(
+    page_ref: str,
+    run_record: RunRecord,
+    source_records: dict[str, tuple[Path, SourceRecord]],
+) -> bool:
+    for source_id in run_record.source_ids:
+        if not _is_superseded_workspace_source(source_id, source_records):
+            continue
+        if page_ref == f"wiki/sources/{source_id}.md":
+            return True
+    return False
+
+
 def _append_issue(
     issues: list[MaintenanceIssue],
     *,
@@ -661,6 +699,8 @@ def _validate_run_record(
     for page_id in run_record.page_ids:
         if page_id in wiki_pages:
             continue
+        if _is_expected_pruned_source_summary_page_id(page_id, run_record, source_records):
+            continue
         _append_issue(
             issues,
             code="missing-run-page-id",
@@ -684,6 +724,8 @@ def _validate_run_record(
             )
             continue
         if not resolved.is_file():
+            if _is_expected_pruned_source_summary_ref(page_ref, run_record, source_records):
+                continue
             _append_issue(
                 issues,
                 code="missing-run-page-ref",
@@ -704,14 +746,17 @@ def _validate_run_record(
                 check_name="run-provenance",
             )
         if link.page_id is not None and link.page_id not in wiki_pages:
-            _append_issue(
-                issues,
-                code="missing-run-provenance-page-ref",
-                message=f"Run provenance references unknown page: {link.page_id}",
-                path=run_relpath,
-                record_id=canonical_run_id,
-                check_name="run-provenance",
-            )
+            if not _is_expected_pruned_source_summary_page_id(
+                link.page_id, run_record, source_records
+            ):
+                _append_issue(
+                    issues,
+                    code="missing-run-provenance-page-ref",
+                    message=f"Run provenance references unknown page: {link.page_id}",
+                    path=run_relpath,
+                    record_id=canonical_run_id,
+                    check_name="run-provenance",
+                )
         if (
             link.run_id is not None
             and link.run_id != canonical_run_id
@@ -740,6 +785,8 @@ def _validate_run_record(
             )
             continue
         if not resolved.exists():
+            if _is_expected_pruned_source_summary_ref(link.path_ref, run_record, source_records):
+                continue
             _append_issue(
                 issues,
                 code="missing-run-provenance-path",
