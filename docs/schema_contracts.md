@@ -211,6 +211,12 @@ Implemented fields:
   source-reference list bullets from superseded source IDs to the active content-addressed source
   version, leaving prose and code-fence mentions untouched. The command does not perform broad repo
   discovery, register uncurated files, or run mutating synthesis compile/update workflows.
+- `splendor pr-summary --since main` is a read-only PR handoff view over local git diff/status and
+  existing report files. It groups curated source manifests, generated source-summary pages,
+  maintained wiki/topic pages, queue/run/report/derived generated-state churn, latest local
+  lint/health report status when available, and reviewer notes. `--json` emits the same structure
+  for agents. The command does not create manifests, queue jobs, wiki pages, run records, reports,
+  or GitHub state.
 - `splendor suggest-next [goal]` is a read-only handoff view over existing deterministic state. It
   does not create planning records, queue jobs, manifests, wiki pages, run records, or reports.
   Human output is path-first where possible; `--json` emits ranked action objects with category,
@@ -272,6 +278,8 @@ In this release:
   rewrite
 - safe workspace refresh composes existing source, queue, ingest, wiki-index, and wiki-frontmatter
   records without changing schema version `1`
+- PR-summary output is derived from existing schema-version-1 files and local git state; it is not a
+  persisted schema and does not require a schema-version bump
 
 ## Knowledge page frontmatter
 
@@ -443,9 +451,10 @@ Current runtime behavior:
 - The release-ready core is file-based, deterministic, and compatible with legacy `path`-only
   source manifests.
 - Source freshness, suggest-next, and agent briefing use existing records as read-only signals.
-- Stable logical source identities are schema-version-1-compatible optional fields above the
-  content-addressed `source_id` compatibility contract. Supersession-aware history remains deferred
-  so it can be designed without breaking the v1 manifest contract.
+- Stable logical source identities, supersession-aware history, superseded summary pruning,
+  maintained-page source-ref migration, and PR-summary handoff output are all
+  schema-version-1-compatible layers above the content-addressed `source_id` compatibility
+  contract.
 - Lint validates present workspace-backed logical identity fields: `logical_id` must match
   `source:<source_ref>`, persisted aliases must stay scoped to the canonical workspace path, and
   exact identities must not point at conflicting canonical source refs.

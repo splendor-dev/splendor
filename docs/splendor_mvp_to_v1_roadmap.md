@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P1.3`
-- Current planned slice: `M14-P1`
-- Current PR sub-slice: `M14-P1.4`
+- Previous completed PR sub-slice: `M14-P1.4`
+- Current planned slice: `M14-P2`
+- Current PR sub-slice: `M14-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M14-P2`
-- Next planned PR sub-slice: `M14-P2.1`
+- Next planned slice: `SynthBanshee re-evaluation gate`
+- Next planned PR sub-slice: `TBD`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -821,9 +821,9 @@ frontmatter, manifests, and run records continue to use canonical IDs for compat
 `M13-P3.1` is the release-hardening and v1 readiness audit. It keeps the implementation surface
 stable, reconciles README, quickstart, schema/product docs, roadmap, CI/GitHub automation docs, and
 dogfooding guidance with the current product, and records per-issue status for the open feedback
-threads. It does not add SQLite, vector search, background workers, mutating web UI, broad refresh
-lifecycle machinery, stable logical source identities, supersedes/superseded_by source semantics,
-pruning, or PR-summary tooling.
+threads. Later M14 slices added stable logical source identities, supersedes/superseded_by source
+semantics, safe workspace refresh, pruning, topic-ref migration, and PR-summary tooling without
+adding SQLite, vector search, background workers, mutating web UI, or broad refresh discovery.
 
 `M13-P3.2` is the final release checklist and post-v1 handoff. It keeps runtime behavior stable,
 adds the concise release handoff in `docs/v1_release_handoff.md`, and makes the post-v1 queue
@@ -843,7 +843,7 @@ performance/scaling follow-ups.
   identify that #72 now owns remaining source lifecycle and agent-workflow follow-up.
 - [x] Issue #72 remains the parent feedback loop for source-refresh lifecycle and agent workflow;
   stable logical source identities, source supersession, safe workspace refresh, superseded
-  summary pruning, and topic-ref migration have landed; `pr-summary` remains post-v1 work.
+  summary pruning, topic-ref migration, and `splendor pr-summary --since main` have landed.
 - [x] Issue #79 tracks the deferred mutating compile/update path from #41 so #41 can stay closed for
   the shipped v1 briefing and non-mutating compile-contract scope.
 - [x] Final release handoff records validation commands, docs state, issue state, GitHub metadata,
@@ -903,12 +903,18 @@ post-#72 lifecycle loop is substantially implemented. The intended sequence befo
    `splendor workspace refresh --changed --ingest --rebuild-index`, limited to curated
    workspace-backed source manifests.
 5. `M14-P1.4` handles superseded generated-state pruning and topic-ref migration.
-6. `M14-P2.1` adds `splendor pr-summary --since main` or an equivalent PR-oriented summary with
-   lower-noise generated-state review guidance.
+6. `M14-P2.1` adds `splendor pr-summary --since main`, a read-only PR-oriented summary with
+   lower-noise generated-state review guidance over local git state.
 
 After those slices land, the external-agent retry should use a comparable real planning or
 repo-maintenance workflow and explicitly compare against #72. Earlier feedback should be requested
 only for the narrower safe-discovery, freshness, and handoff surfaces already shipped in M13.
+
+`M14-P2.1` keeps the command non-mutating and schema-version-1-compatible. It summarizes curated
+source manifests, generated source-summary pages, maintained wiki/topic pages, queue/run/report
+churn, latest local lint/health reports when available, and reviewer notes that distinguish
+meaningful generated knowledge from mechanical runtime records. JSON output is available for agent
+handoff.
 
 ### Boundaries
 - Promote these candidates to committed roadmap slices only after the child issues and GitHub

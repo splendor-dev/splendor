@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -122,6 +123,16 @@ def test_cli_workspace_refresh_parser_accepts_safe_refresh_flags() -> None:
     assert args.changed is True
     assert args.ingest is True
     assert args.rebuild_index is True
+    assert args.json_output is True
+
+
+def test_cli_pr_summary_parser_accepts_since_and_json() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["pr-summary", "--since", "origin/main", "--json"])
+
+    assert args.command == "pr-summary"
+    assert args.since == "origin/main"
     assert args.json_output is True
 
 
@@ -1334,6 +1345,84 @@ def test_cli_workspace_refresh_human_output_is_path_first(tmp_path: Path, capsys
     assert re.search(r"- brief\.md: refreshed source_id=src-[a-f0-9]{16}", out)
     assert f"Previous source ID: {original_id}" in out
     assert "Next: splendor ingest --pending" in out
+
+
+def test_cli_pr_summary_reports_generated_state_without_mutating(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "lint"])
+    main(["--root", str(tmp_path), "health"])
+    capsys.readouterr()
+    report_paths_before = sorted(
+        path.relative_to(tmp_path).as_posix() for path in tmp_path.glob("reports/**/*.json")
+    )
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    source_manifest = payload["curated_sources"][0]
+    assert source_manifest["action"] == "added"
+    assert source_manifest["path"].startswith("state/manifests/sources/")
+    assert source_manifest["source_ref"] == "brief.md"
+    assert source_manifest["logical_id"] == "source:brief.md"
+    assert payload["source_summary_pages"]["added"] == [
+        f"wiki/sources/{source_manifest['source_id']}.md"
+    ]
+    assert payload["generated_state"]["queue"]["added"] == [
+        f"state/queue/ingest-{source_manifest['source_id']}.json"
+    ]
+    assert payload["generated_state"]["runs"]["added"]
+    assert payload["maintenance"]["lint"]["status"] == "passed"
+    assert payload["maintenance"]["health"]["status"] == "passed"
+    assert any("queue, run, and report files" in note for note in payload["reviewer_notes"])
+    assert (
+        sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.glob("reports/**/*.json"))
+        == report_paths_before
+    )
+
+
+def test_cli_pr_summary_human_output_is_path_first(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "PR summary since main" in out
+    assert re.search(r"- state/manifests/sources/src-[a-f0-9]+\.json: added", out)
+    assert "Source ref: brief.md" in out
+    assert "Generated state:" in out
+    assert "- queue: total=1" in out
+    assert "No local lint report was found" in out
+
+
+def _git_init_main(root: Path) -> None:
+    subprocesses = [
+        ["git", "init", "-b", "main"],
+        ["git", "config", "user.email", "splendor@example.test"],
+        ["git", "config", "user.name", "Splendor Tests"],
+        ["git", "add", "."],
+        ["git", "commit", "-m", "baseline"],
+    ]
+    for command in subprocesses:
+        result = subprocess.run(
+            command,
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
 
 
 def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, capsys) -> None:

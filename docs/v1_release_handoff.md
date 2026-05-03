@@ -49,14 +49,14 @@ For this handoff:
 - #47 remains open as the real ingest run-duration bug
 - #30 remains open as post-v1 repo-scan registration performance work
 - #37 remains open as post-v1 web document-list scaling work
+- #72 is unblocked for the planned SynthBanshee re-evaluation once `M14-P2.1` lands; do not close
+  the parent issue before the external retry is recorded
 
 ## Known Non-Blockers
 
 These items are intentionally not v1 release blockers:
 
-- `splendor pr-summary --since main`
 - authority and staleness metadata for living planning docs
-- lower-noise generated-state review policies beyond the current reviewer-significance guidance
 - ingest run-duration precision for #47
 - repo-scan bulk registration optimization for #30
 - web document-list scaling for #37
@@ -68,8 +68,8 @@ The conservative next queue is:
 1. Continue #72 implementation after the workspace-backed `source:<path>` logical ID layer,
    supersession-aware source refresh, safe workspace refresh path, superseded generated-state
    pruning, and topic-ref migration.
-2. Add `splendor pr-summary --since main` only after source lifecycle churn is explicit enough to
-   summarize reliably.
+2. Use `splendor pr-summary --since main` during review handoff to explain source lifecycle,
+   maintained wiki, source-summary, and mechanical generated-state changes.
 3. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
    scope.
 4. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
@@ -87,7 +87,7 @@ bundle is:
    index rebuild, and a health-clean end state.
 5. `M14-P1.4` Superseded generated-state pruning and topic-ref migration.
 6. `M14-P2.1` PR summary and lower-noise generated-state review handoff, including
-   `splendor pr-summary --since main` or an equivalent reviewed output.
+   `splendor pr-summary --since main`.
 
 After those slices land, ask the SynthBanshee Claude agent to retry a comparable real planning or
 repo-maintenance workflow and compare against the original #72 report. Before then, any retry
