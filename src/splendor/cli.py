@@ -36,6 +36,11 @@ from splendor.commands.planning import (
     list_tasks,
     update_question_answer,
 )
+from splendor.commands.pr_summary import (
+    PathGroup,
+    build_pr_summary,
+    render_pr_summary_json,
+)
 from splendor.commands.query import run_query
 from splendor.commands.queue import (
     QueueItemSnapshot,
@@ -383,6 +388,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     workspace_refresh_parser.set_defaults(handler=handle_workspace_refresh)
+
+    pr_summary_parser = subparsers.add_parser(
+        "pr-summary", help="Summarize PR-relevant Splendor state changes"
+    )
+    pr_summary_parser.add_argument(
+        "--since",
+        default="main",
+        help="Base git ref to compare against. Defaults to main.",
+    )
+    pr_summary_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    pr_summary_parser.set_defaults(handler=handle_pr_summary)
 
     materialize_parser = subparsers.add_parser(
         "materialize-source", help="Create or refresh a source storage artifact"
@@ -1413,6 +1434,75 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
     else:
         print("Next: splendor source freshness")
     return 0
+
+
+def handle_pr_summary(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        summary = build_pr_summary(root, since=args.since)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_pr_summary_json(summary))
+        return 0
+
+    print(f"PR summary since {summary.since}")
+    print(f"Merge base: {summary.merge_base}")
+    if summary.head is not None:
+        print(f"Head: {summary.head}")
+    print(f"Changed paths: {summary.changed_path_count}")
+    print("Curated sources:")
+    if not summary.curated_sources:
+        print("- none")
+    for source in summary.curated_sources:
+        print(f"- {source.path}: {source.action} source_id={source.source_id}")
+        if source.source_ref is not None:
+            print(f"  Source ref: {source.source_ref}")
+        if source.logical_id is not None:
+            print(f"  Logical ID: {source.logical_id}")
+        if source.supersedes:
+            print(f"  Supersedes: {', '.join(source.supersedes)}")
+        if source.superseded_by is not None:
+            print(f"  Superseded by: {source.superseded_by}")
+        if source.error is not None:
+            print(f"  Error: {source.error}")
+
+    _print_path_group("Generated source-summary pages", summary.source_summary_pages)
+    _print_path_group("Maintained wiki/topic pages", summary.maintained_wiki_pages)
+    print("Generated state:")
+    for label, group in summary.generated_state.items():
+        _print_path_group(f"- {label}", group, indent="  ")
+    _print_path_group("Other changed paths", summary.other_paths)
+
+    print("Latest local maintenance reports (not tied to current HEAD):")
+    for command in ("lint", "health"):
+        status = summary.maintenance.get(command)
+        if status is None:
+            print(f"- {command}: no local report found")
+            continue
+        print(
+            f"- {command}: {status.status} path={status.path} "
+            f"issues={status.issue_count if status.issue_count is not None else '-'}"
+        )
+        print(f"  Warning: {status.warning}")
+
+    print("Reviewer notes:")
+    for note in summary.reviewer_notes:
+        print(f"- {note}")
+    return 0
+
+
+def _print_path_group(label: str, group: PathGroup, *, indent: str = "") -> None:
+    print(f"{indent}{label}: total={group.total}")
+    for path in group.added:
+        print(f"{indent}- added: {path}")
+    for path in group.changed:
+        print(f"{indent}- changed: {path}")
+    for item in group.renamed:
+        print(f"{indent}- renamed: {item['from']} -> {item['to']}")
+    for path in group.deleted:
+        print(f"{indent}- deleted: {path}")
 
 
 def handle_materialize_source(args: argparse.Namespace) -> int:

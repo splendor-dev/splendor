@@ -109,8 +109,8 @@ in issue #72.
   freshness, ranked handoff, and path-first source-summary UX.
 - #72 is a separate parent feedback loop for source-refresh lifecycle and agent workflow. Stable
   workspace-backed `source:<path>` aliases, `supersedes`/`superseded_by`, safe workspace refresh,
-  superseded source-summary pruning, and topic-ref migration have landed; `pr-summary` remains
-  post-v1 work.
+  superseded source-summary pruning, topic-ref migration, and `splendor pr-summary --since main`
+  have landed; the parent issue remains open for the planned external-agent retry.
 - #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
   `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
   deferred and is tracked by #79.

@@ -789,6 +789,13 @@ Current implementation:
   active content-addressed source version, while leaving prose and code-fence mentions untouched.
   It does not discover or register uncurated files or run mutating synthesis compile/update
   workflows.
+- `splendor pr-summary --since main` is a read-only PR handoff command. It uses local git
+  diff/status from the merge base with the base ref, respects configured layout paths, and uses
+  existing report files to group curated source lifecycle changes, generated source-summary pages,
+  maintained wiki/topic edits, queue/run/report/derived churn, latest local lint/health report
+  status, and reviewer notes that separate meaningful generated knowledge from mechanical runtime
+  records. Latest maintenance status is explicitly reported as local report state rather than
+  fresh validation for the current `HEAD`. `--json` emits the same summary for agent handoff.
 - `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.
@@ -861,8 +868,8 @@ Release-readiness boundary:
   with workspace-backed `source:<path>` aliases plus `supersedes`/`superseded_by` source-version
   links. The safe workspace refresh path over curated workspace-backed sources has also landed,
   including explicit superseded source-summary pruning and maintained-page source-ref migration.
-  The `pr-summary` surface remains a follow-up unless a future roadmap slice explicitly pulls it
-  forward.
+  The `pr-summary` surface now provides a read-only local PR handoff over that generated-state
+  churn.
 - issue #79 tracks the deferred mutating compile/update workflow from #41; v1 ships briefing and
   the non-mutating compile contract only.
 - `docs/v1_release_handoff.md` is the v1 handoff checklist for final validation, GitHub metadata,
@@ -918,6 +925,10 @@ A source should not be re-ingested merely because it exists in the repo. Re-inge
 - the user explicitly requests re-ingestion
 - a repair job targets the source
 - a source refresh detects changed content and registers the current source version
+
+PR handoff summarization should not trigger re-ingestion. `splendor pr-summary --since main`
+observes local git state and existing report artifacts only; it does not refresh sources, enqueue
+jobs, run maintenance checks, or write reports.
 
 ## 16. Queue Model
 
@@ -1317,8 +1328,8 @@ These are not blockers to the spec, but should remain visible:
 7. whether a companion-repo linking model needs a first-class schema element
 8. post-v1 refinements to generated source-summary policy for readable in-repo markdown and code
    files, after the v1 default of concise claim-bearing excerpts has been exercised in real repos
-9. stable logical source identities, source supersession semantics, pruning policy, and PR-summary
-   tooling for lower-churn agent workflows
+9. authority and staleness metadata for living planning docs after the source-lifecycle and
+   PR-summary handoff loop has been exercised in real repos
 
 ## 31. Summary Product Statement
 

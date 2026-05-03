@@ -141,7 +141,6 @@ Not implemented yet:
 - mutating review-gated `splendor wiki compile`
 - heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
-- PR-oriented generated-state summaries such as `splendor pr-summary --since main`
 
 `splendor repo scan` is safe by default: it previews candidates without writing manifests or
 derived state. Registration requires `repo scan --apply` plus `--class ...` or `--all`.
@@ -161,6 +160,15 @@ page `source_refs` and generated source-reference list bullets from superseded s
 active source version ID. Prune JSON reports skipped unsafe candidates with reasons rather than
 deleting ambiguous state. The command does not discover or register uncurated files or mutate
 maintained synthesis content beyond that explicit source-ref migration.
+
+`splendor pr-summary --since main` is a read-only PR handoff command over local git state. It uses
+the merge base between `HEAD` and the base ref for PR-style diff semantics, then summarizes curated
+source manifests added, refreshed, superseded, or invalid; generated source-summary pages added,
+pruned, or changed; maintained wiki/topic pages changed; queue/run/report/derived generated-state
+churn; and the latest local lint/health report status when report files exist. Maintenance report
+status is labeled as latest local report state, not proof that this command ran validation for the
+current `HEAD`. Use `--json` for agent handoff. The command does not run lint or health, write
+reports, call GitHub, or mutate workspace state.
 
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
@@ -189,12 +197,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.3`
-- Current planned slice: `M14-P1`
-- Current PR sub-slice: `M14-P1.4`
+- Previous completed PR sub-slice: `M14-P1.4`
+- Current planned slice: `M14-P2`
+- Current PR sub-slice: `M14-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M14-P2`
-- Next planned PR sub-slice: `M14-P2.1`
+- Next planned slice: `SynthBanshee re-evaluation gate`
+- Next planned PR sub-slice: `TBD`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -285,7 +293,7 @@ workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Is
 remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
 stays open as the parent feedback loop; stable logical source identities, supersession lifecycle,
 safe workspace refresh, superseded summary pruning, and topic-ref migration have landed, while
-PR-summary ideas remain post-v1 planning work.
+PR-summary support is now represented by `splendor pr-summary --since main`.
 Issue #79 tracks the deferred mutating compile/update path from #41.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
@@ -308,6 +316,13 @@ exists, and `--update-topic-refs` migrates maintained wiki source references to 
 content-addressed source version while schema version `1` continues to validate `source_refs`
 against source manifests. Historical manifests and run records remain valid.
 
+`M14-P2.1` adds the read-only PR handoff surface:
+`splendor pr-summary --since main` groups merge-base changes into curated source lifecycle records,
+generated source-summary pages, maintained wiki/topic edits, generated queue/run/report churn, and
+latest local maintenance report status. The human output is path-first and layout-aware, and
+`--json` emits the same structure for agent handoff without mutating workspace state or depending
+on GitHub.
+
 ### v1 readiness checklist
 
 - [x] Safe repo discovery is non-mutating by default and requires explicit apply flags.
@@ -318,4 +333,4 @@ against source manifests. Historical manifests and run records remain valid.
 - [x] CLI, schema, quickstart, automation, and dogfooding docs describe the same current behavior.
 - [x] Final release handoff names validation, issue state, GitHub metadata, known non-blockers,
   and the post-v1 queue.
-- [ ] PR-summary tooling remains the next planned source-lifecycle handoff follow-up.
+- [x] PR-summary tooling gives reviewers a lower-noise generated-state handoff.
