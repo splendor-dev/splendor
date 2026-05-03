@@ -910,11 +910,12 @@ After those slices land, the external-agent retry should use a comparable real p
 repo-maintenance workflow and explicitly compare against #72. Earlier feedback should be requested
 only for the narrower safe-discovery, freshness, and handoff surfaces already shipped in M13.
 
-`M14-P2.1` keeps the command non-mutating and schema-version-1-compatible. It summarizes curated
-source manifests, generated source-summary pages, maintained wiki/topic pages, queue/run/report
-churn, latest local lint/health reports when available, and reviewer notes that distinguish
-meaningful generated knowledge from mechanical runtime records. JSON output is available for agent
-handoff.
+`M14-P2.1` keeps the command non-mutating and schema-version-1-compatible. It summarizes
+merge-base curated source manifests, generated source-summary pages, maintained wiki/topic pages,
+queue/run/report churn, latest local lint/health reports when available, and reviewer notes that
+distinguish meaningful generated knowledge from mechanical runtime records. It respects configured
+layout paths and reports malformed changed source manifests without aborting the whole handoff.
+JSON output is available for agent handoff.
 
 ### Boundaries
 - Promote these candidates to committed roadmap slices only after the child issues and GitHub

@@ -27,13 +27,14 @@ class ChangedPath:
 class SourceChange:
     action: str
     path: str
-    source_id: str
+    source_id: str | None
     title: str | None
     source_ref: str | None
     logical_id: str | None
     supersedes: list[str]
     superseded_by: str | None
     old_path: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,8 @@ class MaintenanceStatus:
     command: str
     status: str
     path: str
+    scope: str
+    warning: str
     created_at: str | None
     checked_count: int | None
     issue_count: int | None
@@ -62,6 +65,7 @@ class MaintenanceStatus:
 @dataclass(frozen=True)
 class PrSummary:
     since: str
+    merge_base: str
     head: str | None
     changed_path_count: int
     curated_sources: list[SourceChange]
@@ -77,24 +81,37 @@ def build_pr_summary(root: Path, *, since: str) -> PrSummary:
     root = root.resolve()
     _assert_git_ref(root, since)
     layout = resolve_layout(root, load_config(root))
-    changes = _changed_paths(root, since=since)
-    source_changes = _source_changes(root, since=since, changes=changes)
+    merge_base = _merge_base(root, since=since)
+    changes = _changed_paths(root, base_ref=merge_base)
+    source_changes = _source_changes(root, base_ref=merge_base, layout=layout, changes=changes)
     source_summary_pages = _group_paths(
-        change for change in changes if _is_source_summary_path(change.path)
+        change for change in changes if _is_source_summary_path(change.path, layout)
     )
     maintained_wiki_pages = _group_paths(
-        change for change in changes if _is_maintained_wiki_path(change.path)
+        change for change in changes if _is_maintained_wiki_path(change.path, layout)
     )
     generated_state = {
         "queue": _group_paths(
-            change for change in changes if change.path.startswith("state/queue/")
+            change for change in changes if _is_layout_child(change.path, layout, layout.queue_dir)
         ),
-        "runs": _group_paths(change for change in changes if change.path.startswith("state/runs/")),
+        "runs": _group_paths(
+            change for change in changes if _is_layout_child(change.path, layout, layout.runs_dir)
+        ),
         "queries": _group_paths(
-            change for change in changes if change.path.startswith("state/queries/")
+            change
+            for change in changes
+            if _is_layout_child(change.path, layout, layout.queries_dir)
         ),
-        "reports": _group_paths(change for change in changes if change.path.startswith("reports/")),
-        "derived": _group_paths(change for change in changes if change.path.startswith("derived/")),
+        "reports": _group_paths(
+            change
+            for change in changes
+            if _is_layout_child(change.path, layout, layout.reports_dir)
+        ),
+        "derived": _group_paths(
+            change
+            for change in changes
+            if _is_layout_child(change.path, layout, layout.derived_dir)
+        ),
     }
     categorized = set()
     for change in changes:
@@ -102,11 +119,12 @@ def build_pr_summary(root: Path, *, since: str) -> PrSummary:
             categorized.add(change.path)
     other_paths = _group_paths(change for change in changes if change.path not in categorized)
     maintenance = {
-        "lint": _latest_maintenance_status(root, command="lint"),
-        "health": _latest_maintenance_status(root, command="health"),
+        "lint": _latest_maintenance_status(root, layout=layout, command="lint"),
+        "health": _latest_maintenance_status(root, layout=layout, command="health"),
     }
     summary = PrSummary(
         since=since,
+        merge_base=merge_base,
         head=_git_text(root, ["rev-parse", "--short", "HEAD"], required=False),
         changed_path_count=len(changes),
         curated_sources=source_changes,
@@ -119,6 +137,7 @@ def build_pr_summary(root: Path, *, since: str) -> PrSummary:
     )
     return PrSummary(
         since=summary.since,
+        merge_base=summary.merge_base,
         head=summary.head,
         changed_path_count=summary.changed_path_count,
         curated_sources=summary.curated_sources,
@@ -139,6 +158,10 @@ def _assert_git_ref(root: Path, ref: str) -> None:
     _git_text(root, ["rev-parse", "--verify", f"{ref}^{{commit}}"])
 
 
+def _merge_base(root: Path, *, since: str) -> str:
+    return _git_text(root, ["merge-base", since, "HEAD"]) or since
+
+
 def _git_text(root: Path, args: list[str], *, required: bool = True) -> str | None:
     result = subprocess.run(
         ["git", *args],
@@ -155,8 +178,8 @@ def _git_text(root: Path, args: list[str], *, required: bool = True) -> str | No
     return result.stdout.strip()
 
 
-def _changed_paths(root: Path, *, since: str) -> list[ChangedPath]:
-    output = _git_text(root, ["diff", "--name-status", "-M", since, "--"]) or ""
+def _changed_paths(root: Path, *, base_ref: str) -> list[ChangedPath]:
+    output = _git_text(root, ["diff", "--name-status", "-M", base_ref, "--"]) or ""
     changes: dict[str, ChangedPath] = {}
     for line in output.splitlines():
         if not line.strip():
@@ -178,18 +201,42 @@ def _changed_paths(root: Path, *, since: str) -> list[ChangedPath]:
     return sorted(changes.values(), key=lambda change: change.path)
 
 
-def _source_changes(root: Path, *, since: str, changes: list[ChangedPath]) -> list[SourceChange]:
-    layout = resolve_layout(root, load_config(root))
+def _source_changes(
+    root: Path,
+    *,
+    base_ref: str,
+    layout: ResolvedLayout,
+    changes: list[ChangedPath],
+) -> list[SourceChange]:
     result: list[SourceChange] = []
     for change in changes:
         if not _is_source_manifest_path(change.path, layout):
             continue
-        current = _load_current_source(root, change.path)
-        previous = _load_source_at_ref(root, since, change.old_path or change.path)
+        current, current_error = _load_current_source(root, change.path)
+        previous, previous_error = _load_source_at_ref(
+            root, base_ref, change.old_path or change.path
+        )
         source = current or previous
+        error = current_error or previous_error
         if source is None:
+            result.append(
+                SourceChange(
+                    action="invalid",
+                    path=change.path,
+                    old_path=change.old_path,
+                    source_id=Path(change.path).stem,
+                    title=None,
+                    source_ref=None,
+                    logical_id=None,
+                    supersedes=[],
+                    superseded_by=None,
+                    error=error or "source manifest could not be loaded",
+                )
+            )
             continue
         action = _source_action(change, current=current, previous=previous)
+        if error is not None:
+            action = "invalid"
         result.append(
             SourceChange(
                 action=action,
@@ -201,6 +248,7 @@ def _source_changes(root: Path, *, since: str, changes: list[ChangedPath]) -> li
                 logical_id=effective_logical_id(source),
                 supersedes=list(source.supersedes),
                 superseded_by=source.superseded_by,
+                error=error,
             )
         )
     return result
@@ -211,19 +259,25 @@ def _is_source_manifest_path(path: str, layout: ResolvedLayout) -> bool:
     return path.startswith(f"{source_dir}/") and path.endswith(".json")
 
 
-def _load_current_source(root: Path, path: str) -> SourceRecord | None:
+def _load_current_source(root: Path, path: str) -> tuple[SourceRecord | None, str | None]:
     source_path = root / path
     if not source_path.is_file():
-        return None
-    return load_source_record(source_path)
+        return None, None
+    try:
+        return load_source_record(source_path), None
+    except Exception as exc:
+        return None, str(exc)
 
 
-def _load_source_at_ref(root: Path, ref: str, path: str) -> SourceRecord | None:
+def _load_source_at_ref(root: Path, ref: str, path: str) -> tuple[SourceRecord | None, str | None]:
     content = _git_text(root, ["show", f"{ref}:{path}"], required=False)
     if content is None:
-        return None
-    payload = json.loads(content)
-    return SourceRecord.model_validate(payload)
+        return None, None
+    try:
+        payload = json.loads(content)
+        return SourceRecord.model_validate(payload), None
+    except Exception as exc:
+        return None, str(exc)
 
 
 def _source_action(
@@ -249,32 +303,33 @@ def _source_action(
     return "changed"
 
 
-def _is_source_summary_path(path: str) -> bool:
-    return path.startswith("wiki/sources/") and path.endswith(".md")
+def _is_layout_child(path: str, layout: ResolvedLayout, directory: Path) -> bool:
+    prefix = directory.relative_to(layout.root).as_posix()
+    return path.startswith(f"{prefix}/")
 
 
-def _is_maintained_wiki_path(path: str) -> bool:
-    return path.startswith("wiki/") and path.endswith(".md") and not _is_source_summary_path(path)
+def _is_source_summary_path(path: str, layout: ResolvedLayout) -> bool:
+    return _is_layout_child(path, layout, layout.wiki_sources_dir) and path.endswith(".md")
 
 
-def _in_group(change: ChangedPath, group_key: str) -> bool:
-    return change.path.startswith(
-        {
-            "queue": "state/queue/",
-            "runs": "state/runs/",
-            "queries": "state/queries/",
-            "reports": "reports/",
-            "derived": "derived/",
-        }[group_key]
+def _is_maintained_wiki_path(path: str, layout: ResolvedLayout) -> bool:
+    return (
+        _is_layout_child(path, layout, layout.wiki_dir)
+        and path.endswith(".md")
+        and not _is_source_summary_path(path, layout)
     )
 
 
 def _is_categorized_path(change: ChangedPath, layout: ResolvedLayout) -> bool:
     return (
         _is_source_manifest_path(change.path, layout)
-        or _is_source_summary_path(change.path)
-        or _is_maintained_wiki_path(change.path)
-        or any(_in_group(change, key) for key in ("queue", "runs", "queries", "reports", "derived"))
+        or _is_source_summary_path(change.path, layout)
+        or _is_maintained_wiki_path(change.path, layout)
+        or _is_layout_child(change.path, layout, layout.queue_dir)
+        or _is_layout_child(change.path, layout, layout.runs_dir)
+        or _is_layout_child(change.path, layout, layout.queries_dir)
+        or _is_layout_child(change.path, layout, layout.reports_dir)
+        or _is_layout_child(change.path, layout, layout.derived_dir)
     )
 
 
@@ -300,12 +355,15 @@ def _group_paths(changes: Iterable[ChangedPath]) -> PathGroup:
     )
 
 
-def _latest_maintenance_status(root: Path, *, command: str) -> MaintenanceStatus | None:
-    report_dir = root / "reports" / command
+def _latest_maintenance_status(
+    root: Path, *, layout: ResolvedLayout, command: str
+) -> MaintenanceStatus | None:
+    report_dir = layout.reports_dir / command
     candidates = sorted(report_dir.glob("*.json"))
     if not candidates:
         return None
     latest = candidates[-1]
+    warning = "Latest local report only; not tied to the current HEAD or diff."
     try:
         report = MaintenanceReport.model_validate_json(latest.read_text(encoding="utf-8"))
     except Exception as exc:
@@ -313,6 +371,8 @@ def _latest_maintenance_status(root: Path, *, command: str) -> MaintenanceStatus
             command=command,
             status="unreadable",
             path=latest.relative_to(root).as_posix(),
+            scope="latest_local_report",
+            warning=warning,
             created_at=None,
             checked_count=None,
             issue_count=None,
@@ -322,6 +382,8 @@ def _latest_maintenance_status(root: Path, *, command: str) -> MaintenanceStatus
         command=command,
         status=report.status,
         path=latest.relative_to(root).as_posix(),
+        scope="latest_local_report",
+        warning=warning,
         created_at=report.created_at,
         checked_count=report.checked_count,
         issue_count=report.issue_count,
@@ -357,7 +419,11 @@ def _reviewer_notes(summary: PrSummary) -> list[str]:
             notes.append(
                 f"No local {command} report was found; run `splendor {command}` before handoff."
             )
-        elif status.status != "passed":
+        else:
+            notes.append(
+                f"{command} status is from the latest local report, not from this command."
+            )
+        if status is not None and status.status != "passed":
             notes.append(
                 f"Latest {command} report is {status.status} at {status.path}; "
                 "inspect it before PR review."

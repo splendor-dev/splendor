@@ -1378,6 +1378,8 @@ def test_cli_pr_summary_reports_generated_state_without_mutating(tmp_path: Path,
     ]
     assert payload["generated_state"]["runs"]["added"]
     assert payload["maintenance"]["lint"]["status"] == "passed"
+    assert payload["maintenance"]["lint"]["scope"] == "latest_local_report"
+    assert "not tied to the current HEAD" in payload["maintenance"]["lint"]["warning"]
     assert payload["maintenance"]["health"]["status"] == "passed"
     assert any("queue, run, and report files" in note for note in payload["reviewer_notes"])
     assert (
@@ -1399,11 +1401,90 @@ def test_cli_pr_summary_human_output_is_path_first(tmp_path: Path, capsys) -> No
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "PR summary since main" in out
+    assert "Merge base:" in out
     assert re.search(r"- state/manifests/sources/src-[a-f0-9]+\.json: added", out)
     assert "Source ref: brief.md" in out
     assert "Generated state:" in out
     assert "- queue: total=1" in out
     assert "No local lint report was found" in out
+
+
+def test_cli_pr_summary_uses_merge_base_when_main_advances(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    _git_run(tmp_path, ["git", "switch", "-c", "feature"])
+    feature_path = tmp_path / "feature.md"
+    feature_path.write_text("# Feature\n", encoding="utf-8")
+    _git_run(tmp_path, ["git", "add", "feature.md"])
+    _git_run(tmp_path, ["git", "commit", "-m", "feature change"])
+    _git_run(tmp_path, ["git", "switch", "main"])
+    main_path = tmp_path / "main-only.md"
+    main_path.write_text("# Main only\n", encoding="utf-8")
+    _git_run(tmp_path, ["git", "add", "main-only.md"])
+    _git_run(tmp_path, ["git", "commit", "-m", "main change"])
+    _git_run(tmp_path, ["git", "switch", "feature"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["merge_base"] != _git_stdout(tmp_path, ["git", "rev-parse", "main"])
+    assert payload["other_paths"]["added"] == ["feature.md"]
+    assert "main-only.md" not in json.dumps(payload)
+
+
+def test_cli_pr_summary_respects_custom_layout_paths(tmp_path: Path, capsys) -> None:
+    config = load_config(tmp_path)
+    config.layout.wiki_dir = "knowledge"
+    config.layout.state_dir = "custom-state"
+    config.layout.reports_dir = "custom-reports"
+    config.layout.source_records_dir = "custom-state/manifests/sources"
+    write_config(tmp_path, config)
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "lint"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    source_id = payload["curated_sources"][0]["source_id"]
+    assert payload["curated_sources"][0]["path"] == (
+        f"custom-state/manifests/sources/{source_id}.json"
+    )
+    assert payload["source_summary_pages"]["added"] == [f"knowledge/sources/{source_id}.md"]
+    assert payload["generated_state"]["queue"]["added"] == [
+        f"custom-state/queue/ingest-{source_id}.json"
+    ]
+    assert payload["generated_state"]["reports"]["added"]
+    assert payload["maintenance"]["lint"]["path"].startswith("custom-reports/lint/")
+
+
+def test_cli_pr_summary_reports_invalid_source_manifest_without_aborting(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    manifest = tmp_path / "state" / "manifests" / "sources" / "src-bad.json"
+    manifest.write_text("{bad json}\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload["curated_sources"]) == 1
+    invalid_source = payload["curated_sources"][0]
+    assert invalid_source["action"] == "invalid"
+    assert "Invalid JSON" in invalid_source["error"]
+    assert invalid_source["path"] == "state/manifests/sources/src-bad.json"
+    assert invalid_source["source_id"] == "src-bad"
 
 
 def _git_init_main(root: Path) -> None:
@@ -1415,14 +1496,30 @@ def _git_init_main(root: Path) -> None:
         ["git", "commit", "-m", "baseline"],
     ]
     for command in subprocesses:
-        result = subprocess.run(
-            command,
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, result.stderr
+        _git_run(root, command)
+
+
+def _git_run(root: Path, command: list[str]) -> None:
+    result = subprocess.run(
+        command,
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def _git_stdout(root: Path, command: list[str]) -> str:
+    result = subprocess.run(
+        command,
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
 
 
 def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, capsys) -> None:

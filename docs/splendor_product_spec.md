@@ -790,10 +790,12 @@ Current implementation:
   It does not discover or register uncurated files or run mutating synthesis compile/update
   workflows.
 - `splendor pr-summary --since main` is a read-only PR handoff command. It uses local git
-  diff/status and existing report files to group curated source lifecycle changes, generated
-  source-summary pages, maintained wiki/topic edits, queue/run/report/derived churn, latest local
-  lint/health report status, and reviewer notes that separate meaningful generated knowledge from
-  mechanical runtime records. `--json` emits the same summary for agent handoff.
+  diff/status from the merge base with the base ref, respects configured layout paths, and uses
+  existing report files to group curated source lifecycle changes, generated source-summary pages,
+  maintained wiki/topic edits, queue/run/report/derived churn, latest local lint/health report
+  status, and reviewer notes that separate meaningful generated knowledge from mechanical runtime
+  records. Latest maintenance status is explicitly reported as local report state rather than
+  fresh validation for the current `HEAD`. `--json` emits the same summary for agent handoff.
 - `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.

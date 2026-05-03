@@ -161,12 +161,14 @@ active source version ID. Prune JSON reports skipped unsafe candidates with reas
 deleting ambiguous state. The command does not discover or register uncurated files or mutate
 maintained synthesis content beyond that explicit source-ref migration.
 
-`splendor pr-summary --since main` is a read-only PR handoff command over local git state. It
-summarizes curated source manifests added, refreshed, or superseded; generated source-summary
-pages added, pruned, or changed; maintained wiki/topic pages changed; queue/run/report/derived
-generated-state churn; and the latest local lint/health report status when report files exist. Use
-`--json` for agent handoff. The command does not run lint or health, write reports, call GitHub, or
-mutate workspace state.
+`splendor pr-summary --since main` is a read-only PR handoff command over local git state. It uses
+the merge base between `HEAD` and the base ref for PR-style diff semantics, then summarizes curated
+source manifests added, refreshed, superseded, or invalid; generated source-summary pages added,
+pruned, or changed; maintained wiki/topic pages changed; queue/run/report/derived generated-state
+churn; and the latest local lint/health report status when report files exist. Maintenance report
+status is labeled as latest local report state, not proof that this command ran validation for the
+current `HEAD`. Use `--json` for agent handoff. The command does not run lint or health, write
+reports, call GitHub, or mutate workspace state.
 
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
@@ -315,10 +317,11 @@ content-addressed source version while schema version `1` continues to validate 
 against source manifests. Historical manifests and run records remain valid.
 
 `M14-P2.1` adds the read-only PR handoff surface:
-`splendor pr-summary --since main` groups local changes into curated source lifecycle records,
+`splendor pr-summary --since main` groups merge-base changes into curated source lifecycle records,
 generated source-summary pages, maintained wiki/topic edits, generated queue/run/report churn, and
-latest local maintenance report status. The human output is path-first, and `--json` emits the
-same structure for agent handoff without mutating workspace state or depending on GitHub.
+latest local maintenance report status. The human output is path-first and layout-aware, and
+`--json` emits the same structure for agent handoff without mutating workspace state or depending
+on GitHub.
 
 ### v1 readiness checklist
 

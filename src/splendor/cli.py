@@ -1448,6 +1448,7 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
         return 0
 
     print(f"PR summary since {summary.since}")
+    print(f"Merge base: {summary.merge_base}")
     if summary.head is not None:
         print(f"Head: {summary.head}")
     print(f"Changed paths: {summary.changed_path_count}")
@@ -1464,6 +1465,8 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
             print(f"  Supersedes: {', '.join(source.supersedes)}")
         if source.superseded_by is not None:
             print(f"  Superseded by: {source.superseded_by}")
+        if source.error is not None:
+            print(f"  Error: {source.error}")
 
     _print_path_group("Generated source-summary pages", summary.source_summary_pages)
     _print_path_group("Maintained wiki/topic pages", summary.maintained_wiki_pages)
@@ -1472,7 +1475,7 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
         _print_path_group(f"- {label}", group, indent="  ")
     _print_path_group("Other changed paths", summary.other_paths)
 
-    print("Latest local maintenance reports:")
+    print("Latest local maintenance reports (not tied to current HEAD):")
     for command in ("lint", "health"):
         status = summary.maintenance.get(command)
         if status is None:
@@ -1482,6 +1485,7 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
             f"- {command}: {status.status} path={status.path} "
             f"issues={status.issue_count if status.issue_count is not None else '-'}"
         )
+        print(f"  Warning: {status.warning}")
 
     print("Reviewer notes:")
     for note in summary.reviewer_notes:

@@ -378,7 +378,8 @@ If any of those publication steps are still missing, the work is still in progre
 changes are already committed locally.
 
 For Splendor-generated state changes, run `splendor pr-summary --since main` before publication
-when practical. The command is read-only and uses local git state plus existing lint/health reports
-to explain curated source changes, maintained wiki edits, source-summary changes, and mechanical
-queue/run/report churn for reviewers. It does not replace the required validation commands or
-GitHub metadata checks.
+when practical. The command is read-only and uses local merge-base git state plus existing
+lint/health reports to explain curated source changes, maintained wiki edits, source-summary
+changes, and mechanical queue/run/report churn for reviewers. It labels lint/health status as
+latest local report state; it does not replace the required validation commands or GitHub metadata
+checks.
