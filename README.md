@@ -168,12 +168,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P2.2`
+- Previous completed PR sub-slice: `M13-P2.3`
 - Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.3`
+- Current PR sub-slice: `M13-P2.4`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.4`
+- Next planned PR sub-slice: `M13-P2.5`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -237,3 +237,10 @@ reports path-first freshness state for workspace-backed manifests, includes mani
 checksums, separates historical source versions from actionable stale paths, supports JSON/report
 output, and does not update manifests, wiki pages, derived artifacts, queue records, run records, or
 reports unless `--report PATH` is provided.
+
+`M13-P2.4` adds a ranked handoff surface for agents. `splendor suggest-next [goal]` is read-only
+and ranks deterministic next actions from source freshness, queue failures or pending ingest work,
+stale/contested/review-needed pages, missing synthesis follow-up, active planning records, recent
+maintenance reports, and query matches for the optional goal. `brief --agent-context` now leads
+with the same suggested work before the lower-level metadata lists. Use `--json` on either command
+for machine handoff.

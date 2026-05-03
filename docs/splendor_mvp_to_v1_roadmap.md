@@ -334,17 +334,17 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M13-P2.2`
+- Previous completed PR sub-slice: `M13-P2.3`
 - Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.3`
+- Current PR sub-slice: `M13-P2.4`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.4`
+- Next planned PR sub-slice: `M13-P2.5`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The current M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
 shifting agent-facing value toward freshness, contested knowledge, planning state, and next
-actions. The lifecycle marker means `M13-P2.3` is in progress on feature branches and merged once
+actions. The lifecycle marker means `M13-P2.4` is in progress on feature branches and merged once
 the same committed state is observed on `main`.
 
 ---
@@ -804,6 +804,12 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 - provider/backend docs
 - GitHub optional integration docs
 - roadmap for post-v1 search/index accelerators
+
+`M13-P2.4` is implemented: `brief --agent-context` now leads with ranked suggested work, and
+`splendor suggest-next [goal]` exposes the same deterministic action model directly. Suggestions
+are read-only and draw from source freshness, queue failures or pending work,
+stale/contested/review-needed pages, missing synthesis follow-up, active planning records, recent
+maintenance reports, and optional goal matches.
 
 ### Exit criteria
 - the product is stable enough for sustained real-world use

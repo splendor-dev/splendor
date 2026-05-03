@@ -168,6 +168,14 @@ Implemented fields:
   artifacts, queue records, run records, or reports.
 - Refresh uses the queue ledger directly, so active leases remain protected and dead-lettered jobs
   still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
+- `splendor suggest-next [goal]` is a read-only handoff view over existing deterministic state. It
+  does not create planning records, queue jobs, manifests, wiki pages, run records, or reports.
+  Human output is path-first where possible; `--json` emits ranked action objects with category,
+  priority, title, reason, command, path, source ID/source ref, and planning/page record IDs when
+  available.
+- Suggested actions are derived from source freshness, queue operator state, invalid/stale/
+  contested/review-needed wiki pages, ingested sources missing maintained synthesis follow-up,
+  active planning records, recent lint/health reports, and optional goal query matches.
 - Text-bearing PDF sources are routed through source-type dispatch during ingest. The source
   manifest keeps the same `source_ref`, `source_ref_kind`, and `storage_mode` contract as
   text-native sources, while extracted text artifacts are recorded in `derived_artifacts`.

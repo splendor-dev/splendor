@@ -776,6 +776,13 @@ def test_brief_agent_context_json_packages_handoff_state(tmp_path: Path, capsys)
     assert payload["source_refs"] == [added.source_id]
     assert unrelated.source_id not in payload["source_refs"]
     assert any(match["path"] == "wiki/topics/agent-context.md" for match in payload["matches"])
+    assert payload["suggested_actions"]
+    assert payload["suggested_actions"][0]["category"] in {
+        "goal-match",
+        "planning",
+        "synthesis",
+        "wiki-review",
+    }
     assert payload["active_planning"][0]["record_id"] == "task-agent-context"
     assert any(run["source_ids"] == [added.source_id] for run in payload["recent_runs"])
     assert payload["next_actions"]
@@ -790,8 +797,105 @@ def test_brief_agent_context_text_output_is_compact(tmp_path: Path, capsys) -> N
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "Agent context" in out
+    assert "Suggested next:" in out
     assert "Wiki status:" in out
     assert "Next actions:" in out
+
+
+def test_suggest_next_json_ranks_changed_sources_before_review_work(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "handoff.md"
+    source.write_text("# Handoff\n\nOriginal briefing state.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "handoff.md",
+        kind="topic",
+        title="Handoff",
+        page_id="topic-handoff",
+        review_state="contested",
+        source_refs=[added.source_id],
+        body="Handoff work has contested notes.",
+    )
+    source.write_text("# Handoff\n\nUpdated briefing state.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "suggest-next", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    actions = payload["actions"]
+    assert actions[0]["category"] == "source-freshness"
+    assert actions[0]["path"] == "handoff.md"
+    assert actions[0]["source_id"] == added.source_id
+    assert actions[0]["command"] == "splendor source refresh handoff.md"
+    assert any(action["category"] == "wiki-review" for action in actions)
+    assert payload["freshness"]["changed"] == 1
+
+
+def test_suggest_next_text_reports_pending_queue_path_first(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "pending.md"
+    source.write_text("# Pending\n\nNeeds ingest.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "pending.md"])
+    added = load_source_record(next((tmp_path / "state" / "manifests" / "sources").glob("*.json")))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "suggest-next"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Suggested next actions" in out
+    assert "Drain ingest queue job" in out
+    assert "target=pending.md" in out
+    assert "command=splendor ingest --pending" in out
+    assert added.source_id in out
+
+
+def test_suggest_next_caps_review_noise_and_preserves_goal_work(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    for index in range(10):
+        write_wiki_page(
+            tmp_path / "wiki" / "topics" / f"generated-{index}.md",
+            kind="topic",
+            title=f"Generated {index}",
+            page_id=f"topic-generated-{index}",
+            review_state="machine-generated",
+            body="Generated review noise.",
+        )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "handoff.md",
+        kind="topic",
+        title="Handoff",
+        page_id="topic-handoff",
+        review_state="human-reviewed",
+        body="Handoff work should stay visible in suggest-next results.",
+    )
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Continue handoff",
+            "--id",
+            "task-handoff",
+            "--status",
+            "in_progress",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "suggest-next", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    actions = payload["actions"]
+    categories = [action["category"] for action in actions]
+    assert categories.count("wiki-review") == 2
+    assert "goal-match" in categories
+    assert "planning" in categories
+    assert categories.index("goal-match") < categories.index("wiki-review")
 
 
 def test_brief_skips_invalid_query_matches_without_failing(tmp_path: Path, capsys) -> None:
