@@ -138,6 +138,62 @@ def test_run_query_filters_by_source_ref_and_allows_filter_only_lookup(tmp_path:
     assert result.matches[0].path == "wiki/topics/briefing.md"
 
 
+def test_run_query_source_filter_accepts_readable_source_path(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    source = docs / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "briefing.md",
+        title="Briefing",
+        page_id="topic-briefing",
+        body="Planning brief uses source refs.",
+        source_refs=[added.source_id],
+    )
+
+    result = run_query(tmp_path, "", source_id="docs/brief.md")
+
+    assert result.filters.source_id == added.source_id
+    assert result.matches[0].path == "wiki/topics/briefing.md"
+
+
+def test_run_query_source_path_filter_matches_all_versions_for_that_path(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "docs" / "brief.md"
+    source.parent.mkdir()
+    source.write_text("# Brief\n\nOriginal source version.\n", encoding="utf-8")
+    original = add_source(tmp_path, source)
+    source.write_text("# Brief\n\nUpdated source version.\n", encoding="utf-8")
+    updated = add_source(tmp_path, source)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "original.md",
+        title="Original",
+        page_id="topic-original",
+        body="Original synthesis page.",
+        source_refs=[original.source_id],
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "updated.md",
+        title="Updated",
+        page_id="topic-updated",
+        body="Updated synthesis page.",
+        source_refs=[updated.source_id],
+    )
+
+    result = run_query(tmp_path, "", source_id="docs/brief.md")
+
+    assert result.filters.source_id in {updated.source_id, original.source_id}
+    assert set(result.filters.source_ids or []) == {updated.source_id, original.source_id}
+    assert {match.path for match in result.matches} == {
+        "wiki/topics/original.md",
+        "wiki/topics/updated.md",
+    }
+
+
 def test_run_query_finds_extracted_pdf_source_summary_text(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "dispatch.pdf"

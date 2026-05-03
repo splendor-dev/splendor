@@ -46,6 +46,11 @@ def update_summary_modes(
     write_config(root, config)
 
 
+def extract_rendered_extract_section(body: str) -> str:
+    after_heading = body.split("## Extract\n\n", maxsplit=1)[1]
+    return after_heading.split("\n\n## ", maxsplit=1)[0]
+
+
 def enable_sidecar_ocr(root: Path, *, suffix: str = ".ocr.txt") -> None:
     config = load_config(root)
     config.sources.ocr_enabled = True
@@ -1212,6 +1217,33 @@ def test_ingest_source_workspace_backed_default_uses_excerpt(tmp_path: Path) -> 
     assert "## Extract" in body
     assert "line 10" in body
     assert "line 119" not in body
+    assert "Extract policy: `excerpt`" in body
+
+
+def test_ingest_source_excerpt_prefers_claim_bearing_section(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text(
+        "# Brief\n\n"
+        + "\n".join(f"opening filler {i}" for i in range(60))
+        + "\n\n## Product Experience Notes\n\n"
+        "- Path-first output should be visible before source IDs.\n"
+        "- Generated summaries should stay compact for readable repo files.\n"
+        "\n## Later Detail\n\n"
+        "This late section should not enter the bounded excerpt.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.page_path is not None
+    body = result.page_path.read_text(encoding="utf-8")
+    extract = extract_rendered_extract_section(body)
+    assert "## Product Experience Notes" in extract
+    assert "Path-first output should be visible before source IDs." in extract
+    assert "opening filler 50" not in extract
+    assert "This late section should not enter the bounded excerpt." not in extract
 
 
 def test_ingest_source_markdown_summary_uses_heading_and_paragraph(tmp_path: Path) -> None:

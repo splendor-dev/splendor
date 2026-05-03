@@ -119,7 +119,7 @@ Implemented today:
 - `splendor repair ingest <source-id>`
 - `splendor materialize-source <source-id>`
 - `splendor query "<question>"`, `splendor query --tag <tag>`,
-  `splendor query --source <source-id>`, and `splendor query "<question>" --json`
+  `splendor query --source <source-id|title|path>`, and `splendor query "<question>" --json`
 - `splendor file-answer --from-last-query --title "..."`
 - `splendor task|milestone|decision|question ...`
 - `splendor repo scan`
@@ -149,6 +149,13 @@ and prints exact `source refresh`/`ingest --pending` next commands for stale pat
 the same preview for machine handoff, and `--report PATH` writes only an explicit freshness report.
 Relative report paths use the current working directory.
 
+Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
+markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
+display; copied, external, parsed PDF, and OCR-derived sources keep fuller extracts by default
+because the generated artifact may be the clearest review surface. Queue/run records are
+mechanical provenance, while explicit reports should be committed only when they support the
+reviewed workspace update.
+
 Text-bearing PDFs are supported through the ingest dispatch path. Parsed PDF text is written under
 `derived/parsed/`, linked from the source manifest, and used for the generated source-summary page.
 Image sources and image-only PDFs can use explicitly configured sidecar-text OCR; extracted OCR text
@@ -168,12 +175,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P2.3`
+- Previous completed PR sub-slice: `M13-P2.4`
 - Current planned slice: `M13-P2`
-- Current PR sub-slice: `M13-P2.4`
+- Current PR sub-slice: `M13-P2.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M13-P2`
-- Next planned PR sub-slice: `M13-P2.5`
+- Next planned slice: `M13-P3`
+- Next planned PR sub-slice: `M13-P3.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel

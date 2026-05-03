@@ -305,7 +305,9 @@ def build_parser() -> argparse.ArgumentParser:
     wiki_suggest_parser = wiki_subparsers.add_parser(
         "suggest", help="Suggest synthesis pages affected by a source"
     )
-    wiki_suggest_parser.add_argument("source_id", help="Registered source identifier to inspect")
+    wiki_suggest_parser.add_argument(
+        "source_id", help="Registered source ID, title, or path to inspect"
+    )
     wiki_suggest_parser.add_argument(
         "--json",
         action="store_true",
@@ -316,7 +318,9 @@ def build_parser() -> argparse.ArgumentParser:
     wiki_compile_parser = wiki_subparsers.add_parser(
         "compile", help="Describe the review-gated synthesis compile contract for a source"
     )
-    wiki_compile_parser.add_argument("source_id", help="Registered source identifier to inspect")
+    wiki_compile_parser.add_argument(
+        "source_id", help="Registered source ID, title, or path to inspect"
+    )
     wiki_compile_parser.add_argument(
         "--json",
         action="store_true",
@@ -379,7 +383,7 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--source",
         dest="source_id",
-        help="Restrict results to records referencing this source ID.",
+        help="Restrict results to records referencing this source ID, title, or path.",
     )
     query_parser.add_argument(
         "--json",
@@ -732,7 +736,7 @@ def handle_add_source(args: argparse.Namespace) -> int:
 
             results.append(result)
             action = "already registered" if result.already_registered else "registered"
-            print(f"- {result.source_id} ({action}) {result.source_ref}")
+            print(f"- {result.source_ref}: {action} source_id={result.source_id}")
             if result.already_registered:
                 continue
             try:
@@ -772,9 +776,9 @@ def handle_add_source(args: argparse.Namespace) -> int:
     except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
         return _print_error(exc)
     action = "Already registered" if result.already_registered else "Registered"
+    print(f"Source ref: {result.source_ref}")
     print(f"{action} source {result.source_id}")
     print(f"Manifest: {result.manifest_path}")
-    print(f"Source ref: {result.source_ref}")
     print(f"Storage mode: {result.storage_mode}")
     if result.stored_path is not None:
         print(f"Storage artifact: {result.stored_path}")
@@ -870,14 +874,16 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
         return 0
 
     if result.changed:
-        print(f"Detected changed source content for {result.requested.source_id}")
+        print(f"Detected changed source content for {canonical_source_ref(result.requested)}")
+        print(f"Requested source ID: {result.requested.source_id}")
         if result.refreshed.record.source_id != result.requested.source_id:
             if result.refreshed.already_registered:
-                print(f"Matched existing source version {result.refreshed.record.source_id}")
+                print(f"Matched existing source version: {result.refreshed.record.source_id}")
             else:
-                print(f"Registered refreshed source {result.refreshed.record.source_id}")
+                print(f"Registered refreshed source ID: {result.refreshed.record.source_id}")
     else:
-        print(f"No source content change detected for {result.requested.source_id}")
+        print(f"No source content change detected for {canonical_source_ref(result.requested)}")
+        print(f"Source ID: {result.requested.source_id}")
     print(f"Source ref: {result.refreshed.source_ref}")
     if result.queued and result.queue_path is not None:
         print(f"Queued ingest: {result.queue_path}")
@@ -976,14 +982,18 @@ def handle_ingest(args: argparse.Namespace) -> int:
         print(f"Page: {result.page_path}")
         return 0
 
-    print(f"Ingested source {result.source_id}")
-    print(f"Source ref: {result.canonical_ref}")
+    print(f"Ingested source: {result.canonical_ref}")
+    print(f"Source ID: {result.source_id}")
     print(f"Canonical content: {result.content_origin_kind.replace('_', ' ')}")
     print(f"Run: {result.run_id}")
     print(f"Page: {result.page_path}")
     print(f"Queue record: {result.queue_path}")
     print(f"Run record: {result.run_path}")
     print(f"Next: splendor wiki suggest {result.source_id}")
+    print(
+        "Generated state: review source-summary, source manifest, queue, and run changes; "
+        "commit explicit reports only when they support the reviewed workspace update."
+    )
     return 0
 
 
@@ -1111,8 +1121,8 @@ def _print_source_lookup_results(results: list[SourceLookupResult]) -> None:
     for result in results:
         source = result.source
         print(
-            f"- {source.source_id} [{source.status}] {source.title} "
-            f"ref={canonical_source_ref(source)}"
+            f"- {canonical_source_ref(source)} [{source.status}] {source.title} "
+            f"source_id={source.source_id} ref={canonical_source_ref(source)}"
         )
         print(f"  Manifest: {result.manifest_path}")
     print("Next: splendor source refresh <source-id|title|path>")
@@ -1183,9 +1193,11 @@ def handle_wiki_suggest(args: argparse.Namespace) -> int:
         print(render_wiki_suggest_json(result))
         return 0
 
-    print(f"Source: {result.source_id}")
-    print(f"Title: {result.source_title}")
     print(f"Source ref: {result.source_ref}")
+    print(f"Source ID: {result.source_id}")
+    if len(result.source_ids) > 1:
+        print(f"Resolved source IDs: {', '.join(result.source_ids)}")
+    print(f"Title: {result.source_title}")
     print(f"Status: {result.source_status}")
     if not result.suggestions:
         print("No likely synthesis-page matches found")
@@ -1208,9 +1220,9 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
         print(render_wiki_compile_contract_json(result))
         return 0
 
-    print(f"Source: {result.source_id}")
-    print(f"Title: {result.source_title}")
     print(f"Source ref: {result.source_ref}")
+    print(f"Source ID: {result.source_id}")
+    print(f"Title: {result.source_title}")
     print(f"Status: {result.source_status}")
     print("Compile contract: review-gated synthesis maintenance")
     print("Mutates wiki: no")
@@ -1319,6 +1331,7 @@ def handle_query(args: argparse.Namespace) -> int:
                 filters=QueryFilterSnapshot(
                     tags=result.filters.tags,
                     source_id=result.filters.source_id,
+                    source_ids=result.filters.source_ids or [],
                 ),
                 summary=result.summary,
                 match_count=result.match_count,
@@ -1356,6 +1369,7 @@ def handle_query(args: argparse.Namespace) -> int:
             "filters": {
                 "tags": result.filters.tags,
                 "source_id": result.filters.source_id,
+                "source_ids": result.filters.source_ids or [],
             },
             "summary": result.summary,
             "match_count": result.match_count,
@@ -1393,6 +1407,11 @@ def handle_query(args: argparse.Namespace) -> int:
             "Filters: "
             f"tags={', '.join(result.filters.tags) if result.filters.tags else '-'} "
             f"source={result.filters.source_id or '-'}"
+            + (
+                f" resolved={', '.join(result.filters.source_ids)}"
+                if result.filters.source_ids and len(result.filters.source_ids) > 1
+                else ""
+            )
         )
     print(f"Summary: {result.summary}")
     print("Matches:")
@@ -1464,7 +1483,10 @@ def handle_brief(args: argparse.Namespace) -> int:
     if result.recent_sources:
         print("Recent sources:")
         for source in result.recent_sources:
-            print(f"- {source.source_id} [{source.status}] {source.title}")
+            print(
+                f"- {source.source_ref} [{source.status}] {source.title} "
+                f"source_id={source.source_id}"
+            )
     if result.recent_runs:
         print("Recent runs:")
         for run in result.recent_runs:
@@ -1519,7 +1541,10 @@ def _print_agent_context(result: ProjectBrief) -> None:
     if result.recent_sources:
         print("Recent sources:")
         for source in result.recent_sources:
-            print(f"- {source.source_id} [{source.status}/{source.review_state}] {source.title}")
+            print(
+                f"- {source.source_ref} [{source.status}/{source.review_state}] "
+                f"{source.title} source_id={source.source_id}"
+            )
     if result.recent_runs:
         print("Recent runs:")
         for run in result.recent_runs:

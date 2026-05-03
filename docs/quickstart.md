@@ -159,6 +159,15 @@ This creates:
 - a run record under `state/runs/`
 - updated `wiki/index.md` and `wiki/log.md`
 
+Generated source-summary pages are reviewer-significant when they help explain a curated source,
+its provenance, or synthesis follow-up. Queue and run records are deterministic operational state;
+review them for broken references or surprising failures, but do not treat every timestamp-only
+record as hand-authored knowledge. Explicit reports under `reports/` should be committed only when
+they support the reviewed workspace update; failed or exploratory local reports can stay local.
+Readable in-repo markdown/text/code summaries default to concise excerpts, while external, copied,
+parsed PDF, and OCR-derived sources keep fuller extracts because the generated artifact may be the
+most convenient review surface.
+
 After ingest, use the source ID from the command output to inspect likely synthesis follow-up:
 
 ```bash

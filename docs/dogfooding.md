@@ -43,6 +43,12 @@ users and agents can identify affected concept, entity, topic, architecture, or 
 rank immediate handoff work before manual review. Mutating compile/update workflow support remains
 planned.
 
+For readable in-repo sources, generated source-summary pages should stay compact and path-first:
+Splendor renders claim-bearing excerpts by default and keeps source paths visible before source IDs.
+Commit source summaries, manifests, queue/run state, and explicit reports when they are part of a
+reviewed workspace update; leave failed or exploratory local reports out unless the report itself
+is the artifact under review.
+
 Dogfood runs should record usability friction separately from knowledge gaps. Pay special attention
 to whether each command prints the next useful command, whether long source IDs need to be copied
 manually, whether query results show claim-bearing snippets, and whether the web UI exposes enough

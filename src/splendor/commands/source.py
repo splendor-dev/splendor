@@ -112,6 +112,59 @@ def lookup_sources(root: Path, query: str | None = None) -> list[SourceLookupRes
     return [result for result in results if _matches_source(result.source, needle)]
 
 
+def resolve_source_query(root: Path, query: str) -> SourceLookupResult:
+    return _select_source_query_candidate(root, query)
+
+
+def resolve_source_query_matches(root: Path, query: str) -> list[SourceLookupResult]:
+    matches = lookup_sources(root, query)
+    if not matches:
+        label = "source ID" if query.startswith("src-") else "source"
+        msg = f"Unknown {label}: {query}"
+        raise FileNotFoundError(msg)
+
+    exact_id_matches = [match for match in matches if match.source.source_id == query]
+    if exact_id_matches:
+        return exact_id_matches
+
+    exact_ref_matches = [
+        match
+        for match in matches
+        if canonical_source_ref(match.source) == query
+        or (match.source.original_path is not None and match.source.original_path == query)
+    ]
+    if exact_ref_matches:
+        return sorted(exact_ref_matches, key=_latest_source_sort_key, reverse=True)
+
+    exact_matches = [
+        match for match in matches if match.source.title.casefold() == query.casefold()
+    ]
+    if exact_matches:
+        refs = {canonical_source_ref(match.source) for match in exact_matches}
+        if len(refs) == 1:
+            return sorted(exact_matches, key=_latest_source_sort_key, reverse=True)
+
+    return [_select_source_query_candidate(root, query)]
+
+
+def _select_source_query_candidate(root: Path, query: str) -> SourceLookupResult:
+    matches = lookup_sources(root, query)
+    exact_matches = [
+        match
+        for match in matches
+        if match.source.source_id == query
+        or match.source.title.casefold() == query.casefold()
+        or canonical_source_ref(match.source) == query
+        or (match.source.original_path is not None and match.source.original_path == query)
+    ]
+    candidates = exact_matches or matches
+    if not candidates:
+        label = "source ID" if query.startswith("src-") else "source"
+        msg = f"Unknown {label}: {query}"
+        raise FileNotFoundError(msg)
+    return _select_refresh_candidate(query, candidates)
+
+
 def source_commit_capture_intent(source: SourceRecord) -> bool | None:
     if source.source_commit_capture is not None:
         return source.source_commit_capture
@@ -121,20 +174,7 @@ def source_commit_capture_intent(source: SourceRecord) -> bool | None:
 
 
 def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
-    matches = lookup_sources(root, source_query)
-    exact_matches = [
-        match
-        for match in matches
-        if match.source.source_id == source_query
-        or match.source.title.casefold() == source_query.casefold()
-        or canonical_source_ref(match.source) == source_query
-        or (match.source.original_path is not None and match.source.original_path == source_query)
-    ]
-    candidates = exact_matches or matches
-    if not candidates:
-        msg = f"Unknown source: {source_query}"
-        raise FileNotFoundError(msg)
-    requested_match = _select_refresh_candidate(source_query, candidates)
+    requested_match = resolve_source_query(root, source_query)
 
     requested = requested_match.source
     current_path = _refreshable_source_path(root, requested)

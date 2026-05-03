@@ -255,6 +255,12 @@ Current runtime behavior:
 - those pages persist `last_generated_at`
 - those pages persist structured provenance links back to the source manifest, ingest run, and
   source-content path actually read
+- readable workspace-backed text summaries default to a policy-driven `excerpt` extract that
+  prefers claim-bearing sections before falling back to a bounded opening excerpt
+- copied, external, parsed PDF, and OCR-derived sources keep fuller extracts by default because the
+  generated page or derived artifact is often the easiest local review surface
+- human-facing source-summary markdown renders source paths/source files before source IDs, while
+  frontmatter and state records keep canonical source IDs as the durable linkage contract
 - when contradiction review finds explicit conflicts, both involved source-summary pages switch to
   `review_state: contested`
 - contested pages persist structured contradiction annotations with linked review-task IDs and
@@ -291,6 +297,7 @@ Current implementation fields:
 - `filters`
   - `tags`
   - `source_id`
+  - `source_ids`
 - `summary`
 - `match_count`
 - `created_at`
@@ -298,6 +305,9 @@ Current implementation fields:
 
 Query matches preserve rank, score, class/kind, record identity, path, status/review state, snippet,
 source refs, generated run IDs, provenance links, contradiction counts, review task IDs, and tags.
+When a source filter is provided by readable path and multiple content-addressed source versions
+share that path, `source_id` stores the primary resolved source ID and `source_ids` stores every
+matching source ID used for the filter.
 `splendor query --no-save` preserves query output behavior but does not update this snapshot.
 
 ## Queue and run records
