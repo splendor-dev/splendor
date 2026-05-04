@@ -120,6 +120,10 @@ def _utc_now() -> datetime:
     return datetime.now(UTC).replace(microsecond=0)
 
 
+def _run_timestamp_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="microseconds")
+
+
 def _relative_to_root(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
@@ -683,7 +687,7 @@ def _mark_attempt_failed(
     failed_run = run.model_copy(
         update={
             "source_ids": failed_run.source_ids,
-            "finished_at": utc_now_iso(),
+            "finished_at": _run_timestamp_iso(),
             "status": "failed",
             "errors": [error_message],
             "provenance_links": failed_run.provenance_links,
@@ -894,7 +898,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         run_id=run_id,
         job_id=queue_item.job_id,
         job_type="ingest_source",
-        started_at=utc_now_iso(),
+        started_at=_run_timestamp_iso(),
         status="running",
         input_refs=[
             _relative_to_root(root, manifest_path),
@@ -978,7 +982,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         page_path = _page_path_for(layout.wiki_sources_dir, source.source_id)
         page_relpath = _relative_to_root(root, page_path)
         registered_path = canonical_source_ref(source)
-        finished_at = utc_now_iso()
+        finished_at = _run_timestamp_iso()
         frontmatter = KnowledgePageFrontmatter(
             kind="source-summary",
             title=source.title,

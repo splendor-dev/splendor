@@ -479,6 +479,9 @@ The runtime contracts are now used by deterministic single-source ingestion.
 - `QueueItemRecord` captures item lifecycle, retries, backoff scheduling, dead-letter state, and
   leases.
 - `RunRecord` captures pipeline inputs, outputs, warnings, and failures.
+- Ingest run records capture `started_at` with sub-second precision before source
+  resolution/dispatch work begins, and set `finished_at` only when the run reaches terminal
+  success or failure. Historical run records are not rewritten.
 
 Current persisted locations:
 

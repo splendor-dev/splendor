@@ -6,6 +6,7 @@ import pytest
 import yaml
 from pypdf import PdfWriter
 
+import splendor.commands.ingest as ingest_module
 import splendor.utils.contradictions as contradictions_module
 from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
@@ -137,6 +138,33 @@ def test_ingest_source_happy_path(tmp_path: Path) -> None:
     log_content = (tmp_path / "wiki" / "log.md").read_text(encoding="utf-8")
     assert added.source_id in log_content
     assert result.run_id in log_content
+
+
+def test_ingest_source_records_distinct_start_and_finish_timestamps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source, storage_mode="copy")
+    timestamps = iter(
+        [
+            "2026-05-04T10:00:00.000100+00:00",
+            "2026-05-04T10:00:00.000900+00:00",
+        ]
+    )
+
+    monkeypatch.setattr(ingest_module, "_run_timestamp_iso", lambda: next(timestamps))
+
+    result = ingest_source(tmp_path, added.source_id)
+
+    assert result.run_path is not None
+    run_record = load_run_record(result.run_path)
+    assert run_record.started_at == "2026-05-04T10:00:00.000100+00:00"
+    assert run_record.finished_at == "2026-05-04T10:00:00.000900+00:00"
+    assert datetime.fromisoformat(run_record.started_at) <= datetime.fromisoformat(
+        run_record.finished_at
+    )
 
 
 def test_ingest_source_is_idempotent_when_current_pipeline_already_succeeded(

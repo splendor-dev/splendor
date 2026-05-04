@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P1.9`
-- Current planned slice: `Compile/update expansion after first reviewed page apply`
-- Current PR sub-slice: `M15-P1.2`
+- Previous completed PR sub-slice: `M15-P1.2`
+- Current planned slice: `Ingest run-duration precision`
+- Current PR sub-slice: `M10-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely ingest run-duration precision or post-M15 issue triage`
-- Next planned PR sub-slice: `likely TBD, possibly issue #47`
+- Next planned slice: `likely post-M15 issue triage or performance follow-up`
+- Next planned PR sub-slice: `likely TBD, possibly #30 or #37 after #47`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -827,9 +827,9 @@ adding SQLite, vector search, background workers, mutating web UI, or broad refr
 
 `M13-P3.2` is the final release checklist and post-v1 handoff. It keeps runtime behavior stable,
 adds the concise release handoff in `docs/v1_release_handoff.md`, and makes the post-v1 queue
-explicit: #72 owns source lifecycle and agent workflow follow-up; #47 owns ingest run durations;
-#79 owns the deferred mutating compile/update path from #41; #30 and #37 remain independent
-performance/scaling follow-ups.
+explicit: #72 owns source lifecycle and agent workflow follow-up; #79 owns the deferred mutating
+compile/update path from #41; #47 owns ingest run durations and is handled by `M10-P3.1`; #30 and
+#37 remain independent performance/scaling follow-ups.
 
 ### M13-P3 v1 release-readiness checklist
 
@@ -1048,6 +1048,13 @@ JSON suggestions include structured `compile_preview_args` alongside the rendere
 so agents can execute the preview command without shell parsing. This slice does not add automatic
 multi-page apply, LLM synthesis, web mutation, source registration changes, broad workspace
 refresh, or performance/scaling work from #47, #37, or #30.
+
+### M10-P3.1 ingest run-duration precision
+
+`M10-P3.1` handles issue #47 as a focused runtime-ledger correction. Ingest run records capture
+`started_at` with sub-second precision before source resolution and dispatch begin, then preserve a
+terminal `finished_at` only when the run succeeds or fails. The persisted run-record shape and
+schema version remain unchanged, and historical run records are not rewritten.
 
 ### Boundaries
 - Promote these candidates to committed roadmap slices only after the child issues and GitHub
