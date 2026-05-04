@@ -82,8 +82,9 @@ The conservative next queue after the `M14-P3.1` gate is:
 4. Use `M14-P1.5` for issue #93 before continuing post-MVP expansion: add an explicit
    `splendor ingest --changed` path for checksum-drifted curated sources whose old queue items are
    already done.
-5. Use `M14-P1.6` for issue #90 after #93: repo/workspace refresh should skip missing or broken
-   curated sources with diagnostics while continuing valid refresh work.
+5. `M14-P1.6` handles issue #90: workspace refresh skips missing curated sources and summarizes
+   per-source refresh failures with diagnostics while continuing valid refresh work, then exits
+   non-zero while unresolved sources remain.
 6. Continue #79 through `M15-P1.2` after the open Milestone 14 P1 repair issues are handled.
 7. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.

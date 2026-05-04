@@ -61,9 +61,22 @@ class TopicRefMigrationResult:
 
 
 @dataclass(frozen=True)
+class FailedWorkspaceRefreshSource:
+    path: str
+    source_id: str
+    logical_id: str | None
+    title: str
+    manifest_path: str
+    phase: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class WorkspaceRefreshResult:
     initial_freshness: SourceFreshnessResult
     final_freshness: SourceFreshnessResult
+    skipped_sources: list[SourceFreshnessItem]
+    failed_sources: list[FailedWorkspaceRefreshSource]
     refreshed: list[SourceRefreshResult]
     ingest: DrainResult | None
     index: WikiIndexRebuildResult | None
@@ -88,9 +101,9 @@ def refresh_workspace(
         raise ValueError(msg)
 
     initial_freshness = scan_source_freshness(root)
-    _raise_if_missing_active_workspace_sources(initial_freshness)
+    skipped_sources = _unresolved_active_workspace_sources(initial_freshness)
     changed_items = [item for item in initial_freshness.sources if item.status == "changed"]
-    refreshed = [_refresh_changed_item(root, item) for item in changed_items]
+    refreshed, failed_sources = _refresh_changed_items(root, changed_items)
 
     ingest_result = _drain_refreshed_ingest_jobs(root, refreshed) if ingest else None
     index_result = None
@@ -112,6 +125,8 @@ def refresh_workspace(
     return WorkspaceRefreshResult(
         initial_freshness=initial_freshness,
         final_freshness=final_freshness,
+        skipped_sources=skipped_sources,
+        failed_sources=failed_sources,
         refreshed=refreshed,
         ingest=ingest_result,
         index=index_result,
@@ -279,6 +294,10 @@ def render_workspace_refresh_json(root: Path, result: WorkspaceRefreshResult) ->
         {
             "initial_freshness": _freshness_counts(result.initial_freshness),
             "final_freshness": _freshness_counts(result.final_freshness),
+            "skipped_sources": [
+                _skipped_source_payload(root, item) for item in result.skipped_sources
+            ],
+            "failed_sources": [asdict(item) for item in result.failed_sources],
             "refreshed": [_refresh_payload(root, item) for item in result.refreshed],
             "ingest": None if result.ingest is None else _ingest_payload(root, result.ingest),
             "index": None if result.index is None else asdict(result.index),
@@ -440,19 +459,42 @@ def _refresh_changed_item(root: Path, item: SourceFreshnessItem) -> SourceRefres
     return refresh_source(root, item.canonical_path)
 
 
-def _raise_if_missing_active_workspace_sources(result: SourceFreshnessResult) -> None:
-    missing_paths = sorted(
-        {
-            item.canonical_path
-            for item in result.sources
-            if item.status == "missing" and item.source.superseded_by is None
-        }
+def _refresh_changed_items(
+    root: Path, items: list[SourceFreshnessItem]
+) -> tuple[list[SourceRefreshResult], list[FailedWorkspaceRefreshSource]]:
+    refreshed: list[SourceRefreshResult] = []
+    failed: list[FailedWorkspaceRefreshSource] = []
+    for item in items:
+        try:
+            refreshed.append(_refresh_changed_item(root, item))
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            failed.append(_failed_refresh_source(root, item=item, reason=str(exc)))
+    return refreshed, failed
+
+
+def _unresolved_active_workspace_sources(
+    result: SourceFreshnessResult,
+) -> list[SourceFreshnessItem]:
+    return [
+        item
+        for item in result.sources
+        if item.status in {"missing", "unsupported"} and item.source.superseded_by is None
+    ]
+
+
+def _failed_refresh_source(
+    root: Path, *, item: SourceFreshnessItem, reason: str
+) -> FailedWorkspaceRefreshSource:
+    source = item.source
+    return FailedWorkspaceRefreshSource(
+        path=item.canonical_path,
+        source_id=source.source_id,
+        logical_id=effective_logical_id(source),
+        title=source.title,
+        manifest_path=item.manifest_path.relative_to(root).as_posix(),
+        phase="refresh",
+        reason=reason,
     )
-    if not missing_paths:
-        return
-    joined = ", ".join(missing_paths)
-    msg = f"workspace refresh cannot continue with missing curated sources: {joined}"
-    raise FileNotFoundError(msg)
 
 
 def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult]) -> DrainResult:
@@ -542,6 +584,22 @@ def _refresh_payload(root: Path, result: SourceRefreshResult) -> dict[str, objec
         "queued": result.queued,
         "queue_path": queue_path,
         "message": result.message,
+    }
+
+
+def _skipped_source_payload(root: Path, item: SourceFreshnessItem) -> dict[str, object]:
+    source = item.source
+    return {
+        "path": item.canonical_path,
+        "status": item.status,
+        "source_id": source.source_id,
+        "logical_id": effective_logical_id(source),
+        "title": source.title,
+        "source_ref": canonical_source_ref(source),
+        "source_ref_kind": source.source_ref_kind,
+        "manifest_path": item.manifest_path.relative_to(root).as_posix(),
+        "message": item.message,
+        "next_commands": item.next_commands,
     }
 
 

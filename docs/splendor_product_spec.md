@@ -789,9 +789,13 @@ Current implementation:
   of active current-byte targets.
 - `splendor workspace refresh --changed` safely refreshes only changed curated workspace-backed
   sources by composing `source freshness` with the supersession-aware `source refresh` path. It
-  fails before mutating when active curated workspace sources are missing, can ingest only refreshed
+  reports missing or unsupported active curated workspace sources as skipped unresolved diagnostics,
+  records per-source refresh failures without aborting the whole command, can ingest only refreshed
   sources' queue jobs with `--ingest`, and can rebuild `wiki/index.md` after successful targeted
-  ingest with `--rebuild-index`. JSON output reports both initial and final freshness counts.
+  ingest with `--rebuild-index`. Valid changed sources still refresh and ingest even when unrelated
+  curated sources are unresolved; the command exits non-zero while skipped sources, failed refreshes,
+  or targeted ingest failures remain. JSON output reports both initial and final freshness counts
+  plus skipped-source and failed-refresh diagnostics.
   `--prune-superseded` deletes old generated source-summary pages only after a current successor
   summary exists, removes stale generated-page links from the superseded source manifest, and keeps
   historical source manifests and run records valid. Unsafe prune candidates are reported with
