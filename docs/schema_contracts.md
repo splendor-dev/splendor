@@ -212,12 +212,12 @@ Implemented fields:
   version, leaving prose and code-fence mentions untouched. The command does not perform broad repo
   discovery, register uncurated files, or run mutating synthesis compile/update workflows.
 - `splendor ingest --changed` is the narrow stale-source ingestion path for checksum-drifted
-  curated workspace-backed sources. It scans source freshness, refuses to mutate while active
-  curated workspace sources are missing, refreshes each changed source through the existing
+  curated workspace-backed sources. It scans source freshness, reports missing active curated
+  workspace sources as unresolved diagnostics, refreshes each changed source through the existing
   supersession-aware source refresh path, and runs only the refreshed sources' queue records. It
   reports a clean no-op when no curated workspace-backed source bytes changed. `--json` emits
-  initial and final freshness counts, refreshed source IDs, targeted queue outcomes, and summary
-  counts.
+  initial and final freshness counts, missing-source diagnostics, refreshed source IDs, targeted
+  queue outcomes, and summary counts.
 - `splendor wiki compile <source-id|title|path>` remains non-mutating unless a maintained target
   page is selected and `--apply --proposal-hash <hash>` is supplied. `--page <maintained-page>`
   proposes a deterministic update from the generated source-summary page into one maintained

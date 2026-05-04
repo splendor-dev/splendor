@@ -12,7 +12,7 @@ import splendor.cli as cli_module
 from splendor import __version__
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
-from splendor.commands.source import refresh_source
+from splendor.commands.source import ingest_changed_sources, refresh_source
 from splendor.config import load_config, write_config
 from splendor.layout import resolve_layout
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
@@ -1905,17 +1905,45 @@ def test_cli_ingest_changed_noops_for_unchanged_workspace(tmp_path: Path, capsys
     assert sorted((tmp_path / "state" / "runs").glob("*.json")) == before_runs
 
 
-def test_cli_ingest_changed_reports_missing_sources_without_mutating(
+def test_ingest_changed_sources_returns_typed_noop_result(tmp_path: Path) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", source_id])
+
+    result = ingest_changed_sources(tmp_path)
+
+    assert result.status == "no-op"
+    assert result.initial_freshness == result.final_freshness
+    assert result.processed == 0
+    assert result.succeeded == 0
+    assert result.failed == 0
+    assert result.skipped == 0
+
+
+def test_cli_ingest_changed_reports_missing_sources_and_continues_valid_refresh(
     tmp_path: Path, capsys
 ) -> None:
     main(["--root", str(tmp_path), "init"])
-    source = tmp_path / "missing.md"
-    source.write_text("# Missing\n", encoding="utf-8")
-    main(["--root", str(tmp_path), "add-source", str(source)])
-    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
-    source.unlink()
+    changed_source = tmp_path / "changed.md"
+    changed_source.write_text("# Changed\n\nOriginal.\n", encoding="utf-8")
+    missing_source = tmp_path / "missing.md"
+    missing_source.write_text("# Missing\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(changed_source)])
+    changed_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", changed_id])
+    main(["--root", str(tmp_path), "add-source", str(missing_source)])
+    missing_id = next(
+        path.stem
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if path.stem != changed_id
+    )
+    changed_source.write_text("# Changed\n\nUpdated.\n", encoding="utf-8")
+    missing_source.unlink()
     before_manifest = (
-        tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+        tmp_path / "state" / "manifests" / "sources" / f"{missing_id}.json"
     ).read_text(encoding="utf-8")
     capsys.readouterr()
 
@@ -1923,10 +1951,19 @@ def test_cli_ingest_changed_reports_missing_sources_without_mutating(
 
     assert exit_code == 1
     out = capsys.readouterr().out
-    assert "Stale ingest blocked" in out
+    assert "Stale ingest completed with unresolved sources" in out
     assert "- missing.md: canonical workspace source file is missing" in out
-    assert not list((tmp_path / "state" / "runs").glob("*.json"))
-    assert (tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json").read_text(
+    assert "Stale ingest summary: processed=1 succeeded=1 failed=0 skipped=0" in out
+    manifests = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    assert len(manifests) == 3
+    refreshed_id = next(
+        path.stem for path in manifests if path.stem not in {changed_id, missing_id}
+    )
+    assert load_queue_item(tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").status == (
+        "done"
+    )
+    assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
+    assert (tmp_path / "state" / "manifests" / "sources" / f"{missing_id}.json").read_text(
         encoding="utf-8"
     ) == before_manifest
 
@@ -1954,6 +1991,35 @@ def test_cli_ingest_changed_json_reports_refreshed_ingest(tmp_path: Path, capsys
     assert payload["ingest"][0]["source_id"] == refreshed_id
     assert payload["ingest"][0]["outcome"] == "succeeded"
     load_source_record(tmp_path / "state" / "manifests" / "sources" / f"{refreshed_id}.json")
+
+
+def test_cli_ingest_changed_json_includes_final_freshness_for_noop_and_blocked(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", source_id])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--changed", "--json"])
+
+    assert exit_code == 0
+    noop_payload = json.loads(capsys.readouterr().out)
+    assert noop_payload["status"] == "no-op"
+    assert noop_payload["initial_freshness"] == noop_payload["final_freshness"]
+
+    source.unlink()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--changed", "--json"])
+
+    assert exit_code == 1
+    blocked_payload = json.loads(capsys.readouterr().out)
+    assert blocked_payload["status"] == "blocked"
+    assert blocked_payload["initial_freshness"] == blocked_payload["final_freshness"]
+    assert blocked_payload["missing"][0]["source_id"] == source_id
 
 
 def test_cli_ingest_command_reports_missing_source(tmp_path: Path, capsys) -> None:

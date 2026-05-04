@@ -804,7 +804,8 @@ Current implementation:
   curated workspace-backed sources. It composes the freshness scan, supersession-aware source
   refresh, and targeted queue worker path so a changed source can be re-ingested even when its
   previous queue record is already `done`. It does not drain unrelated pending jobs, reports no-op
-  unchanged workspaces cleanly, and blocks with missing-source diagnostics before rewriting records.
+  unchanged workspaces cleanly, and reports missing-source diagnostics while continuing to process
+  valid changed sources.
 - `splendor pr-summary --since main` is a read-only PR handoff command. It uses local git
   diff/status from the merge base with the base ref, respects configured layout paths, and uses
   existing report files to group curated source lifecycle changes, generated source-summary pages,

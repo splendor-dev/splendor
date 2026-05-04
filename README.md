@@ -168,9 +168,10 @@ maintained synthesis content beyond that explicit source-ref migration.
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
 source versions through the same supersession-aware source lifecycle, ingests only those refreshed
-queue jobs, reports a clean no-op when no curated source bytes changed, and blocks with diagnostics
-when active curated sources are missing. `--json` emits initial/final freshness counts, refreshed
-source IDs, targeted ingest outcomes, and the summary.
+queue jobs, reports a clean no-op when no curated source bytes changed, and reports missing active
+curated sources without preventing valid changed sources from being processed. `--json` emits
+initial/final freshness counts, missing-source diagnostics, refreshed source IDs, targeted ingest
+outcomes, and the summary.
 
 `splendor pr-summary --since main` is a read-only PR handoff command over local git state. It uses
 the merge base between `HEAD` and the base ref for PR-style diff semantics, then summarizes curated
@@ -340,8 +341,8 @@ against source manifests. Historical manifests and run records remain valid.
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes
 them into current canonical source versions, and ingests only those refreshed queue jobs even when
-the previous queue item was already `done`. Missing curated sources are reported before mutation so
-operators can repair paths separately.
+the previous queue item was already `done`. Missing curated sources are reported as unresolved
+diagnostics while valid changed sources continue through refresh and ingest.
 
 `M14-P2.1` adds the read-only PR handoff surface:
 `splendor pr-summary --since main` groups merge-base changes into curated source lifecycle records,

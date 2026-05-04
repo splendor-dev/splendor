@@ -948,7 +948,7 @@ artifacts remain separate from maintained authority ranking.
 Milestone 14 MVP source-lifecycle repair. It adds `splendor ingest --changed` as a narrow bridge
 from source freshness to supersession-aware source refresh and targeted ingest. The command does
 not discover uncurated files, does not drain unrelated pending jobs, and reports missing curated
-sources before mutation so path-repair work can remain separate.
+sources as unresolved diagnostics while continuing valid changed-source repair work.
 
 ## Candidate Milestone 15 — Post-v1 reviewed compile/update workflow
 
