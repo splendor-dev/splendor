@@ -123,6 +123,16 @@ class StaleIngestResult:
     skipped: int
 
 
+def _dedupe_aliases(aliases: list[str | None]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for alias in aliases:
+        if alias and alias not in seen:
+            seen.add(alias)
+            deduped.append(alias)
+    return deduped
+
+
 def list_sources(root: Path) -> list[SourceLookupResult]:
     layout = resolve_layout(root, load_config(root))
     results = [
@@ -371,13 +381,16 @@ def update_source_path(
     )
 
     current_checksum = sha256_file(target)
-    logical_id = logical_source_id_for_ref(new_ref, "workspace_path")
+    stable_identity_ref = source.original_path or old_path
+    logical_id = source.logical_id or logical_source_id_for_ref(
+        stable_identity_ref, "workspace_path"
+    )
+    aliases = _dedupe_aliases([*source.aliases, old_path, new_ref])
     updated_fields: dict[str, object] = {
         "source_ref": new_ref,
         "source_ref_kind": "workspace_path",
         "logical_id": logical_id,
-        "aliases": [new_ref],
-        "original_path": new_ref,
+        "aliases": aliases,
     }
     if storage_mode == "none":
         updated_fields["path"] = new_ref

@@ -173,9 +173,10 @@ migration.
 path for moved active curated workspace sources. By default it requires the old workspace path to
 be missing; `--force` is available for deliberate reparenting while the old file still exists. It
 validates that the new path is a supported file inside the workspace, rejects targets already
-curated by another active source, updates the source manifest's workspace ref, logical ID, alias,
-and compatibility path fields, and reports manifest/current checksums plus next commands. Same-byte
-moves queue a re-ingest so generated source-summary provenance can refresh. Changed-byte moves are
+curated by another active source, updates the source manifest's workspace ref and compatibility
+path fields, preserves the stable logical ID and old path alias, adds the new path alias, and
+reports manifest/current checksums plus next commands. Same-byte moves queue a re-ingest so
+generated source-summary provenance can refresh. Changed-byte moves are
 reported as partial repairs with a non-zero exit and an explicit `source refresh` next command. The
 command does not discover/register uncurated files, rewrite historical run records, or mutate
 maintained synthesis pages.
@@ -239,12 +240,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.7`
-- Current planned slice: `Health remediation hints`
-- Current PR sub-slice: `M14-P1.8`
+- Previous completed PR sub-slice: `M14-P1.8`
+- Current planned slice: `Source identity design review`
+- Current PR sub-slice: `M14-P1.9`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely source identity design review or M15 compile/update, depending on roadmap`
-- Next planned PR sub-slice: `likely M14-P1.9 only if #94 is narrowed; otherwise M15-P1.2 or next roadmap notation`
+- Next planned slice: `likely M15 compile/update expansion`
+- Next planned PR sub-slice: `likely M15-P1.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -365,6 +366,30 @@ against source manifests. Historical manifests and run records remain valid.
 them into current canonical source versions, and ingests only those refreshed queue jobs even when
 the previous queue item was already `done`. Missing curated sources are reported as unresolved
 diagnostics while valid changed sources continue through refresh and ingest.
+
+`M14-P1.6` makes workspace refresh continue past unrelated unresolved curated sources: missing or
+unsupported active workspace-backed sources are reported as skipped diagnostics, valid changed
+sources still refresh and ingest, and the command exits non-zero while unresolved source or targeted
+ingest failures remain.
+
+`M14-P1.7` adds `splendor source update-path <source-id|logical-id|title|path> <new-path>` for
+intentional file moves. It updates active workspace-backed source refs, logical IDs, aliases, and
+compatibility paths without broad discovery, queues same-byte repairs for re-ingest, and points
+changed-byte moves to `source refresh`.
+
+`M14-P1.8` adds health remediation hints for the concrete source lifecycle commands now available:
+missing active source paths point to `source update-path` plus freshness checks, checksum drift
+points to source refresh or `ingest --changed`, and queue/runtime state points to queue retry or
+ingest repair.
+
+`M14-P1.9` records the source identity review for issue #94. The disposition is that the current
+M14 source-lifecycle contract materially addresses #94 for curated workspace-backed sources without
+renaming canonical `src-...` manifests or changing schema version `1`: logical IDs and aliases
+provide stable selectors, source refresh records content edits as superseded versions, freshness
+keeps checksum state separate from identity, `source update-path` preserves the stable logical
+selector while adding the new path alias for intentional moves, and workspace refresh can migrate
+maintained topic refs after refreshed versions exist. Remaining work should be a specific
+regression or non-workspace extension, not a broad identity redesign.
 
 `M14-P2.1` adds the read-only PR handoff surface:
 `splendor pr-summary --since main` groups merge-base changes into curated source lifecycle records,

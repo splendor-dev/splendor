@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P1.7`
-- Current planned slice: `Health remediation hints`
-- Current PR sub-slice: `M14-P1.8`
+- Previous completed PR sub-slice: `M14-P1.8`
+- Current planned slice: `Source identity design review`
+- Current PR sub-slice: `M14-P1.9`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely source identity design review or M15 compile/update, depending on roadmap`
-- Next planned PR sub-slice: `likely M14-P1.9 only if #94 is narrowed; otherwise M15-P1.2 or next roadmap notation`
+- Next planned slice: `likely M15 compile/update expansion`
+- Next planned PR sub-slice: `likely M15-P1.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -890,6 +890,7 @@ breaking the v1 file contracts.
 - `M14-P1.6` Repo refresh missing/broken source tolerance
 - `M14-P1.7` Source path repair commands
 - `M14-P1.8` Health remediation hints
+- `M14-P1.9` Source identity design review
 - `M14-P2.1` PR summary and lower-noise generated-state review handoff
 - `M14-P3.1` Source-lifecycle re-evaluation gate
 - `M14-P4.1` Planning-doc authority and task-oriented agent briefs
@@ -920,7 +921,9 @@ loop is substantially implemented and re-evaluated. The intended sequence before
    workspace-backed source paths without broad discovery or manual manifest JSON edits.
 9. `M14-P1.8` adds deterministic health remediation hints that point diagnostics at existing
    repair commands without implementing broad source-identity redesign or provenance rewriting.
-10. `M14-P2.1` adds `splendor pr-summary --since main`, a read-only PR-oriented summary with
+10. `M14-P1.9` audits the implemented source identity behavior against #94 and records whether the
+   remaining gap is narrow enough to close or retarget without changing canonical `src-...` IDs.
+11. `M14-P2.1` adds `splendor pr-summary --since main`, a read-only PR-oriented summary with
    lower-noise generated-state review guidance over local git state.
 
 After those slices land, the gate should use a comparable planning or repo-maintenance workflow and
@@ -967,12 +970,12 @@ ingest failures remain.
 `splendor source update-path <source-id|logical-id|title|path> <new-path>`. The command repairs an
 active workspace-backed source manifest after an intentional file move by validating the target as a
 supported in-workspace file, rejecting paths already curated by another active source, requiring the
-old path to be missing unless `--force` is supplied, updating the source-ref/logical-ID/alias fields,
-and reporting manifest/current checksums plus next commands. Same-byte moves queue re-ingest for the
-existing source ID so generated source-summary provenance can refresh; changed-byte moves return a
-partial repair status and point to `source refresh`. It does not implement the broader #94
-source-identity redesign, discover/register uncurated files, rewrite historical run records, or
-mutate maintained synthesis pages.
+old path to be missing unless `--force` is supplied, updating the source ref and compatibility path,
+preserving the stable logical ID and old path alias, adding the new path alias, and reporting
+manifest/current checksums plus next commands. Same-byte moves queue re-ingest for the existing
+source ID so generated source-summary provenance can refresh; changed-byte moves return a partial
+repair status and point to `source refresh`. It does not discover/register uncurated files, rewrite
+historical run records, or mutate maintained synthesis pages.
 
 `M14-P1.8` addresses issue #95 by making `splendor health` an operational repair guide for the
 repair commands that now exist. Maintenance issues can carry an optional `remediation_hint` field,
@@ -982,6 +985,20 @@ points to `splendor source refresh ...`, `splendor ingest --pending`, or `splend
 --changed`; failed/dead-letter queue shape and expired lease diagnostics point to queue retry or
 ingest repair commands. Unknown source provenance refs remain diagnostic-only and explicitly avoid
 inventing unsafe broad repair commands.
+
+`M14-P1.9` addresses issue #94 as a focused identity review/disposition, not a redesign. The audit
+finds the #94 expected behavior materially covered for curated workspace-backed sources by the
+landed M14 sequence: `M14-P1.1` adds stable `source:<workspace-path>` logical IDs and path aliases;
+`M14-P1.2` keeps content edits as content-addressed versions linked by `supersedes` /
+`superseded_by`; source freshness reports checksum drift separately from identity; `M14-P1.7`
+repairs intentional moves by updating active source refs and compatibility paths while preserving
+the stable logical ID and old path alias; and `M14-P1.4` can migrate maintained topic refs after
+refreshed successor summaries exist. Schema version `1` and canonical `src-...` manifest/page/run
+provenance IDs remain the compatibility contract. Legacy workspace-backed manifests can derive
+logical identity from `source_ref`, while older non-workspace copied/stored-artifact records keep
+their canonical source IDs until explicitly re-curated. Any future #94 follow-up should be a
+specific regression or an explicit extension beyond curated workspace-backed sources, not a
+schema-breaking source-ID migration.
 
 ## Candidate Milestone 15 — Post-v1 reviewed compile/update workflow
 

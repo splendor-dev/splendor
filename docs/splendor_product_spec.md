@@ -904,6 +904,13 @@ Release-readiness boundary:
   The `ingest --changed` repair path handles checksum-drifted curated workspace sources whose
   previous queue records are already done, and the `pr-summary` surface provides a read-only local
   PR handoff over that generated-state churn.
+- issue #94's broader source-identity question is materially addressed for curated
+  workspace-backed sources by the same contract: logical IDs and aliases are stable selectors above
+  canonical `src-...` records, content edits become superseded source versions, freshness reports
+  keep checksum drift separate from identity, `source update-path` preserves the original logical
+  selector while adding the new path alias for intentional moves, and maintained topic refs can be
+  migrated after refreshed successor summaries exist. This does not require a schema-version change
+  or a canonical source-ID migration.
 - issue #79 tracks the reviewed mutating compile/update workflow from #41; v1 shipped briefing and
   the non-mutating compile contract, and `M15-P1.1` begins the explicit one-page proposal/apply
   path.

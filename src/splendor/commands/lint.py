@@ -472,13 +472,14 @@ def _source_identity_issues(
     issues: list[MaintenanceIssue] = []
 
     if source.source_ref_kind == "workspace_path":
-        expected_logical_id = logical_source_id_for_ref(source.source_ref, source.source_ref_kind)
+        stable_identity_ref = source.original_path or source.source_ref
+        expected_logical_id = logical_source_id_for_ref(stable_identity_ref, source.source_ref_kind)
         if source.logical_id is not None and source.logical_id != expected_logical_id:
             issues.append(
                 MaintenanceIssue(
                     code="invalid-source-logical-id",
                     message=(
-                        "Workspace source logical_id must match source_ref: "
+                        "Workspace source logical_id must match the stable source identity ref: "
                         f"expected {expected_logical_id}, got {source.logical_id}"
                     ),
                     path=manifest_relpath,
@@ -486,7 +487,9 @@ def _source_identity_issues(
                     check_name="source-identity",
                 )
             )
-        allowed_aliases = {source.source_ref} if source.source_ref is not None else set()
+        allowed_aliases = {
+            alias for alias in (source.original_path, source.source_ref) if alias is not None
+        }
     else:
         allowed_aliases = set()
 
