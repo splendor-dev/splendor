@@ -112,8 +112,9 @@ Implemented today:
 - `splendor init`
 - `splendor add-source <path>`, `splendor add-source --glob "pattern"`, and
   `splendor add-source --dir path`
-- `splendor source list`, `splendor source lookup [query]`, `splendor source freshness`, and
-  `splendor source refresh <source-id|title|path>`
+- `splendor source list`, `splendor source lookup [query]`, `splendor source freshness`,
+  `splendor source refresh <source-id|title|path>`, and
+  `splendor source update-path <source-id|logical-id|title|path> <new-path>`
 - `splendor workspace refresh --changed` with optional `--ingest`, `--rebuild-index`,
   `--prune-superseded`, and `--update-topic-refs`
 - `splendor ingest <source-id>`, `splendor ingest --pending`, and `splendor ingest --changed`
@@ -168,6 +169,16 @@ list bullets from superseded source IDs to the active source version ID. Prune J
 unsafe candidates with reasons rather than deleting ambiguous state. The command does not discover
 or register uncurated files or mutate maintained synthesis content beyond that explicit source-ref
 migration.
+`splendor source update-path <source-id|logical-id|title|path> <new-path>` is the explicit repair
+path for moved active curated workspace sources. By default it requires the old workspace path to
+be missing; `--force` is available for deliberate reparenting while the old file still exists. It
+validates that the new path is a supported file inside the workspace, rejects targets already
+curated by another active source, updates the source manifest's workspace ref, logical ID, alias,
+and compatibility path fields, and reports manifest/current checksums plus next commands. Same-byte
+moves queue a re-ingest so generated source-summary provenance can refresh. Changed-byte moves are
+reported as partial repairs with a non-zero exit and an explicit `source refresh` next command. The
+command does not discover/register uncurated files, rewrite historical run records, or mutate
+maintained synthesis pages.
 
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
@@ -221,12 +232,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.5`
-- Current planned slice: `Repo refresh missing/broken source tolerance`
-- Current PR sub-slice: `M14-P1.6`
+- Previous completed PR sub-slice: `M14-P1.6`
+- Current planned slice: `Source path repair commands`
+- Current PR sub-slice: `M14-P1.7`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely source path repair commands`
-- Next planned PR sub-slice: `likely M14-P1.7`
+- Next planned slice: `likely health remediation hints`
+- Next planned PR sub-slice: `likely M14-P1.8`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel

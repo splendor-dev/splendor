@@ -9,6 +9,7 @@ from pathlib import Path
 
 from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
 from splendor.config import load_config
+from splendor.ingest_dispatch import SUPPORTED_SOURCE_TYPES
 from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
 from splendor.state.paths import resolve_workspace_path
@@ -19,6 +20,7 @@ from splendor.state.source_compat import (
     effective_logical_id,
     effective_materialized_path,
     effective_storage_mode,
+    logical_source_id_for_ref,
 )
 from splendor.state.source_registry import (
     RegisteredSource,
@@ -44,6 +46,21 @@ class SourceRefreshResult:
     queued: bool
     queue_path: Path | None
     message: str
+
+
+@dataclass(frozen=True)
+class SourcePathUpdateResult:
+    source: SourceRecord
+    manifest_path: Path
+    old_path: str
+    new_path: str
+    status: str
+    manifest_checksum: str
+    current_checksum: str
+    checksum_matches: bool
+    updated: bool
+    queue_path: Path | None
+    next_commands: list[str]
 
 
 @dataclass(frozen=True)
@@ -299,6 +316,108 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     )
 
 
+def update_source_path(
+    root: Path, source_query: str, new_path: Path, *, force: bool = False
+) -> SourcePathUpdateResult:
+    source_match = resolve_source_query_exact(root, source_query)
+    source = source_match.source
+    old_path = canonical_source_ref(source)
+
+    if source.superseded_by is not None:
+        msg = (
+            "Cannot update the path for a superseded source version: "
+            f"{source.source_id}. Select the active source version instead."
+        )
+        raise ValueError(msg)
+    if source.source_ref_kind != "workspace_path" or source.source_ref is None:
+        msg = (
+            "source update-path supports only workspace-backed curated sources in this release: "
+            f"{source.source_id}"
+        )
+        raise ValueError(msg)
+    storage_mode = effective_storage_mode(source)
+    if storage_mode not in {"none", "copy"}:
+        msg = (
+            "source update-path supports only none/copy storage for workspace-backed sources in "
+            f"this release; got {storage_mode!r}"
+        )
+        raise ValueError(msg)
+
+    old_target = resolve_workspace_path(root, source.source_ref, context="Current workspace source")
+    if old_target.exists() and not force:
+        msg = (
+            "Current workspace source path still exists; refusing to reparent a healthy source "
+            f"without --force: {source.source_ref}"
+        )
+        raise ValueError(msg)
+
+    target = _source_path_update_target(root, new_path)
+    source_type = target.suffix.lstrip(".") or "file"
+    if source_type not in SUPPORTED_SOURCE_TYPES:
+        msg = f"Target source type is not supported for ingestion: {source_type}"
+        raise ValueError(msg)
+    if source_type != source.source_type:
+        msg = (
+            "Target source type must match the existing source manifest: "
+            f"expected {source.source_type}, got {source_type}"
+        )
+        raise ValueError(msg)
+
+    new_ref = target.relative_to(root.resolve()).as_posix()
+    _ensure_update_path_target_is_unambiguous(
+        root,
+        source_id=source.source_id,
+        new_ref=new_ref,
+    )
+
+    current_checksum = sha256_file(target)
+    logical_id = logical_source_id_for_ref(new_ref, "workspace_path")
+    updated_fields: dict[str, object] = {
+        "source_ref": new_ref,
+        "source_ref_kind": "workspace_path",
+        "logical_id": logical_id,
+        "aliases": [new_ref],
+        "original_path": new_ref,
+    }
+    if storage_mode == "none":
+        updated_fields["path"] = new_ref
+
+    checksum_matches = current_checksum == source.checksum
+    if checksum_matches and source.status == "ingested":
+        updated_fields["status"] = "registered"
+
+    updated_source = SourceRecord.model_validate(source.model_dump(mode="json") | updated_fields)
+    updated = updated_source != source
+    if updated:
+        write_source_record(source_match.manifest_path, updated_source)
+
+    queue_path = enqueue_ingest_job(root, updated_source.source_id) if checksum_matches else None
+    status = "repaired" if checksum_matches else "partial"
+    next_commands = [
+        "splendor ingest --pending",
+        "splendor source freshness",
+    ]
+    if not checksum_matches:
+        next_commands = [
+            f"splendor source refresh {shlex.quote(new_ref)}",
+            "splendor ingest --pending",
+            "splendor source freshness",
+        ]
+    return SourcePathUpdateResult(
+        source=updated_source,
+        manifest_path=source_match.manifest_path,
+        old_path=old_path,
+        new_path=new_ref,
+        status=status,
+        manifest_checksum=updated_source.checksum,
+        current_checksum=current_checksum,
+        checksum_matches=checksum_matches,
+        updated=updated,
+        queue_path=queue_path,
+        next_commands=next_commands,
+    )
+
+
 def ingest_changed_sources(root: Path) -> StaleIngestResult:
     initial_freshness = scan_source_freshness(root)
     missing_items = [item for item in initial_freshness.sources if item.status == "missing"]
@@ -520,6 +639,30 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
     )
 
 
+def render_source_path_update_json(root: Path, result: SourcePathUpdateResult) -> str:
+    return json.dumps(
+        {
+            "source_id": result.source.source_id,
+            "logical_id": effective_logical_id(result.source),
+            "old_path": result.old_path,
+            "new_path": result.new_path,
+            "status": result.status,
+            "source_ref": result.source.source_ref,
+            "aliases": result.source.aliases,
+            "manifest_checksum": result.manifest_checksum,
+            "current_checksum": result.current_checksum,
+            "checksum_matches": result.checksum_matches,
+            "manifest_path": result.manifest_path.relative_to(root).as_posix(),
+            "updated": result.updated,
+            "queue_path": None
+            if result.queue_path is None
+            else result.queue_path.relative_to(root).as_posix(),
+            "next_commands": result.next_commands,
+        },
+        indent=2,
+    )
+
+
 def write_source_freshness_report(
     root: Path, result: SourceFreshnessResult, report_path: Path
 ) -> SourceFreshnessResult:
@@ -607,6 +750,40 @@ def _refreshable_source_path(root: Path, source: SourceRecord) -> Path:
         "with `splendor add-source <path>` to create a refreshable source_ref."
     )
     raise ValueError(msg)
+
+
+def _source_path_update_target(root: Path, new_path: Path) -> Path:
+    expanded = new_path.expanduser()
+    candidate = expanded.resolve() if expanded.is_absolute() else (root / expanded).resolve()
+    workspace_root = root.resolve()
+    try:
+        candidate.relative_to(workspace_root)
+    except ValueError as exc:
+        msg = f"Target source path must stay inside the workspace: {new_path}"
+        raise ValueError(msg) from exc
+    if not candidate.exists():
+        msg = f"Target source path does not exist: {new_path}"
+        raise FileNotFoundError(msg)
+    if not candidate.is_file():
+        msg = f"Target source path must be a file: {new_path}"
+        raise IsADirectoryError(msg)
+    return candidate
+
+
+def _ensure_update_path_target_is_unambiguous(root: Path, *, source_id: str, new_ref: str) -> None:
+    conflicting = [
+        result.source
+        for result in list_sources(root)
+        if result.source.source_id != source_id
+        and result.source.superseded_by is None
+        and result.source.source_ref_kind == "workspace_path"
+        and result.source.source_ref == new_ref
+    ]
+    if conflicting:
+        ids = ", ".join(source.source_id for source in conflicting[:5])
+        suffix = "" if len(conflicting) <= 5 else ", ..."
+        msg = f"Target source path is already curated by another active source: {ids}{suffix}"
+        raise ValueError(msg)
 
 
 def _freshness_item(root: Path, result: SourceLookupResult) -> SourceFreshnessItem:
