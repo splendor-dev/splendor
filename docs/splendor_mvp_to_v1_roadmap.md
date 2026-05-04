@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P3.1`
-- Current planned slice: `Planning-doc authority and task-oriented agent briefs`
-- Current PR sub-slice: `M14-P4.1`
+- Previous completed PR sub-slice: `M14-P4.1`
+- Current planned slice: `Post-v1 mutating compile/update workflow`
+- Current PR sub-slice: `M15-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Post-v1 mutating compile/update workflow`
-- Next planned PR sub-slice: `TBD`
+- Next planned slice: `Compile/update expansion after first reviewed page apply`
+- Next planned PR sub-slice: `M15-P1.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -936,6 +936,43 @@ metadata for configured planning/docs files and optional maintained wiki frontma
 `brief --agent-context` and `suggest-next` to rank current authority, roadmap, historical review,
 proposal, reference, and generated-summary context for a stated goal. Generated source-summary
 artifacts remain separate from maintained authority ranking.
+
+## Candidate Milestone 15 — Post-v1 reviewed compile/update workflow
+
+### Goal
+Turn the deferred #79 compile/update path from #41 into a small, review-gated source-to-synthesis
+maintenance loop without weakening the generated-versus-maintained page boundary.
+
+### Scope
+- deterministic source-summary evidence extraction
+- explicit one-page maintained synthesis update proposals
+- operator-reviewed apply semantics
+- schema-bound maintained-page frontmatter validation
+- continued separation between generated source summaries and maintained synthesis pages
+
+### Candidate PR slices
+- `M15-P1` Reviewed compile/update loop
+
+### Candidate PR sub-slices
+- `M15-P1.1` First reviewed compile/apply loop
+- `M15-P1.2` Compile/update expansion after first reviewed page apply
+
+### M15-P1.1 first slice
+
+`M15-P1.1` keeps bare `splendor wiki compile <source-id|title|path>` as the non-mutating contract
+surface and adds a narrow reviewed implementation behind explicit page selection. Operators run
+`splendor wiki compile <source-id|title|path> --page <maintained-page>` to preview a deterministic
+update from the generated source-summary page into one maintained topic, concept, entity,
+architecture, or glossary page. The preview reports a unified diff, target/source-summary SHA-256
+hashes, and a proposal hash. The command appends a managed `Compiled Source Evidence` section,
+adds the source ID to `source_refs`, records provenance links to the source and source-summary
+page, and validates schema-version-1 frontmatter before reporting the proposal. It writes only
+when the operator repeats the command with `--apply --proposal-hash <hash>`, and that hash must
+match the current target/source-summary inputs.
+
+The first slice intentionally does not choose multiple pages automatically, call an LLM, create a
+web UI, register new sources, refresh broad workspace state, or address #47 ingest timing, #37 web
+document-list scaling, or #30 repo-scan registration performance.
 
 ### Boundaries
 - Promote these candidates to committed roadmap slices only after the child issues and GitHub

@@ -236,6 +236,32 @@ def test_cli_wiki_rebuild_index_parser_accepts_json_flag() -> None:
     assert args.json_output is True
 
 
+def test_cli_wiki_compile_parser_accepts_reviewed_apply_page() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "wiki",
+            "compile",
+            "src-example",
+            "--page",
+            "wiki/topics/example.md",
+            "--apply",
+            "--proposal-hash",
+            "abc123",
+            "--json",
+        ]
+    )
+
+    assert args.command == "wiki"
+    assert args.wiki_command == "compile"
+    assert args.source_id == "src-example"
+    assert args.page == "wiki/topics/example.md"
+    assert args.apply is True
+    assert args.proposal_hash == "abc123"
+    assert args.json_output is True
+
+
 def test_cli_serve_parser_uses_default_host_and_port() -> None:
     parser = build_parser()
 

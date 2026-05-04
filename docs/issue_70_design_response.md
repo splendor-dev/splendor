@@ -115,8 +115,8 @@ in issue #72.
 - #86 tracks the narrower planning-document authority metadata and task-oriented agent brief gap
   found by the `M14-P3.1` re-evaluation; `M14-P4.1` adds the initial metadata and ranking layer.
 - #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
-  `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
-  deferred and is tracked by #79.
+  `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support is
+  tracked by #79, with `M15-P1.1` starting the explicit one-page proposal/apply path.
 - #42 has shipped restrained next-action hints around add-source, ingest, query/file-answer,
   briefing, and suggest-next flows.
 - #43 has shipped pending ingest queue handoff for CLI-created sources, and docs now show the
