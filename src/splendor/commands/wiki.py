@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+import yaml
 
 from splendor.commands.source import resolve_source_query, resolve_source_query_matches
 from splendor.config import load_config
@@ -16,6 +19,7 @@ from splendor.state.runtime import load_queue_item, load_run_record
 from splendor.state.source_compat import canonical_source_ref
 from splendor.state.source_registry import load_source_record
 from splendor.utils.fs import write_text_atomic
+from splendor.utils.provenance import dedupe_provenance_links, make_provenance_link
 from splendor.utils.wiki import parse_wiki_markdown, render_frontmatter
 
 SYNTHESIS_KINDS = {"architecture", "concept", "entity", "glossary", "topic"}
@@ -133,6 +137,26 @@ class WikiCompileContract:
     status: str
     contract: list[str]
     next_steps: list[str]
+
+
+@dataclass(frozen=True)
+class WikiCompileProposal:
+    source_id: str
+    source_title: str
+    source_ref: str
+    source_status: str
+    target_path: str
+    target_page_id: str
+    target_title: str
+    target_kind: str
+    source_summary_path: str
+    status: str
+    mutates: bool
+    applied: bool
+    changed: bool
+    evidence_lines: list[str]
+    proposed_source_refs: list[str]
+    proposed_markdown: str
 
 
 @dataclass(frozen=True)
@@ -688,6 +712,223 @@ def describe_wiki_compile_contract(root: Path, source_id: str) -> WikiCompileCon
     )
 
 
+def compile_source_into_page(
+    root: Path,
+    source_id: str,
+    *,
+    page_query: str,
+    apply: bool = False,
+) -> WikiCompileProposal:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    source = resolve_source_query(root, source_id).source
+    pages, invalid_pages = load_wiki_pages(root, layout)
+    if invalid_pages:
+        msg = f"Cannot compile with invalid wiki pages present: {invalid_pages[0].path}"
+        raise ValueError(msg)
+
+    target_page = _resolve_compile_target_page(root, layout, pages, page_query)
+    if target_page.frontmatter.kind not in SYNTHESIS_KINDS:
+        msg = (
+            "Compile target must be a maintained synthesis page "
+            f"({', '.join(sorted(SYNTHESIS_KINDS))}), got {target_page.frontmatter.kind}: "
+            f"{target_page.path}"
+        )
+        raise ValueError(msg)
+
+    summary_page = _single_source_summary_page(pages, source.source_id)
+    evidence_lines = _compile_evidence_lines(summary_page.body)
+    if not evidence_lines:
+        msg = f"Source summary has no deterministic evidence lines: {summary_page.path}"
+        raise ValueError(msg)
+
+    proposed_frontmatter = _compile_frontmatter(
+        target_page.frontmatter,
+        source_id=source.source_id,
+        summary_page_id=summary_page.frontmatter.page_id,
+        summary_path=summary_page.path,
+    )
+    proposed_body = _compile_body(
+        target_page.body,
+        source=source,
+        target_path=target_page.path,
+        summary_path=summary_page.path,
+        evidence_lines=evidence_lines,
+    )
+    proposed_markdown = _render_wiki_page(proposed_frontmatter, proposed_body)
+    _validate_compiled_markdown(target_page.path, proposed_markdown)
+
+    target_path = root / target_page.path
+    current_markdown = target_path.read_text(encoding="utf-8")
+    changed = current_markdown != proposed_markdown
+    if apply and changed:
+        write_text_atomic(target_path, proposed_markdown)
+
+    status = "applied" if apply and changed else "no-op" if not changed else "proposed"
+    return WikiCompileProposal(
+        source_id=source.source_id,
+        source_title=source.title,
+        source_ref=canonical_source_ref(source),
+        source_status=source.status,
+        target_path=target_page.path,
+        target_page_id=target_page.frontmatter.page_id,
+        target_title=target_page.frontmatter.title,
+        target_kind=target_page.frontmatter.kind,
+        source_summary_path=summary_page.path,
+        status=status,
+        mutates=apply and changed,
+        applied=apply and changed,
+        changed=changed,
+        evidence_lines=evidence_lines,
+        proposed_source_refs=proposed_frontmatter.source_refs,
+        proposed_markdown=proposed_markdown,
+    )
+
+
+def _resolve_compile_target_page(
+    root: Path,
+    layout,
+    pages: list[WikiPageSnapshot],
+    page_query: str,
+) -> WikiPageSnapshot:
+    raw_path = Path(page_query)
+    candidate_paths: list[Path] = []
+    if raw_path.is_absolute():
+        candidate_paths.append(raw_path)
+    else:
+        candidate_paths.extend([root / raw_path, layout.wiki_dir / raw_path])
+
+    for candidate_path in candidate_paths:
+        if not candidate_path.exists():
+            continue
+        resolved = candidate_path.resolve()
+        if not resolved.is_relative_to(root):
+            msg = f"Compile target must be inside the workspace: {page_query}"
+            raise ValueError(msg)
+        page_ref = _relative(root, resolved)
+        matches = [page for page in pages if page.path == page_ref]
+        if matches:
+            return matches[0]
+
+    exact_matches = [
+        page
+        for page in pages
+        if page.frontmatter.page_id == page_query or page.frontmatter.title == page_query
+    ]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        msg = f"Ambiguous compile target: {page_query}"
+        raise ValueError(msg)
+    msg = f"Unknown compile target page: {page_query}"
+    raise ValueError(msg)
+
+
+def _single_source_summary_page(pages: list[WikiPageSnapshot], source_id: str) -> WikiPageSnapshot:
+    summary_pages = _source_summary_pages(pages, source_id)
+    if len(summary_pages) == 1:
+        return summary_pages[0]
+    if not summary_pages:
+        msg = f"Source has no generated source-summary page yet: {source_id}"
+        raise ValueError(msg)
+    msg = f"Source has multiple source-summary pages: {source_id}"
+    raise ValueError(msg)
+
+
+def _compile_frontmatter(
+    frontmatter: KnowledgePageFrontmatter,
+    *,
+    source_id: str,
+    summary_page_id: str,
+    summary_path: str,
+) -> KnowledgePageFrontmatter:
+    source_refs = _dedupe_preserve_order([*frontmatter.source_refs, source_id])
+    provenance_links = dedupe_provenance_links(
+        [
+            *frontmatter.provenance_links,
+            make_provenance_link(
+                source_id=source_id,
+                role="supports",
+                note="Compiled source evidence accepted into maintained synthesis.",
+            ),
+            make_provenance_link(
+                page_id=summary_page_id,
+                path_ref=summary_path,
+                role="generated-from",
+                note="Generated source-summary page used as compile evidence.",
+            ),
+        ]
+    )
+    return frontmatter.model_copy(
+        update={"source_refs": source_refs, "provenance_links": provenance_links}
+    )
+
+
+def _compile_body(
+    body: str,
+    *,
+    source: SourceRecord,
+    target_path: str,
+    summary_path: str,
+    evidence_lines: list[str],
+) -> str:
+    start_marker = f"<!-- splendor-compile:start source={source.source_id} -->"
+    if start_marker in body:
+        return body
+    summary_link = posixpath.relpath(summary_path, start=posixpath.dirname(target_path))
+    evidence = "\n".join(f"- {line}" for line in evidence_lines)
+    block = (
+        f"## Source Evidence: {source.title}\n\n"
+        f"{start_marker}\n"
+        f"- Source ref: `{canonical_source_ref(source)}`\n"
+        f"- Source summary: [{summary_path}]({summary_link})\n\n"
+        "### Evidence\n\n"
+        f"{evidence}\n"
+        f"<!-- splendor-compile:end source={source.source_id} -->\n"
+    )
+    return body.rstrip() + "\n\n" + block
+
+
+def _compile_evidence_lines(summary_body: str) -> list[str]:
+    section_text = _section_text(summary_body, {"summary", "key facts", "extract"})
+    lines: list[str] = []
+    for raw_line in section_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("```") or line.startswith("~~~"):
+            continue
+        if line.startswith("#"):
+            continue
+        if line.startswith(_GENERATED_KEY_FACT_PREFIXES):
+            continue
+        if line.startswith(("- ", "* ")):
+            line = line[2:].strip()
+        line = re.sub(r"\s+", " ", line).strip()
+        if not line:
+            continue
+        if len(line) > 180:
+            line = line[:177].rstrip() + "..."
+        if line not in lines:
+            lines.append(line)
+        if len(lines) == 5:
+            break
+    return lines
+
+
+def _render_wiki_page(frontmatter: KnowledgePageFrontmatter, body: str) -> str:
+    return f"---\n{render_frontmatter(frontmatter)}\n---\n{body}"
+
+
+def _validate_compiled_markdown(page_ref: str, content: str) -> None:
+    frontmatter_text, body = content.removeprefix("---\n").split("\n---\n", maxsplit=1)
+    payload = yaml.safe_load(frontmatter_text) or {}
+    KnowledgePageFrontmatter.model_validate(payload)
+    if not body.startswith("\n"):
+        msg = f"Compiled page lost markdown body separation: {page_ref}"
+        raise ValueError(msg)
+
+
 def render_wiki_status_json(status: WikiStatus) -> str:
     return json.dumps(
         {
@@ -729,6 +970,10 @@ def render_wiki_suggest_json(result: WikiSuggestResult) -> str:
 
 
 def render_wiki_compile_contract_json(result: WikiCompileContract) -> str:
+    return json.dumps(asdict(result), indent=2)
+
+
+def render_wiki_compile_proposal_json(result: WikiCompileProposal) -> str:
     return json.dumps(asdict(result), indent=2)
 
 

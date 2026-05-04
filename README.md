@@ -129,7 +129,9 @@ Implemented today:
 - `splendor add-topic "Title"` with optional `--tags`, `--source-refs`, and `--template`
 - `splendor wiki status`
 - `splendor wiki suggest <source-id>`
-- `splendor wiki compile <source-id>` as a non-mutating review-gated contract description
+- `splendor wiki compile <source-id>` as a non-mutating review-gated contract description, plus
+  `splendor wiki compile <source-id> --page <page> --apply` for explicit reviewed synthesis-page
+  updates
 - `splendor wiki rebuild-index`
 - `splendor brief [goal]` and `splendor brief --agent-context [goal]`
 - config-backed authority briefs for maintained planning/docs context through
@@ -140,7 +142,7 @@ Implemented today:
 
 Not implemented yet:
 
-- mutating review-gated `splendor wiki compile`
+- multi-page or LLM-assisted mutating `splendor wiki compile`
 - heavyweight OCR/image extraction providers
 - mutating web UI actions such as add-source forms
 
@@ -207,12 +209,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P3.1`
-- Current planned slice: `Planning-doc authority and task-oriented agent briefs`
-- Current PR sub-slice: `M14-P4.1`
+- Previous completed PR sub-slice: `M14-P4.1`
+- Current planned slice: `Post-v1 mutating compile/update workflow`
+- Current PR sub-slice: `M15-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Post-v1 mutating compile/update workflow`
-- Next planned PR sub-slice: `TBD`
+- Next planned slice: `Compile/update expansion after first reviewed page apply`
+- Next planned PR sub-slice: `M15-P1.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -298,14 +300,15 @@ leads with source paths or refs before canonical source IDs where practical.
 CLI, clarifies generated-state review policy, and records the v1 readiness audit. The audit treats
 issue #41's briefing and non-mutating compile contract, #42's next-action hints, #43's pending
 ingest handoff, #44's query snippets, #45's web status/source detail pages, and #46's page-state
-visibility as represented in current behavior. It still calls out #41's mutating compile/update
-workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Issues #30 and #37
+visibility as represented in current behavior. `M15-P1.1` now starts #41's deferred mutating
+compile/update workflow through #79 with explicit one-page proposal/apply semantics. Issue #47
+remains an ingest/run-state timing follow-up. Issues #30 and #37
 remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
 is the parent feedback loop for the M14 source-lifecycle sequence; stable logical source
 identities, supersession lifecycle, safe workspace refresh, superseded summary pruning, topic-ref
 migration, and PR-summary support have landed. `M14-P3.1` recommends closing #72 once maintainers
 accept the gate result, with the narrower remaining handoff gap tracked by #86.
-Issue #79 tracks the deferred mutating compile/update path from #41.
+Issue #79 tracks the reviewed compile/update sequence that started in `M15-P1.1`.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
 workspace-backed manifests now persist `source:<workspace-path>` logical IDs and path aliases while
@@ -346,6 +349,14 @@ and maintained wiki pages can opt into authority ranking with frontmatter fields
 `authority_role`, `authority_freshness`, and `authority_scope`. `brief --agent-context` and
 `suggest-next` include ranked authority docs for the goal while keeping generated source-summary
 artifacts separate from maintained authority.
+
+`M15-P1.1` starts the post-v1 compile/update workflow from #79. Bare
+`splendor wiki compile <source-id|title|path>` remains non-mutating and prints the review contract.
+Adding `--page <maintained-page>` produces a deterministic proposed update from the generated
+source-summary page into a single maintained topic/concept/entity/architecture/glossary page.
+Adding `--apply` is the explicit operator acceptance step that writes only that maintained page,
+updates schema-bound frontmatter source refs/provenance links, and refuses generated
+source-summary pages as compile targets.
 
 ### v1 readiness checklist
 

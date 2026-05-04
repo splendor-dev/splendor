@@ -745,11 +745,20 @@ This workflow should start with text-native sources and deterministic page-impac
 compile step may remain human-reviewed or LLM-assisted behind explicit confirmation until the
 contract is trustworthy.
 
-Current `splendor wiki compile <source-id>` support is intentionally non-mutating. It validates the
-source record and prints the review-gated contract: inspect the source summary, run source-impact
-suggestions, propose synthesis-page edits with provenance/run state, keep generated source-summary
-pages separate from maintained synthesis pages, and require human review before wiki synthesis is
-changed.
+Current `splendor wiki compile <source-id>` support remains intentionally non-mutating when no
+target page is provided. It validates the source record and prints the review-gated contract:
+inspect the source summary, run source-impact suggestions, propose synthesis-page edits with
+provenance/run state, keep generated source-summary pages separate from maintained synthesis pages,
+and require human review before wiki synthesis is changed.
+
+The first mutating slice is deliberately narrow. `splendor wiki compile <source-id|title|path>
+--page <maintained-page>` proposes a deterministic one-page update from the generated
+source-summary page into a maintained topic, concept, entity, architecture, or glossary page. The
+proposal adds bounded source evidence to the page body, adds the source ID to frontmatter
+`source_refs`, records provenance links to the source and generated source-summary page, and
+validates schema-version-1 frontmatter before reporting output. The command writes only when the
+operator supplies `--apply`, making apply the explicit reviewed accept step. Generated
+source-summary pages are rejected as compile targets.
 
 Command output should support the workflow without becoming noisy. After `add-source`, Splendor
 should print the exact next ingest command or enqueue the source for pending ingestion. After
@@ -814,8 +823,10 @@ Current implementation:
 - `splendor wiki suggest <source-id|title|path>` deterministically ranks existing synthesis pages using source
   metadata, source-summary text, frontmatter source refs, tags, source refs, and page content, with
   optional JSON output.
-- `splendor wiki compile <source-id|title|path>` exposes the review-gated compile-loop contract, validates the
-  source, and reports that it does not mutate synthesis pages yet.
+- `splendor wiki compile <source-id|title|path>` exposes the review-gated compile-loop contract
+  when no target page is supplied. With `--page <maintained-page>`, it proposes a deterministic
+  source-summary evidence update for one maintained synthesis page, and `--apply` explicitly
+  accepts and writes that page after frontmatter validation.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
   pages themselves.
@@ -823,8 +834,8 @@ Current implementation:
   boilerplate when selecting snippets, supports tag/source filters, records those filters in JSON
   and saved snapshots, and text output points to `file-answer` when a saved query has matches.
 - `splendor file-answer` prints the created page and a restrained review hint after filing.
-- Mutating `splendor wiki compile <source-id>` remains deferred to a later reviewed compile-loop
-  slice.
+- Multi-page, LLM-assisted, and automatic-page-selection compile/update behavior remains deferred
+  to later reviewed compile-loop slices.
 
 M13-P2 repo-discovery contracts:
 
@@ -870,8 +881,9 @@ Release-readiness boundary:
   including explicit superseded source-summary pruning and maintained-page source-ref migration.
   The `pr-summary` surface now provides a read-only local PR handoff over that generated-state
   churn.
-- issue #79 tracks the deferred mutating compile/update workflow from #41; v1 ships briefing and
-  the non-mutating compile contract only.
+- issue #79 tracks the reviewed mutating compile/update workflow from #41; v1 shipped briefing and
+  the non-mutating compile contract, and `M15-P1.1` begins the explicit one-page proposal/apply
+  path.
 - `docs/v1_release_handoff.md` is the v1 handoff checklist for final validation, GitHub metadata,
   issue state, known non-blockers, and the conservative post-v1 queue.
 

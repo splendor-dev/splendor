@@ -75,10 +75,12 @@ from splendor.commands.source import (
 from splendor.commands.wiki import (
     add_topic_page,
     build_wiki_status,
+    compile_source_into_page,
     describe_wiki_compile_contract,
     rebuild_wiki_index,
     render_topic_scaffold_json,
     render_wiki_compile_contract_json,
+    render_wiki_compile_proposal_json,
     render_wiki_index_rebuild_json,
     render_wiki_status_json,
     render_wiki_suggest_json,
@@ -330,6 +332,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     wiki_compile_parser.add_argument(
         "source_id", help="Registered source ID, title, or path to inspect"
+    )
+    wiki_compile_parser.add_argument(
+        "--page",
+        help=(
+            "Maintained synthesis page path, page ID, or exact title to propose updates for. "
+            "Without --page the command prints the compile contract only."
+        ),
+    )
+    wiki_compile_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the proposed page update after explicit operator review.",
     )
     wiki_compile_parser.add_argument(
         "--json",
@@ -1296,13 +1310,46 @@ def handle_wiki_suggest(args: argparse.Namespace) -> int:
 
 def handle_wiki_compile(args: argparse.Namespace) -> int:
     root = args.root.resolve()
+    if args.apply and not args.page:
+        return _print_error(ValueError("wiki compile --apply requires --page"))
     try:
-        result = describe_wiki_compile_contract(root, args.source_id)
+        if args.page:
+            result = compile_source_into_page(
+                root,
+                args.source_id,
+                page_query=args.page,
+                apply=args.apply,
+            )
+        else:
+            result = describe_wiki_compile_contract(root, args.source_id)
     except (FileNotFoundError, ValueError) as exc:
         return _print_error(exc)
 
     if args.json_output:
-        print(render_wiki_compile_contract_json(result))
+        if args.page:
+            print(render_wiki_compile_proposal_json(result))
+        else:
+            print(render_wiki_compile_contract_json(result))
+        return 0
+
+    if args.page:
+        print(f"Source ref: {result.source_ref}")
+        print(f"Source ID: {result.source_id}")
+        print(f"Title: {result.source_title}")
+        print(f"Status: {result.source_status}")
+        print(f"Target page: {result.target_path}")
+        print(f"Source summary: {result.source_summary_path}")
+        print(f"Compile status: {result.status}")
+        print(f"Mutates wiki: {'yes' if result.mutates else 'no'}")
+        print("Evidence:")
+        for line in result.evidence_lines:
+            print(f"- {line}")
+        if not args.apply and result.changed:
+            print("Next steps:")
+            print(
+                f"- Review the proposed markdown, then run "
+                f"`splendor wiki compile {result.source_id} --page {result.target_path} --apply`."
+            )
         return 0
 
     print(f"Source ref: {result.source_ref}")

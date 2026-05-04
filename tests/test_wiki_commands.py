@@ -672,6 +672,159 @@ def test_wiki_compile_reports_unknown_source(tmp_path: Path, capsys) -> None:
     assert "Unknown source ID: src-missing" in capsys.readouterr().out
 
 
+def test_wiki_compile_proposes_maintained_page_update_without_mutating(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-loop.md"
+    source.write_text(
+        "# Compile loop\n\n"
+        "## Summary\n\n"
+        "Reviewed compile turns source evidence into maintained synthesis.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "compile-loop.md",
+        kind="topic",
+        title="Compile loop",
+        page_id="topic-compile-loop",
+        body="# Compile loop\n\n## Summary\n\nExisting synthesis.\n",
+    )
+    target_path = tmp_path / "wiki" / "topics" / "compile-loop.md"
+    before = target_path.read_text(encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            "wiki/topics/compile-loop.md",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "proposed"
+    assert payload["mutates"] is False
+    assert payload["changed"] is True
+    assert payload["target_path"] == "wiki/topics/compile-loop.md"
+    assert payload["source_summary_path"] == f"wiki/sources/{added.source_id}.md"
+    assert added.source_id in payload["proposed_source_refs"]
+    assert "<!-- splendor-compile:start" in payload["proposed_markdown"]
+    assert "Reviewed compile turns source evidence" in payload["proposed_markdown"]
+    assert target_path.read_text(encoding="utf-8") == before
+
+
+def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-loop.md"
+    source.write_text(
+        "# Compile loop\n\n## Summary\n\nCompile apply records evidence with source provenance.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    source_summary_path = tmp_path / "wiki" / "sources" / f"{added.source_id}.md"
+    source_summary_before = source_summary_path.read_text(encoding="utf-8")
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "compile-loop.md",
+        kind="topic",
+        title="Compile loop",
+        page_id="topic-compile-loop",
+        body="# Compile loop\n\n## Summary\n\nExisting synthesis.\n",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            "topic-compile-loop",
+            "--apply",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "applied"
+    assert payload["mutates"] is True
+    target = parse_wiki_markdown(tmp_path / "wiki" / "topics" / "compile-loop.md")
+    assert target.frontmatter.kind == "topic"
+    assert target.frontmatter.source_refs == [added.source_id]
+    assert [link.source_id for link in target.frontmatter.provenance_links if link.source_id] == [
+        added.source_id
+    ]
+    assert "## Source Evidence: compile loop" in target.body
+    assert "Compile apply records evidence" in target.body
+    assert source_summary_path.read_text(encoding="utf-8") == source_summary_before
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            "topic-compile-loop",
+            "--apply",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "no-op"
+    assert payload["mutates"] is False
+
+
+def test_wiki_compile_rejects_generated_source_summary_target(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-loop.md"
+    source.write_text("# Compile loop\n\nSynthesis belongs elsewhere.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            f"wiki/sources/{added.source_id}.md",
+        ]
+    )
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "Compile target must be a maintained synthesis page" in out
+    assert "source-summary" in out
+
+
+def test_wiki_compile_apply_requires_page(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "compile", "src-missing", "--apply"])
+
+    assert exit_code == 1
+    assert "wiki compile --apply requires --page" in capsys.readouterr().out
+
+
 def test_brief_json_includes_goal_state_matches_planning_and_next_actions(
     tmp_path: Path, capsys
 ) -> None:

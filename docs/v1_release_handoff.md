@@ -54,6 +54,8 @@ For this handoff:
   maintainers accept the gate result
 - #86 tracks the planning-document authority and task-oriented agent brief gap addressed by
   `M14-P4.1`
+- #79 now owns the M15 reviewed compile/update sequence; `M15-P1.1` starts with explicit
+  one-page proposal/apply semantics rather than broad automatic synthesis updates
 
 ## Known Non-Blockers
 
@@ -75,8 +77,8 @@ The conservative next queue after the `M14-P3.1` gate is:
    task-oriented authority brief ranking.
 3. Keep using `splendor pr-summary --since main` during review handoff to explain source
    lifecycle, maintained wiki, source-summary, and mechanical generated-state changes.
-4. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
-   scope.
+4. Continue #79 through `M15-P1.1`, the first reviewed compile/apply loop from source-summary
+   evidence into a single maintained synthesis page.
 5. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
@@ -97,8 +99,10 @@ bundle is:
    #72.
 
 The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. After `M14-P4.1`, future
-work should start from #79 unless #86 review identifies a narrower follow-up or a new real-agent
-run reopens a source-lifecycle regression.
+work starts from #79 unless #86 review identifies a narrower follow-up or a new real-agent run
+reopens a source-lifecycle regression. The first #79 slice is `M15-P1.1`: keep bare compile
+non-mutating, require `--page` for a deterministic proposal, and require `--apply` for the
+explicit reviewed write.
 
 ## Tagging Readiness
 
