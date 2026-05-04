@@ -112,8 +112,8 @@ in issue #72.
   superseded source-summary pruning, topic-ref migration, and `splendor pr-summary --since main`
   have landed. The `M14-P3.1` source-lifecycle re-evaluation records that the broad #72 lifecycle
   loop can close once maintainers accept the gate result.
-- #86 tracks the narrower remaining planning-document authority metadata and task-oriented agent
-  brief gap found by the `M14-P3.1` re-evaluation.
+- #86 tracks the narrower planning-document authority metadata and task-oriented agent brief gap
+  found by the `M14-P3.1` re-evaluation; `M14-P4.1` adds the initial metadata and ranking layer.
 - #41 has shipped `splendor brief [goal]`, `brief --agent-context`, and the non-mutating
   `splendor wiki compile <source-id|title|path>` contract. Mutating compile/update support remains
   deferred and is tracked by #79.

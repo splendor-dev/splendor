@@ -7,7 +7,7 @@ from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.wiki import add_topic_page, rebuild_wiki_index
-from splendor.config import load_config, write_config
+from splendor.config import AuthorityDocumentConfig, load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport
 from splendor.state.source_registry import load_source_record
 from splendor.utils.wiki import parse_wiki_markdown
@@ -22,6 +22,9 @@ def write_wiki_page(
     review_state: str = "draft",
     source_refs: list[str] | None = None,
     tags: list[str] | None = None,
+    authority_role: str | None = None,
+    authority_freshness: str | None = None,
+    authority_scope: list[str] | None = None,
     body: str = "",
 ) -> None:
     frontmatter = KnowledgePageFrontmatter(
@@ -32,6 +35,9 @@ def write_wiki_page(
         review_state=review_state,
         source_refs=source_refs or [],
         tags=tags or [],
+        authority_role=authority_role,
+        authority_freshness=authority_freshness,
+        authority_scope=authority_scope or [],
         confidence=0.8,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -844,6 +850,162 @@ def test_brief_agent_context_text_output_is_compact(tmp_path: Path, capsys) -> N
     assert "Suggested next:" in out
     assert "Wiki status:" in out
     assert "Next actions:" in out
+
+
+def test_brief_agent_context_ranks_configured_authority_docs(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "README.md").write_text(
+        "# Project README\n\nAuthority for current agent handoff workflow.\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "roadmap.md").write_text(
+        "# Roadmap\n\nRoadmap for future agent handoff work.\n", encoding="utf-8"
+    )
+    (docs / "old-review.md").write_text(
+        "# Old Review\n\nHistorical agent handoff review.\n", encoding="utf-8"
+    )
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/old-review.md",
+            role="historical-review",
+            freshness="historical",
+            purpose="Older review context.",
+            applies_to=["agent handoff"],
+        ),
+        AuthorityDocumentConfig(
+            path="README.md",
+            role="current-authority",
+            freshness="current",
+            purpose="Current project entrypoint.",
+            applies_to=["agent handoff"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/roadmap.md",
+            role="roadmap",
+            freshness="current",
+            purpose="Planned future work.",
+            applies_to=["agent handoff"],
+        ),
+    ]
+    write_config(tmp_path, config)
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "agent", "handoff", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority = payload["authority_briefs"]
+    assert [item["path"] for item in authority[:3]] == [
+        "README.md",
+        "docs/roadmap.md",
+        "docs/old-review.md",
+    ]
+    assert authority[0]["role"] == "current-authority"
+    authority_actions = [
+        action for action in payload["suggested_actions"] if action["category"] == "authority"
+    ]
+    assert authority_actions
+    assert authority_actions[0]["path"] == "README.md"
+
+
+def test_brief_agent_context_warns_but_does_not_rank_missing_authority_docs(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="missing.md",
+            role="current-authority",
+            freshness="current",
+        )
+    ]
+    write_config(tmp_path, config)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--agent-context", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["authority_briefs"] == []
+    assert all(
+        not action["title"].startswith("Read authority doc")
+        for action in payload["suggested_actions"]
+    )
+    assert payload["warnings"] == [
+        {
+            "area": "authority",
+            "path": "missing.md",
+            "message": "Configured authority document is missing.",
+        }
+    ]
+
+
+def test_suggest_next_uses_wiki_authority_metadata_but_skips_source_summaries(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "agent-handoff.md",
+        kind="topic",
+        title="Agent handoff authority",
+        page_id="topic-agent-handoff",
+        authority_role="current-authority",
+        authority_freshness="current",
+        authority_scope=["agent handoff"],
+        body="Maintained agent handoff decisions live here.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "sources" / "src-generated.md",
+        kind="source-summary",
+        title="Generated summary",
+        page_id="src-generated",
+        authority_role="current-authority",
+        authority_freshness="current",
+        body="Generated source summaries are not maintained authority.",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "suggest-next", "agent", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority = [action for action in payload["actions"] if action["category"] == "authority"]
+    assert authority
+    assert authority[0]["path"] == "wiki/topics/agent-handoff.md"
+    assert all(action["path"] != "wiki/sources/src-generated.md" for action in authority)
+
+
+def test_suggest_next_derives_draft_wiki_authority_freshness_as_watch(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "draft-authority.md",
+        kind="topic",
+        title="Draft authority",
+        page_id="topic-draft-authority",
+        authority_role="current-authority",
+        body="Draft authority notes for agent handoff.",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "suggest-next", "agent", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority_brief = payload["authority_briefs"][0]
+    assert authority_brief["path"] == "wiki/topics/draft-authority.md"
+    assert authority_brief["freshness"] == "watch"
+    authority_actions = [
+        action for action in payload["actions"] if action["category"] == "authority"
+    ]
+    assert authority_actions[0]["reason"].startswith("current-authority/watch:")
 
 
 def test_suggest_next_json_ranks_changed_sources_before_review_work(tmp_path: Path, capsys) -> None:

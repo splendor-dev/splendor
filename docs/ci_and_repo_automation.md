@@ -308,6 +308,9 @@ Required secrets:
 - `Claude Code Review` provides automated AI code review after CI `lint` and `test` pass, plus
   interactive follow-up.
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
+  Local `brief --agent-context` and `suggest-next` output may include ranked authority docs from
+  `splendor.yaml`, but workflow comments remain GitHub-state summaries rather than document
+  authority validators.
 - `pre-commit.ci autofix trigger` bridges bot PRs and `pre-commit.ci` label-based autofix behavior.
 - `weekly-repo-review` is scheduled maintenance, not a merge gate.
 

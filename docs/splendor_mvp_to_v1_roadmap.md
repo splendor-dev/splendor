@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P2.1`
-- Current planned slice: `Source-lifecycle re-evaluation gate`
-- Current PR sub-slice: `M14-P3.1`
+- Previous completed PR sub-slice: `M14-P3.1`
+- Current planned slice: `Planning-doc authority and task-oriented agent briefs`
+- Current PR sub-slice: `M14-P4.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Planning-doc authority and task-oriented agent briefs`
-- Next planned PR sub-slice: `M14-P4.1`
+- Next planned slice: `Post-v1 mutating compile/update workflow`
+- Next planned PR sub-slice: `TBD`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -931,9 +931,11 @@ lifecycle pain from #72 is materially addressed, and this PR recommends closing 
 maintainers accept the gate result. The remaining agent-usefulness gap is narrower and is tracked
 by #86: planning-document authority metadata and task-oriented agent briefs.
 
-`M14-P4.1` should address #86 without implementing #79. It should improve how Splendor ranks
-current-state planning docs, roadmap docs, historical reviews, proposals, generated summaries, and
-task-specific constraints in agent-facing handoff surfaces.
+`M14-P4.1` addresses #86 without implementing #79. It adds schema-version-1-compatible authority
+metadata for configured planning/docs files and optional maintained wiki frontmatter, then teaches
+`brief --agent-context` and `suggest-next` to rank current authority, roadmap, historical review,
+proposal, reference, and generated-summary context for a stated goal. Generated source-summary
+artifacts remain separate from maintained authority ranking.
 
 ### Boundaries
 - Promote these candidates to committed roadmap slices only after the child issues and GitHub
