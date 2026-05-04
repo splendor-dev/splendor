@@ -142,6 +142,6 @@ urgent:
 
 ## Next Slice
 
-The next planned M14 work should be `M14-P4.1`: planning-document authority metadata and
-task-oriented agent briefs. That work should improve the handoff layer without implementing #79 or
-changing schema version `1` without an explicit migration plan.
+`M14-P4.1` follows this gate with planning-document authority metadata and task-oriented agent
+briefs. That work improves the handoff layer without implementing #79 or changing schema version
+`1` without an explicit migration plan.

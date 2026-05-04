@@ -22,3 +22,76 @@ queue:
   - 60
   - 300
   - 900
+briefing:
+  authority_documents:
+  - path: AGENTS.md
+    role: current-authority
+    freshness: current
+    purpose: Static repo-specific agent rules and completion gate.
+    applies_to:
+    - agent handoff
+    - PR workflow
+  - path: README.md
+    role: current-authority
+    freshness: current
+    purpose: Current user-facing project entrypoint and What Comes Next planning state.
+    applies_to:
+    - agent handoff
+    - planning state
+  - path: .agent-plan.md
+    role: current-authority
+    freshness: current
+    purpose: Dynamic agent planning state for the active roadmap slice.
+    applies_to:
+    - agent handoff
+    - planning state
+  - path: docs/splendor_mvp_to_v1_roadmap.md
+    role: roadmap
+    freshness: current
+    purpose: Current roadmap authority for milestone scope and next planned slices.
+    applies_to:
+    - roadmap
+    - milestone planning
+  - path: docs/splendor_product_spec.md
+    role: current-authority
+    freshness: current
+    purpose: Product behavior authority for briefing, handoff, and source lifecycle semantics.
+    applies_to:
+    - product contract
+    - agent handoff
+  - path: docs/schema_contracts.md
+    role: current-authority
+    freshness: current
+    purpose: Schema and deterministic state contract reference.
+    applies_to:
+    - schemas
+    - CLI contracts
+  - path: docs/ci_and_repo_automation.md
+    role: current-authority
+    freshness: current
+    purpose: Automation and GitHub workflow behavior reference.
+    applies_to:
+    - CI
+    - repository automation
+  - path: docs/v1_release_handoff.md
+    role: reference
+    freshness: watch
+    purpose: v1 release handoff and known post-v1 follow-up queue.
+    applies_to:
+    - release handoff
+    - post-v1 planning
+  - path: docs/m14_synthbanshee_reevaluation.md
+    role: historical-review
+    freshness: current
+    purpose: M14-P3.1 internal re-evaluation of the #72 source-lifecycle feedback loop.
+    applies_to:
+    - issue 72
+    - issue 86
+    - agent handoff
+  - path: docs/issue_70_design_response.md
+    role: historical-review
+    freshness: watch
+    purpose: Design response to the first real agent-experience report and remaining follow-ups.
+    applies_to:
+    - issue 70
+    - agent experience

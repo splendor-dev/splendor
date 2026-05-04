@@ -52,13 +52,15 @@ For this handoff:
 - #72 is unblocked after `M14-P2.1`; the `M14-P3.1` source-lifecycle re-evaluation gate records
   that the source-refresh lifecycle pain is materially addressed and recommends closing #72 once
   maintainers accept the gate result
-- #86 tracks the narrower remaining planning-document authority and task-oriented agent brief gap
+- #86 tracks the planning-document authority and task-oriented agent brief gap addressed by
+  `M14-P4.1`
 
 ## Known Non-Blockers
 
 These items are intentionally not v1 release blockers:
 
-- authority and staleness metadata for living planning docs
+- richer post-M14 authority lifecycle policy after the initial planning-doc authority briefs have
+  been exercised in real repositories
 - ingest run-duration precision for #47
 - repo-scan bulk registration optimization for #30
 - web document-list scaling for #37
@@ -69,7 +71,8 @@ The conservative next queue after the `M14-P3.1` gate is:
 
 1. Close #72 once maintainers accept the gate PR, because its broad source-refresh lifecycle and PR
    handoff asks have landed and been re-evaluated.
-2. Continue with #86 for planning-document authority metadata and task-oriented agent briefs.
+2. Review #86 through `M14-P4.1`, which adds initial planning-document authority metadata and
+   task-oriented authority brief ranking.
 3. Keep using `splendor pr-summary --since main` during review handoff to explain source
    lifecycle, maintained wiki, source-summary, and mechanical generated-state changes.
 4. Keep #79 as the tracked post-v1 compile/update workflow rather than reopening #41 for deferred
@@ -93,8 +96,9 @@ bundle is:
    including a controlled changed-source exercise, and record the close-or-split recommendation for
    #72.
 
-The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. Future work should start
-from #86 unless a new real-agent run reopens a source-lifecycle regression.
+The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. After `M14-P4.1`, future
+work should start from #79 unless #86 review identifies a narrower follow-up or a new real-agent
+run reopens a source-lifecycle regression.
 
 ## Tagging Readiness
 

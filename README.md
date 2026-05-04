@@ -132,6 +132,8 @@ Implemented today:
 - `splendor wiki compile <source-id>` as a non-mutating review-gated contract description
 - `splendor wiki rebuild-index`
 - `splendor brief [goal]` and `splendor brief --agent-context [goal]`
+- config-backed authority briefs for maintained planning/docs context through
+  `brief --agent-context` and `suggest-next`
 - `splendor serve` for a read-only local browse/search/status/planning/runtime UI
 - read-only web `/status`, `/sources/<source-id>`, `/planning`, `/runs`, and `/queue` views
 - `splendor lint` and `splendor health`
@@ -170,6 +172,13 @@ status is labeled as latest local report state, not proof that this command ran 
 current `HEAD`. Use `--json` for agent handoff. The command does not run lint or health, write
 reports, call GitHub, or mutate workspace state.
 
+`splendor brief --agent-context [goal]` and `splendor suggest-next [goal]` also rank configured
+authority documents from `splendor.yaml` plus maintained wiki pages that opt into
+`authority_role` frontmatter. This lets agent handoff distinguish current authority, roadmap,
+historical review, proposal, reference, and generated-summary context, with freshness marked as
+current, watch, stale, or historical. Generated `source-summary` pages remain ingestion artifacts
+and are excluded from maintained authority ranking.
+
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
 display; copied, external, parsed PDF, and OCR-derived sources keep fuller extracts by default
@@ -198,12 +207,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P2.1`
-- Current planned slice: `Source-lifecycle re-evaluation gate`
-- Current PR sub-slice: `M14-P3.1`
+- Previous completed PR sub-slice: `M14-P3.1`
+- Current planned slice: `Planning-doc authority and task-oriented agent briefs`
+- Current PR sub-slice: `M14-P4.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Planning-doc authority and task-oriented agent briefs`
-- Next planned PR sub-slice: `M14-P4.1`
+- Next planned slice: `Post-v1 mutating compile/update workflow`
+- Next planned PR sub-slice: `TBD`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -330,6 +339,13 @@ on GitHub.
 controlled changed-source exercise through freshness, full workspace refresh, PR summary, lint, and
 health. It is not a new external SynthBanshee report; it recommends closing #72 after maintainer
 review and moves the remaining planning-doc authority / task-brief gap to #86.
+
+`M14-P4.1` adds planning-document authority metadata and task-oriented authority briefs. Workspaces
+can list maintained planning/docs files under `briefing.authority_documents` in `splendor.yaml`,
+and maintained wiki pages can opt into authority ranking with frontmatter fields
+`authority_role`, `authority_freshness`, and `authority_scope`. `brief --agent-context` and
+`suggest-next` include ranked authority docs for the goal while keeping generated source-summary
+artifacts separate from maintained authority.
 
 ### v1 readiness checklist
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from splendor.commands.maintenance import MaintenanceCheckResult, workspace_relative_path
+from splendor.config import load_config
 from splendor.layout import ResolvedLayout, required_directories
 from splendor.schemas import (
     DecisionRecord,
@@ -252,6 +253,7 @@ def _run_reference_integrity_checks(
     checked_count = 0
     issues: list[MaintenanceIssue] = []
     inventory = inventory_result.context.inventory
+    config = load_config(root)
 
     wiki_by_id: dict[str, list[_WikiPageInventory]] = {}
     wiki_by_path: dict[str, _WikiPageInventory] = {}
@@ -309,6 +311,21 @@ def _run_reference_integrity_checks(
         if page.frontmatter is not None
         for contradiction in page.frontmatter.contradictions
     }
+
+    checked_count += len(config.briefing.authority_documents)
+    for doc in config.briefing.authority_documents:
+        path = root / doc.path
+        if path.is_file():
+            continue
+        issues.append(
+            MaintenanceIssue(
+                code="missing-authority-document",
+                message="Configured authority document is missing",
+                path=doc.path,
+                record_id=doc.role,
+                check_name="briefing-authority",
+            )
+        )
 
     for page in inventory.wiki_pages:
         if page.frontmatter is None:

@@ -78,6 +78,9 @@ def test_knowledge_page_frontmatter_defaults_review_and_provenance_fields() -> N
     )
 
     assert record.review_state == "draft"
+    assert record.authority_role is None
+    assert record.authority_freshness is None
+    assert record.authority_scope == []
     assert record.last_generated_at is None
     assert record.provenance_links == []
     assert record.contradictions == []

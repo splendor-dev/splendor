@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Annotated
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from splendor.schemas.types import SourceClass, StorageMode, SummaryMode
 
@@ -76,6 +76,47 @@ class QueueConfig(BaseModel):
     )
 
 
+class AuthorityDocumentConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    role: Literal[
+        "current-authority",
+        "roadmap",
+        "historical-review",
+        "proposal",
+        "reference",
+        "generated-summary",
+    ] = "reference"
+    freshness: Literal["current", "watch", "stale", "historical"] = "current"
+    title: str | None = None
+    purpose: str | None = None
+    applies_to: list[str] = Field(default_factory=list)
+
+    @field_validator("path")
+    @classmethod
+    def validate_repo_relative_path(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("authority document path must not be empty")
+        posix_path = PurePosixPath(normalized)
+        if posix_path.is_absolute() or PureWindowsPath(normalized).is_absolute():
+            raise ValueError("authority document path must be repo-relative")
+        if "\\" in normalized:
+            raise ValueError("authority document path must use POSIX separators")
+        if any(part in {"", ".", ".."} for part in posix_path.parts):
+            raise ValueError("authority document path must be normalized and stay inside the repo")
+        if posix_path.as_posix() != normalized:
+            raise ValueError("authority document path must be normalized")
+        return normalized
+
+
+class BriefingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    authority_documents: list[AuthorityDocumentConfig] = Field(default_factory=list)
+
+
 class SplendorConfig(BaseModel):
     schema_version: str = "1"
     project_name: str = "Splendor workspace"
@@ -83,6 +124,7 @@ class SplendorConfig(BaseModel):
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
     queue: QueueConfig = Field(default_factory=QueueConfig)
     reviews: ReviewsConfig = Field(default_factory=ReviewsConfig)
+    briefing: BriefingConfig = Field(default_factory=BriefingConfig)
 
 
 def config_path_for(root: Path) -> Path:

@@ -18,6 +18,19 @@ class KnowledgePageFrontmatter(StrictRecord):
     page_id: str
     status: Literal["draft", "active", "stale"] = "draft"
     review_state: PageReviewState = "draft"
+    authority_role: (
+        Literal[
+            "current-authority",
+            "roadmap",
+            "historical-review",
+            "proposal",
+            "reference",
+            "generated-summary",
+        ]
+        | None
+    ) = None
+    authority_freshness: Literal["current", "watch", "stale", "historical"] | None = None
+    authority_scope: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
     generated_by_run_ids: list[str] = Field(default_factory=list)
     last_generated_at: str | None = None

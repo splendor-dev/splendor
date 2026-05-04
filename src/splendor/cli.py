@@ -1726,6 +1726,10 @@ def handle_brief(args: argparse.Namespace) -> int:
         print("Relevant records:")
         for match in result.matches:
             print(f"- {match.path} [{match.kind}] score={match.score}: {match.title}")
+    if result.authority_briefs:
+        print("Authority docs:")
+        for item in result.authority_briefs:
+            print(f"- {item.path} [{item.role}/{item.freshness}] score={item.score}: {item.title}")
     if result.planning_items:
         print("Active planning:")
         for item in result.planning_items:
@@ -1784,6 +1788,10 @@ def _print_agent_context(result: ProjectBrief) -> None:
             print(f"- {match.path} [{match.kind}] score={match.score} sources={source_refs}")
             if match.snippet:
                 print(f"  {match.snippet}")
+    if result.authority_briefs:
+        print("Authority docs:")
+        for item in result.authority_briefs[:5]:
+            print(f"- {item.path} [{item.role}/{item.freshness}] score={item.score} {item.title}")
     if result.planning_items:
         print("Active planning:")
         for item in result.planning_items:

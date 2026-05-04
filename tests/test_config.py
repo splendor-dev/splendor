@@ -18,6 +18,7 @@ def test_default_config_includes_source_policy_defaults() -> None:
     assert config.queue.max_attempts == 3
     assert config.queue.lease_ttl_seconds == 300
     assert config.queue.retry_backoff_seconds == [60, 300, 900]
+    assert config.briefing.authority_documents == []
 
 
 def test_load_config_accepts_yaml_without_sources_block(tmp_path: Path) -> None:
@@ -83,6 +84,61 @@ def test_load_config_accepts_queue_policy(tmp_path: Path) -> None:
     assert config.queue.max_attempts == 5
     assert config.queue.lease_ttl_seconds == 120
     assert config.queue.retry_backoff_seconds == [1, 2, 3]
+
+
+def test_load_config_accepts_briefing_authority_documents(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        (
+            "schema_version: '1'\n"
+            "project_name: Example\n"
+            "briefing:\n"
+            "  authority_documents:\n"
+            "    - path: README.md\n"
+            "      role: current-authority\n"
+            "      freshness: current\n"
+            "      purpose: Current project entrypoint.\n"
+            "      applies_to: [agent handoff]\n"
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    authority = config.briefing.authority_documents[0]
+    assert authority.path == "README.md"
+    assert authority.role == "current-authority"
+    assert authority.applies_to == ["agent handoff"]
+
+
+def test_load_config_rejects_unknown_briefing_keys(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        ("schema_version: '1'\nproject_name: Example\nbriefing:\n  authority_documentz: []\n"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_config(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "path", ["/etc/hosts", "../README.md", "docs/../README.md", "docs\\brief.md", ""]
+)
+def test_load_config_rejects_non_repo_relative_authority_document_paths(
+    tmp_path: Path, path: str
+) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        (
+            "schema_version: '1'\n"
+            "project_name: Example\n"
+            "briefing:\n"
+            "  authority_documents:\n"
+            f"    - path: {path!r}\n"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_config(tmp_path)
 
 
 def test_load_config_rejects_unknown_queue_keys(tmp_path: Path) -> None:

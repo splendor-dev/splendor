@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import MaintenanceReport, QuerySnapshot, SourceRecord
+from splendor.schemas import (
+    KnowledgePageFrontmatter,
+    MaintenanceReport,
+    QuerySnapshot,
+    SourceRecord,
+)
 from splendor.state.query_snapshot import last_query_path_for
 from splendor.state.source_compat import canonical_source_ref
 from splendor.utils.planning import (
@@ -44,6 +50,7 @@ _SUGGESTION_CATEGORY_LIMITS = {
     "queue": 3,
     "wiki-validation": 2,
     "goal-match": 3,
+    "authority": 3,
     "planning": 2,
     "synthesis": 2,
     "wiki-review": 2,
@@ -56,14 +63,34 @@ _SUGGESTION_CATEGORY_ORDER = {
     "queue": 1,
     "wiki-validation": 2,
     "goal-match": 3,
-    "planning": 4,
-    "synthesis": 5,
-    "wiki-review": 6,
-    "maintenance": 7,
-    "query": 8,
-    "orientation": 9,
+    "authority": 4,
+    "planning": 5,
+    "synthesis": 6,
+    "wiki-review": 7,
+    "maintenance": 8,
+    "query": 9,
+    "orientation": 10,
 }
 _SUGGESTION_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+_AUTHORITY_LIMIT = 6
+_TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
+_AUTHORITY_ROLE_ORDER = {
+    "current-authority": 0,
+    "roadmap": 1,
+    "reference": 2,
+    "proposal": 3,
+    "historical-review": 4,
+    "generated-summary": 5,
+}
+_AUTHORITY_ROLE_SCORE = {
+    "current-authority": 60,
+    "roadmap": 45,
+    "reference": 35,
+    "proposal": 25,
+    "historical-review": 20,
+    "generated-summary": 5,
+}
+_AUTHORITY_FRESHNESS_SCORE = {"current": 25, "watch": 10, "stale": -10, "historical": -20}
 _PLANNING_STATUSES = {
     "task": {"todo", "in_progress", "blocked"},
     "milestone": {"planned", "active"},
@@ -93,6 +120,17 @@ class BriefPlanningItem:
     title: str
     status: str
     path: str
+
+
+@dataclass(frozen=True)
+class AuthorityBrief:
+    rank: int
+    path: str
+    title: str
+    role: str
+    freshness: str
+    score: int
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -151,6 +189,7 @@ class SuggestNextResult:
     queue: QueueInspectResult
     freshness: SourceFreshnessResult
     matches: list[BriefMatch]
+    authority_briefs: list[AuthorityBrief]
     planning_items: list[BriefPlanningItem]
     latest_reports: list[BriefReportSnapshot]
     warnings: list[BriefWarning]
@@ -166,6 +205,7 @@ class BriefStateSnapshot:
     queue: QueueInspectResult
     freshness: SourceFreshnessResult
     matches: list[BriefMatch]
+    authority_briefs: list[AuthorityBrief]
     planning_items: list[BriefPlanningItem]
     recent_sources: list[BriefSourceItem]
     recent_runs: list[RecentRunSnapshot]
@@ -183,6 +223,7 @@ class ProjectBrief:
     query_summary: str | None
     status: WikiStatus
     matches: list[BriefMatch]
+    authority_briefs: list[AuthorityBrief]
     planning_items: list[BriefPlanningItem]
     recent_sources: list[BriefSourceItem]
     recent_runs: list[RecentRunSnapshot]
@@ -199,6 +240,7 @@ def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
     next_actions = _next_actions(
         status=snapshot.status,
         matches=snapshot.matches,
+        authority_briefs=snapshot.authority_briefs,
         planning_items=snapshot.planning_items,
         warnings=snapshot.warnings,
         suggested_actions=suggested_actions,
@@ -208,6 +250,7 @@ def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
         query_summary=snapshot.query_summary,
         status=snapshot.status,
         matches=snapshot.matches,
+        authority_briefs=snapshot.authority_briefs,
         planning_items=snapshot.planning_items,
         recent_sources=snapshot.recent_sources,
         recent_runs=snapshot.recent_runs,
@@ -229,6 +272,7 @@ def build_suggest_next(root: Path, goal: str | None = None) -> SuggestNextResult
         queue=snapshot.queue,
         freshness=snapshot.freshness,
         matches=snapshot.matches,
+        authority_briefs=snapshot.authority_briefs,
         planning_items=snapshot.planning_items,
         latest_reports=snapshot.latest_reports,
         warnings=snapshot.warnings,
@@ -262,6 +306,8 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
     sources = load_sources(layout)
     sources_by_id = {source.source_id: source for source in sources}
     wiki_pages, invalid_wiki_pages = load_wiki_pages(root, layout)
+    authority_briefs, authority_warnings = _authority_briefs(root, config, wiki_pages, goal)
+    warnings.extend(authority_warnings)
     recent_sources = _recent_sources(sources)
     recent_runs = status.recent_runs
     latest_reports = _latest_reports(root, layout)
@@ -275,6 +321,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
         queue=queue,
         freshness=freshness,
         matches=matches,
+        authority_briefs=authority_briefs,
         planning_items=planning_items,
         recent_sources=recent_sources,
         recent_runs=recent_runs,
@@ -343,6 +390,127 @@ def _active_planning_items(
     return items[:_BRIEF_PLANNING_LIMIT], warnings
 
 
+def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: str | None):
+    items: list[AuthorityBrief] = []
+    warnings: list[BriefWarning] = []
+    goal_tokens = _tokens(goal or "")
+
+    for doc in config.briefing.authority_documents:
+        path = Path(doc.path)
+        absolute = root / path
+        if absolute.exists() and absolute.is_file():
+            body = absolute.read_text(encoding="utf-8", errors="replace")
+        else:
+            warnings.append(
+                BriefWarning(
+                    area="authority",
+                    path=path.as_posix(),
+                    message="Configured authority document is missing.",
+                )
+            )
+            continue
+        title = doc.title or _title_from_markdown(body) or path.name
+        reason = doc.purpose or f"{doc.role} document for {path.as_posix()}"
+        score = _authority_score(
+            role=doc.role,
+            freshness=doc.freshness,
+            goal_tokens=goal_tokens,
+            text=" ".join([title, reason, " ".join(doc.applies_to), path.as_posix(), body]),
+        )
+        items.append(
+            AuthorityBrief(
+                rank=0,
+                path=path.as_posix(),
+                title=title,
+                role=doc.role,
+                freshness=doc.freshness,
+                score=score,
+                reason=reason,
+            )
+        )
+
+    for page in pages:
+        if page.frontmatter.kind == "source-summary":
+            continue
+        if page.frontmatter.authority_role is None:
+            continue
+        freshness = page.frontmatter.authority_freshness or _derived_authority_freshness(
+            page.frontmatter
+        )
+        reason = (
+            "Maintained wiki page marked for agent briefing"
+            if not page.frontmatter.authority_scope
+            else "Applies to " + ", ".join(page.frontmatter.authority_scope)
+        )
+        score = _authority_score(
+            role=page.frontmatter.authority_role,
+            freshness=freshness,
+            goal_tokens=goal_tokens,
+            text=" ".join(
+                [
+                    page.frontmatter.title,
+                    page.frontmatter.page_id,
+                    page.path,
+                    " ".join(page.frontmatter.authority_scope),
+                    page.body,
+                ]
+            ),
+        )
+        items.append(
+            AuthorityBrief(
+                rank=0,
+                path=page.path,
+                title=page.frontmatter.title,
+                role=page.frontmatter.authority_role,
+                freshness=freshness,
+                score=score,
+                reason=reason,
+            )
+        )
+
+    ranked = sorted(
+        enumerate(items),
+        key=lambda item: (
+            -item[1].score,
+            _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
+            item[0],
+            item[1].path,
+        ),
+    )
+    return [
+        replace(item, rank=rank)
+        for rank, (_sequence, item) in enumerate(ranked[:_AUTHORITY_LIMIT], start=1)
+    ], warnings
+
+
+def _authority_score(*, role: str, freshness: str, goal_tokens: set[str], text: str) -> int:
+    score = _AUTHORITY_ROLE_SCORE.get(role, 0) + _AUTHORITY_FRESHNESS_SCORE.get(freshness, 0)
+    if goal_tokens:
+        overlap = goal_tokens & _tokens(text)
+        score += min(len(overlap), 6) * 12
+    return score
+
+
+def _derived_authority_freshness(frontmatter: KnowledgePageFrontmatter) -> str:
+    if frontmatter.status == "stale" or frontmatter.review_state in {"contested", "stale"}:
+        return "stale"
+    if frontmatter.status == "draft" or frontmatter.review_state in {"draft", "machine-generated"}:
+        return "watch"
+    return "current"
+
+
+def _title_from_markdown(body: str) -> str | None:
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped.removeprefix("# ").strip() or None
+    return None
+
+
+def _tokens(text: str) -> set[str]:
+    return set(_TOKEN_PATTERN.findall(text.lower()))
+
+
 def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:
     sources = sorted(sources, key=lambda source: (source.added_at, source.source_id))
     return [
@@ -395,6 +563,7 @@ def _next_actions(
     *,
     status: WikiStatus,
     matches: list[BriefMatch],
+    authority_briefs: list[AuthorityBrief],
     planning_items: list[BriefPlanningItem],
     warnings: list[BriefWarning],
     suggested_actions: list[SuggestedAction],
@@ -418,6 +587,8 @@ def _next_actions(
         actions.append("Review draft, stale, contested, or machine-generated synthesis pages.")
     if matches:
         actions.append("Open the top matching wiki or planning records for the stated goal.")
+    if authority_briefs:
+        actions.append("Read the top authority docs before changing planning-heavy behavior.")
     if planning_items:
         actions.append("Continue or close the active planning records listed in this brief.")
     if warnings:
@@ -551,6 +722,17 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             None,
             path=match.path,
             record_id=match.record_id,
+        )
+
+    for authority in snapshot.authority_briefs[:3]:
+        priority = "medium" if authority.role in {"current-authority", "roadmap"} else "low"
+        add(
+            priority,
+            "authority",
+            f"Read authority doc {authority.path}",
+            f"{authority.role}/{authority.freshness}: {authority.reason}",
+            None,
+            path=authority.path,
         )
 
     for item in snapshot.planning_items:
@@ -704,6 +886,7 @@ def render_suggest_next_json(result: SuggestNextResult) -> str:
                 "status_counts": result.queue.status_counts,
             },
             "matches": [asdict(match) for match in result.matches],
+            "authority_briefs": [asdict(brief) for brief in result.authority_briefs],
             "planning_items": [asdict(item) for item in result.planning_items],
             "latest_reports": [asdict(report) for report in result.latest_reports],
             "warnings": [asdict(warning) for warning in result.warnings],
@@ -719,6 +902,7 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
             "query_summary": brief.query_summary,
             "status": asdict(brief.status),
             "matches": [asdict(match) for match in brief.matches],
+            "authority_briefs": [asdict(item) for item in brief.authority_briefs],
             "planning_items": [asdict(item) for item in brief.planning_items],
             "recent_sources": [asdict(source) for source in brief.recent_sources],
             "recent_runs": [asdict(run) for run in brief.recent_runs],
@@ -749,6 +933,7 @@ def render_agent_context_json(brief: ProjectBrief) -> str:
                 "sources_missing_synthesis": brief.status.sources_missing_synthesis,
             },
             "matches": [asdict(match) for match in brief.matches],
+            "authority_briefs": [asdict(item) for item in brief.authority_briefs],
             "source_refs": _agent_context_source_refs(brief),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
             "active_planning": [asdict(item) for item in brief.planning_items],

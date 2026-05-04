@@ -293,6 +293,9 @@ Minimal frontmatter contract for wiki pages:
 - `page_id`
 - `status`
 - `review_state`
+- `authority_role`
+- `authority_freshness`
+- `authority_scope`
 - `source_refs`
 - `generated_by_run_ids`
 - `last_generated_at`
@@ -312,6 +315,9 @@ Current runtime behavior:
   markdown scaffolds; templates do not generate source-summary content or LLM-authored synthesis
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter and
   does not mutate generated source-summary pages
+- maintained wiki pages may opt into agent authority ranking with `authority_role`,
+  `authority_freshness`, and `authority_scope`; generated `source-summary` pages are ignored by
+  maintained authority ranking even if those fields are present
 - source-summary pages written by `splendor ingest` now use `review_state: machine-generated`
 - those pages persist `last_generated_at`
 - those pages persist structured provenance links back to the source manifest, ingest run, and
@@ -338,6 +344,26 @@ Strict record contracts currently exist for:
 
 The implemented fields follow the product spec closely and reserve room for future markdown-backed
 renderers and CLI creation commands.
+
+## Briefing authority metadata
+
+`splendor.yaml` may include a `briefing.authority_documents` list for maintained planning,
+roadmap, schema, automation, release, and design documents that are not wiki pages. Each entry is
+schema-version-1-compatible config, not generated state:
+
+- `path`: normalized repo-relative document path; absolute paths, parent traversal, empty paths,
+  and backslash separators are rejected
+- `role`: one of `current-authority`, `roadmap`, `historical-review`, `proposal`, `reference`, or
+  `generated-summary`
+- `freshness`: one of `current`, `watch`, `stale`, or `historical`
+- `title`: optional display title
+- `purpose`: optional handoff reason
+- `applies_to`: optional task/topic terms used during goal ranking
+
+`splendor brief --agent-context [goal]` and `splendor suggest-next [goal]` use this metadata as a
+read-only ranking signal. Missing configured files are excluded from the ranked authority list,
+reported as authority warnings in the brief, and surfaced by `splendor lint` as
+`missing-authority-document`.
 
 Task records now also reserve:
 

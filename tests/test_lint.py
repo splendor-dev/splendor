@@ -9,7 +9,7 @@ from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.lint import run_lint_checks
 from splendor.commands.planning import create_task
-from splendor.config import load_config
+from splendor.config import AuthorityDocumentConfig, load_config, write_config
 from splendor.layout import resolve_layout
 from splendor.schemas import (
     ContradictionAnnotation,
@@ -229,6 +229,23 @@ def test_run_lint_checks_reports_invalid_source_manifest(tmp_path: Path) -> None
     assert [issue.code for issue in result.issues] == ["invalid-source-manifest"]
     assert "\n" not in result.issues[0].message
     assert str(tmp_path) not in result.issues[0].message
+
+
+def test_run_lint_checks_reports_missing_authority_document(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(path="missing.md", role="current-authority")
+    ]
+    write_config(tmp_path, config)
+
+    result = _run_lint(tmp_path)
+
+    issues = [issue for issue in result.issues if issue.check_name == "briefing-authority"]
+    assert len(issues) == 1
+    assert issues[0].code == "missing-authority-document"
+    assert issues[0].path == "missing.md"
+    assert issues[0].record_id == "current-authority"
 
 
 def test_run_lint_checks_reports_missing_source_derived_artifact(tmp_path: Path) -> None:
