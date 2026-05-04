@@ -9,11 +9,15 @@ from dataclasses import dataclass, replace
 from fnmatch import fnmatchcase
 from pathlib import Path
 
-from splendor.config import load_config
+from splendor.config import SplendorConfig, load_config
 from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, SUPPORTED_SOURCE_TYPES
 from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.schemas.types import SourceClass
-from splendor.state.source_registry import load_source_record, register_source
+from splendor.state.source_registry import (
+    SourceRegistrationContext,
+    load_source_record,
+    register_source,
+)
 from splendor.utils.hashing import sha256_file
 
 _CONFIG_EXTENSIONS = {"json", "yaml", "yml"}
@@ -109,6 +113,23 @@ def scan_repo(
 ) -> RepoScanResult:
     config = load_config(root)
     layout = resolve_layout(root, config)
+    return _scan_repo_with_context(
+        root,
+        config=config,
+        layout=layout,
+        class_filters=class_filters,
+        all_classes=all_classes,
+    )
+
+
+def _scan_repo_with_context(
+    root: Path,
+    *,
+    config: SplendorConfig,
+    layout: ResolvedLayout,
+    class_filters: list[SourceClass] | None = None,
+    all_classes: bool = False,
+) -> RepoScanResult:
     selected_classes = _selected_classes(
         configured_default_classes=config.sources.repo_scan_default_classes,
         class_filters=class_filters,
@@ -221,7 +242,16 @@ def apply_repo_scan(
     if not class_filters and not all_classes:
         msg = "repo scan --apply requires at least one --class filter or --all"
         raise ValueError(msg)
-    preview = scan_repo(root, class_filters=class_filters, all_classes=all_classes)
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    registration_context = SourceRegistrationContext(config=config, layout=layout)
+    preview = _scan_repo_with_context(
+        root,
+        config=config,
+        layout=layout,
+        class_filters=class_filters,
+        all_classes=all_classes,
+    )
     if preview.candidates > LARGE_APPLY_CANDIDATE_LIMIT and not allow_large_apply:
         msg = (
             "repo scan --apply refused "
@@ -241,6 +271,7 @@ def apply_repo_scan(
             source_labels=candidate.source_labels,
             discovered_by="repo_scan",
             refresh_existing_metadata=True,
+            context=registration_context,
         )
         status = "already_registered" if registered_source.already_registered else "registered"
         if registered_source.already_registered:

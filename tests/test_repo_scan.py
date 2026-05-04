@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+import splendor.commands.repo_scan as repo_scan_module
+import splendor.state.source_registry as source_registry_module
 from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
@@ -101,6 +103,66 @@ def test_repo_scan_apply_registers_and_classifies_supported_workspace_files(
     assert manifest_by_ref["AGENTS.md"].source_class == "documentation"
     assert manifest_by_ref["AGENTS.md"].source_labels == ["agent-instructions"]
     assert manifest_by_ref["src/main.py"].source_class == "code"
+
+
+def test_repo_scan_apply_reuses_config_and_layout_for_bulk_registration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initialize_workspace(tmp_path)
+    config_path = tmp_path / "splendor.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["layout"]["state_dir"] = "custom-state"
+    config["layout"]["source_records_dir"] = "custom-state/manifests/sources"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    for index in range(3):
+        (tmp_path / f"doc-{index}.md").write_text(f"# Doc {index}\n", encoding="utf-8")
+
+    load_config_calls = 0
+    resolve_layout_calls = 0
+    real_load_config = repo_scan_module.load_config
+    real_resolve_layout = repo_scan_module.resolve_layout
+
+    def counting_load_config(root: Path):
+        nonlocal load_config_calls
+        load_config_calls += 1
+        return real_load_config(root)
+
+    def counting_resolve_layout(root: Path, config):
+        nonlocal resolve_layout_calls
+        resolve_layout_calls += 1
+        return real_resolve_layout(root, config)
+
+    def fail_source_registry_load_config(root: Path):
+        raise AssertionError(f"unexpected per-source config load for {root}")
+
+    def fail_source_registry_resolve_layout(root: Path, config):
+        raise AssertionError(f"unexpected per-source layout resolution for {root}")
+
+    monkeypatch.setattr(repo_scan_module, "load_config", counting_load_config)
+    monkeypatch.setattr(repo_scan_module, "resolve_layout", counting_resolve_layout)
+    monkeypatch.setattr(source_registry_module, "load_config", fail_source_registry_load_config)
+    monkeypatch.setattr(
+        source_registry_module,
+        "resolve_layout",
+        fail_source_registry_resolve_layout,
+    )
+
+    result = repo_scan_module.apply_repo_scan(tmp_path, class_filters=["documentation"])
+
+    assert result.registered == 3
+    assert load_config_calls == 1
+    assert resolve_layout_calls == 1
+    assert _manifest_paths(tmp_path) == []
+    custom_manifest_paths = sorted(
+        (tmp_path / "custom-state" / "manifests" / "sources").glob("*.json")
+    )
+    assert len(custom_manifest_paths) == 3
+    assert {load_source_record(path).source_ref for path in custom_manifest_paths} == {
+        "doc-0.md",
+        "doc-1.md",
+        "doc-2.md",
+    }
 
 
 def test_repo_scan_classifies_image_sources_as_other(tmp_path: Path) -> None:
