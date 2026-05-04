@@ -184,6 +184,15 @@ Implemented fields:
   new canonical source version, preserves `source_commit_capture` intent, links the old and new
   versions with `supersedes` / `superseded_by`, and queues ingest through the same queue handoff
   used by `add-source`.
+- `splendor source update-path <source-id|logical-id|title|path> <new-path>` repairs the manifest
+  for an active curated workspace-backed source after an intentional file move. The first
+  implementation supports `storage_mode: none` and `storage_mode: copy` workspace sources. It
+  validates that the target is a supported file inside the workspace, rejects paths already curated
+  by another active source, updates `source_ref`, `logical_id`, `aliases`, `original_path`, and the
+  compatibility `path` field for `storage_mode: none`, then validates and rewrites the schema-bound
+  manifest. Human and JSON output report source ID, old path, new path, manifest/current
+  checksums, checksum match status, manifest path, and next commands. It does not discover or
+  register uncurated files, rewrite run records, or mutate maintained synthesis pages.
 - `splendor source freshness` is a non-mutating preview over curated source manifests. It reports
   path-first freshness state for workspace-backed canonical source refs, including unchanged,
   changed, missing, and unsupported statuses, manifest/current checksums where available, source

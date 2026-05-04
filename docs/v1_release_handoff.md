@@ -64,8 +64,7 @@ These items are intentionally not v1 release blockers:
 - richer post-M14 authority lifecycle policy after the initial planning-doc authority briefs have
   been exercised in real repositories
 - ingest run-duration precision for #47
-- repo refresh tolerance for missing or broken curated sources after the narrower #93 stale-ingest
-  repair
+- health remediation hints after source path repair commands exist
 - repo-scan bulk registration optimization for #30
 - web document-list scaling for #37
 
@@ -85,8 +84,12 @@ The conservative next queue after the `M14-P3.1` gate is:
 5. `M14-P1.6` handles issue #90: workspace refresh skips missing curated sources and summarizes
    per-source refresh failures with diagnostics while continuing valid refresh work, then exits
    non-zero while unresolved sources remain.
-6. Continue #79 through `M15-P1.2` after the open Milestone 14 P1 repair issues are handled.
-7. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
+6. `M14-P1.7` handles issue #89: `splendor source update-path` repairs moved active curated
+   workspace-backed source paths without manual manifest JSON edits or broad discovery.
+7. Use #95 as the likely next Milestone 14 repair slice so health diagnostics can point at the
+   concrete `source update-path`, source refresh, and stale-ingest commands now available.
+8. Continue #79 through `M15-P1.2` after the open Milestone 14 P1 repair issues are handled.
+9. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
 The internal source-lifecycle re-evaluation gate is now complete in `M14-P3.1`. The completed retry

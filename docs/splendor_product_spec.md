@@ -787,6 +787,12 @@ Current implementation:
   those content-addressed versions. Refresh also links changed versions with `supersedes` and
   `superseded_by` so health treats older workspace-backed manifests as historical records instead
   of active current-byte targets.
+- `splendor source update-path <source-id|logical-id|title|path> <new-path>` repairs an active
+  `none`/`copy` storage workspace-backed source manifest after a curated file moves. It validates
+  that the target is a supported in-workspace file, rejects targets already curated by another
+  active source, updates the manifest's path/logical identity fields, and reports manifest/current
+  checksums plus next commands. It does not perform broad discovery, register uncurated files,
+  rewrite historical run records, or mutate maintained synthesis pages.
 - `splendor workspace refresh --changed` safely refreshes only changed curated workspace-backed
   sources by composing `source freshness` with the supersession-aware `source refresh` path. It
   reports missing or unsupported active curated workspace sources as skipped unresolved diagnostics,

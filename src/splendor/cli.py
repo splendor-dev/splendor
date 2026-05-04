@@ -68,10 +68,12 @@ from splendor.commands.source import (
     refresh_source,
     render_source_freshness_json,
     render_source_lookup_json,
+    render_source_path_update_json,
     render_source_refresh_json,
     render_stale_ingest_json,
     resolve_source_query_exact,
     scan_source_freshness,
+    update_source_path,
     write_source_freshness_report,
 )
 from splendor.commands.wiki import (
@@ -233,6 +235,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     source_refresh_parser.set_defaults(handler=handle_source_refresh)
+    source_update_path_parser = source_subparsers.add_parser(
+        "update-path", help="Repair a workspace-backed source manifest after a file move"
+    )
+    source_update_path_parser.add_argument(
+        "query", help="Source ID, logical ID, title, or current path to repair"
+    )
+    source_update_path_parser.add_argument(
+        "new_path",
+        type=Path,
+        help="New workspace path for the curated source file",
+    )
+    source_update_path_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    source_update_path_parser.set_defaults(handler=handle_source_update_path)
     source_freshness_parser = source_subparsers.add_parser(
         "freshness", help="Preview changed workspace-backed source content without mutating"
     )
@@ -1002,6 +1022,35 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
     else:
         print(f"Refresh skipped: {result.message}")
         print(f"Next: splendor wiki suggest {result.refreshed.record.source_id}")
+    return 0
+
+
+def handle_source_update_path(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = update_source_path(root, args.query, args.new_path)
+    except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_source_path_update_json(root, result))
+        return 0
+
+    print(f"Updated source path for {result.source.source_id}")
+    print(f"Old path: {result.old_path}")
+    print(f"New path: {result.new_path}")
+    logical_id = effective_logical_id(result.source)
+    if logical_id is not None:
+        print(f"Logical ID: {logical_id}")
+    print(f"Manifest: {result.manifest_path}")
+    print(f"Manifest checksum: {result.manifest_checksum}")
+    print(f"Current checksum: {result.current_checksum}")
+    if result.checksum_matches:
+        print("Checksum: matches manifest")
+    else:
+        print("Checksum: differs from manifest")
+    for command in result.next_commands:
+        print(f"Next: {command}")
     return 0
 
 
