@@ -46,7 +46,7 @@ For this handoff:
 - #72 remains open as the parent source-refresh lifecycle and agent-workflow feedback loop
 - #41-#46 are closed as completed v1 dogfood issues after closing comments named the shipped scope
   and any deferred work; #79 tracks the deferred mutating compile/update path from #41
-- #47 remains open as the real ingest run-duration bug
+- #47 is targeted by `M10-P3.1` as the focused ingest run-duration precision bug
 - #30 remains open as post-v1 repo-scan registration performance work
 - #37 remains open as post-v1 web document-list scaling work
 - #72 is unblocked after `M14-P2.1`; the `M14-P3.1` source-lifecycle re-evaluation gate records
@@ -67,7 +67,8 @@ These items are intentionally not v1 release blockers:
 
 - richer post-M14 authority lifecycle policy after the initial planning-doc authority briefs have
   been exercised in real repositories
-- ingest run-duration precision for #47
+- historical ingest run records may still show zero duration because `M10-P3.1` does not rewrite
+  old runtime ledger entries
 - source identity extensions beyond curated workspace-backed source lifecycle semantics, if real
   repository use identifies a concrete remaining gap after #94
 - repo-scan bulk registration optimization for #30
@@ -100,7 +101,8 @@ The conservative next queue after the `M14-P3.1` gate is:
    moves.
 9. Continue #79 after `M15-P1.2` only through deliberately narrowed follow-ups, because compile
    target discovery and one-page reviewed apply are now represented.
-10. Keep #47 as the likely next focused post-M15 follow-up for ingest run-duration precision.
+10. Complete #47 through `M10-P3.1` once the focused ingest run-duration precision PR merges,
+    without rewriting historical runtime records.
 11. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 

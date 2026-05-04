@@ -207,6 +207,8 @@ Examples:
 - repair attempts
 
 This layer exists to support idempotency, trust, debugging, and recovery.
+Ingest run records preserve distinct start and terminal finish timestamps with sub-second
+precision for new runs, without rewriting historical ledger entries.
 
 ### 4.7 Planning Objects
 

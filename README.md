@@ -240,12 +240,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.9`
-- Current planned slice: `Compile/update expansion after first reviewed page apply`
-- Current PR sub-slice: `M15-P1.2`
+- Previous completed PR sub-slice: `M15-P1.2`
+- Current planned slice: `Ingest run-duration precision`
+- Current PR sub-slice: `M10-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely ingest run-duration precision or post-M15 issue triage`
-- Next planned PR sub-slice: `likely TBD, possibly issue #47`
+- Next planned slice: `likely post-M15 issue triage or performance follow-up`
+- Next planned PR sub-slice: `likely TBD, possibly #30 or #37 after #47`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -332,8 +332,10 @@ CLI, clarifies generated-state review policy, and records the v1 readiness audit
 issue #41's briefing and non-mutating compile contract, #42's next-action hints, #43's pending
 ingest handoff, #44's query snippets, #45's web status/source detail pages, and #46's page-state
 visibility as represented in current behavior. `M15-P1.1` now starts #41's deferred mutating
-compile/update workflow through #79 with explicit one-page proposal/apply semantics. Issue #47
-remains an ingest/run-state timing follow-up. Issues #30 and #37
+compile/update workflow through #79 with explicit one-page proposal/apply semantics. `M15-P1.2`
+is implemented: bare compile/suggest output now includes ranked compile-target previews while
+preserving the explicit apply gate. Issue #47 is targeted next by `M10-P3.1` as a focused
+ingest/run-state timing follow-up. Issues #30 and #37
 remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
 is the parent feedback loop for the M14 source-lifecycle sequence; stable logical source
 identities, supersession lifecycle, safe workspace refresh, superseded summary pruning, topic-ref
@@ -429,6 +431,11 @@ suggest <source-id|title|path>` exposes the same compile-preview commands in tex
 JSON output also includes structured `compile_preview_args` argv tokens so agents do not have to
 parse shell text. Actual writes still require the explicit one-page `--apply --proposal-hash
 <hash>` gate.
+
+`M10-P3.1` handles issue #47 as a narrow runtime-ledger bugfix. New ingest run records capture
+`started_at` with sub-second precision before source resolution/dispatch work begins and preserve
+`finished_at` only when the run reaches terminal success or failure. Historical run records are not
+rewritten.
 
 ### v1 readiness checklist
 
