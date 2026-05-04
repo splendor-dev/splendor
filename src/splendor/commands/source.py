@@ -54,10 +54,12 @@ class SourcePathUpdateResult:
     manifest_path: Path
     old_path: str
     new_path: str
+    status: str
     manifest_checksum: str
     current_checksum: str
     checksum_matches: bool
     updated: bool
+    queue_path: Path | None
     next_commands: list[str]
 
 
@@ -314,7 +316,9 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     )
 
 
-def update_source_path(root: Path, source_query: str, new_path: Path) -> SourcePathUpdateResult:
+def update_source_path(
+    root: Path, source_query: str, new_path: Path, *, force: bool = False
+) -> SourcePathUpdateResult:
     source_match = resolve_source_query_exact(root, source_query)
     source = source_match.source
     old_path = canonical_source_ref(source)
@@ -336,6 +340,14 @@ def update_source_path(root: Path, source_query: str, new_path: Path) -> SourceP
         msg = (
             "source update-path supports only none/copy storage for workspace-backed sources in "
             f"this release; got {storage_mode!r}"
+        )
+        raise ValueError(msg)
+
+    old_target = resolve_workspace_path(root, source.source_ref, context="Current workspace source")
+    if old_target.exists() and not force:
+        msg = (
+            "Current workspace source path still exists; refusing to reparent a healthy source "
+            f"without --force: {source.source_ref}"
         )
         raise ValueError(msg)
 
@@ -370,29 +382,38 @@ def update_source_path(root: Path, source_query: str, new_path: Path) -> SourceP
     if storage_mode == "none":
         updated_fields["path"] = new_ref
 
+    checksum_matches = current_checksum == source.checksum
+    if checksum_matches and source.status == "ingested":
+        updated_fields["status"] = "registered"
+
     updated_source = SourceRecord.model_validate(source.model_dump(mode="json") | updated_fields)
     updated = updated_source != source
     if updated:
         write_source_record(source_match.manifest_path, updated_source)
 
-    checksum_matches = current_checksum == updated_source.checksum
-    next_commands = (
-        ["splendor source freshness", f"splendor ingest {updated_source.source_id}"]
-        if checksum_matches
-        else [
+    queue_path = enqueue_ingest_job(root, updated_source.source_id) if checksum_matches else None
+    status = "repaired" if checksum_matches else "partial"
+    next_commands = [
+        "splendor ingest --pending",
+        "splendor source freshness",
+    ]
+    if not checksum_matches:
+        next_commands = [
             f"splendor source refresh {shlex.quote(new_ref)}",
             "splendor ingest --pending",
+            "splendor source freshness",
         ]
-    )
     return SourcePathUpdateResult(
         source=updated_source,
         manifest_path=source_match.manifest_path,
         old_path=old_path,
         new_path=new_ref,
+        status=status,
         manifest_checksum=updated_source.checksum,
         current_checksum=current_checksum,
         checksum_matches=checksum_matches,
         updated=updated,
+        queue_path=queue_path,
         next_commands=next_commands,
     )
 
@@ -625,6 +646,7 @@ def render_source_path_update_json(root: Path, result: SourcePathUpdateResult) -
             "logical_id": effective_logical_id(result.source),
             "old_path": result.old_path,
             "new_path": result.new_path,
+            "status": result.status,
             "source_ref": result.source.source_ref,
             "aliases": result.source.aliases,
             "manifest_checksum": result.manifest_checksum,
@@ -632,6 +654,9 @@ def render_source_path_update_json(root: Path, result: SourcePathUpdateResult) -
             "checksum_matches": result.checksum_matches,
             "manifest_path": result.manifest_path.relative_to(root).as_posix(),
             "updated": result.updated,
+            "queue_path": None
+            if result.queue_path is None
+            else result.queue_path.relative_to(root).as_posix(),
             "next_commands": result.next_commands,
         },
         indent=2,

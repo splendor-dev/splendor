@@ -252,6 +252,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="json_output",
         help="Emit machine-readable JSON output.",
     )
+    source_update_path_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow updating a source path even when the current path still exists.",
+    )
     source_update_path_parser.set_defaults(handler=handle_source_update_path)
     source_freshness_parser = source_subparsers.add_parser(
         "freshness", help="Preview changed workspace-backed source content without mutating"
@@ -1028,15 +1033,16 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
 def handle_source_update_path(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
-        result = update_source_path(root, args.query, args.new_path)
-    except (FileNotFoundError, IsADirectoryError, ValueError) as exc:
+        result = update_source_path(root, args.query, args.new_path, force=args.force)
+    except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
 
     if args.json_output:
         print(render_source_path_update_json(root, result))
-        return 0
+        return 0 if result.status == "repaired" else 1
 
     print(f"Updated source path for {result.source.source_id}")
+    print(f"Status: {result.status}")
     print(f"Old path: {result.old_path}")
     print(f"New path: {result.new_path}")
     logical_id = effective_logical_id(result.source)
@@ -1047,11 +1053,14 @@ def handle_source_update_path(args: argparse.Namespace) -> int:
     print(f"Current checksum: {result.current_checksum}")
     if result.checksum_matches:
         print("Checksum: matches manifest")
+        if result.queue_path is not None:
+            print(f"Queued ingest: {result.queue_path}")
     else:
         print("Checksum: differs from manifest")
+        print("Path was updated, but content refresh is still required.")
     for command in result.next_commands:
         print(f"Next: {command}")
-    return 0
+    return 0 if result.status == "repaired" else 1
 
 
 def handle_source_freshness(args: argparse.Namespace) -> int:

@@ -963,11 +963,14 @@ ingest failures remain.
 `M14-P1.7` addresses issue #89 with the narrow path-repair command:
 `splendor source update-path <source-id|logical-id|title|path> <new-path>`. The command repairs an
 active workspace-backed source manifest after an intentional file move by validating the target as a
-supported in-workspace file, rejecting paths already curated by another active source, updating the
-source-ref/logical-ID/alias fields, and reporting manifest/current checksums plus next commands. It
-does not implement the broader #94 source-identity redesign, discover/register uncurated files,
-rewrite historical run records, or mutate maintained synthesis pages. #95 can build on this by
-adding health remediation hints that point at the new repair surface.
+supported in-workspace file, rejecting paths already curated by another active source, requiring the
+old path to be missing unless `--force` is supplied, updating the source-ref/logical-ID/alias fields,
+and reporting manifest/current checksums plus next commands. Same-byte moves queue re-ingest for the
+existing source ID so generated source-summary provenance can refresh; changed-byte moves return a
+partial repair status and point to `source refresh`. It does not implement the broader #94
+source-identity redesign, discover/register uncurated files, rewrite historical run records, or
+mutate maintained synthesis pages. #95 can build on this by adding health remediation hints that
+point at the new repair surface.
 
 ## Candidate Milestone 15 — Post-v1 reviewed compile/update workflow
 

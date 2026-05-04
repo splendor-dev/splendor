@@ -170,11 +170,15 @@ unsafe candidates with reasons rather than deleting ambiguous state. The command
 or register uncurated files or mutate maintained synthesis content beyond that explicit source-ref
 migration.
 `splendor source update-path <source-id|logical-id|title|path> <new-path>` is the explicit repair
-path for moved active curated workspace sources. It validates that the new path is a supported file
-inside the workspace, rejects targets already curated by another active source, updates the source
-manifest's workspace ref, logical ID, alias, and compatibility path fields, and reports
-manifest/current checksums plus next commands. It does not discover/register uncurated files,
-rewrite run records, or mutate maintained synthesis pages.
+path for moved active curated workspace sources. By default it requires the old workspace path to
+be missing; `--force` is available for deliberate reparenting while the old file still exists. It
+validates that the new path is a supported file inside the workspace, rejects targets already
+curated by another active source, updates the source manifest's workspace ref, logical ID, alias,
+and compatibility path fields, and reports manifest/current checksums plus next commands. Same-byte
+moves queue a re-ingest so generated source-summary provenance can refresh. Changed-byte moves are
+reported as partial repairs with a non-zero exit and an explicit `source refresh` next command. The
+command does not discover/register uncurated files, rewrite historical run records, or mutate
+maintained synthesis pages.
 
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed

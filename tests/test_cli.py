@@ -97,7 +97,7 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     lookup = parser.parse_args(["source", "lookup", "brief", "--json"])
     refresh = parser.parse_args(["source", "refresh", "docs/brief.md", "--json"])
     update_path = parser.parse_args(
-        ["source", "update-path", "docs/old.md", "docs/new.md", "--json"]
+        ["source", "update-path", "docs/old.md", "docs/new.md", "--force", "--json"]
     )
     freshness = parser.parse_args(
         ["source", "freshness", "--report", "reports/freshness.json", "--json"]
@@ -113,6 +113,7 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert update_path.source_command == "update-path"
     assert update_path.query == "docs/old.md"
     assert update_path.new_path == Path("docs/new.md")
+    assert update_path.force is True
     assert update_path.json_output is True
     assert freshness.source_command == "freshness"
     assert freshness.report == Path("reports/freshness.json")
@@ -855,9 +856,11 @@ def test_cli_source_update_path_repairs_missing_workspace_source(tmp_path: Path,
     assert f"Updated source path for {source_id}" in out
     assert "Old path: docs/brief.md" in out
     assert "New path: moved/brief.md" in out
+    assert "Status: repaired" in out
     assert "Logical ID: source:moved/brief.md" in out
     assert "Checksum: matches manifest" in out
-    assert "Next: splendor source freshness" in out
+    assert f"Queued ingest: {tmp_path / 'state' / 'queue' / f'ingest-{source_id}.json'}" in out
+    assert "Next: splendor ingest --pending" in out
     updated = load_source_record(manifest_path)
     assert updated.source_id == source_id
     assert updated.source_ref == "moved/brief.md"
@@ -898,6 +901,7 @@ def test_cli_source_update_path_json_reports_deterministic_payload(tmp_path: Pat
         "logical_id": "source:new.md",
         "old_path": "old.md",
         "new_path": "new.md",
+        "status": "repaired",
         "source_ref": "new.md",
         "aliases": ["new.md"],
         "manifest_checksum": manifest.checksum,
@@ -905,9 +909,10 @@ def test_cli_source_update_path_json_reports_deterministic_payload(tmp_path: Pat
         "checksum_matches": True,
         "manifest_path": f"state/manifests/sources/{manifest.source_id}.json",
         "updated": True,
+        "queue_path": f"state/queue/ingest-{manifest.source_id}.json",
         "next_commands": [
+            "splendor ingest --pending",
             "splendor source freshness",
-            f"splendor ingest {manifest.source_id}",
         ],
     }
 
@@ -930,6 +935,7 @@ def test_cli_source_update_path_rejects_invalid_targets(
     source = tmp_path / "old.md"
     source.write_text("# Brief\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", "old.md"])
+    source.unlink()
     if target_content is not None:
         (tmp_path / target_name).write_bytes(target_content)
     capsys.readouterr()
@@ -946,6 +952,7 @@ def test_cli_source_update_path_rejects_directory_and_ambiguous_target(
     main(["--root", str(tmp_path), "init"])
     first = tmp_path / "first.md"
     second = tmp_path / "second.md"
+    moved = tmp_path / "moved.md"
     first.write_text("# First\n", encoding="utf-8")
     second.write_text("# Second\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", "first.md"])
@@ -953,6 +960,13 @@ def test_cli_source_update_path_rejects_directory_and_ambiguous_target(
     main(["--root", str(tmp_path), "add-source", "second.md"])
     capsys.readouterr()
 
+    existing_exit = main(
+        ["--root", str(tmp_path), "source", "update-path", "first.md", "second.md"]
+    )
+    assert existing_exit == 1
+    assert "still exists" in capsys.readouterr().out
+
+    first.rename(moved)
     directory_exit = main(["--root", str(tmp_path), "source", "update-path", "first.md", "."])
     assert directory_exit == 1
     assert "Target source path must be a file" in capsys.readouterr().out
@@ -965,6 +979,7 @@ def test_cli_source_update_path_rejects_directory_and_ambiguous_target(
             "update-path",
             first_manifest.stem,
             "second.md",
+            "--force",
         ]
     )
     assert target_exit == 1
@@ -989,6 +1004,69 @@ def test_cli_source_update_path_does_not_mutate_maintained_synthesis(
 
     assert exit_code == 0
     assert topic.read_text(encoding="utf-8") == topic_before
+
+
+def test_cli_source_update_path_reingests_same_byte_move_to_refresh_provenance(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "old.md"
+    replacement = tmp_path / "new.md"
+    source.write_text("# Brief\n\nSame bytes.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "old.md"])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source_id = manifest_path.stem
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    page_path = tmp_path / "wiki" / "sources" / f"{source_id}.md"
+    assert "old.md" in page_path.read_text(encoding="utf-8")
+    source.rename(replacement)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "update-path", "old.md", "new.md"])
+
+    assert exit_code == 0
+    updated = load_source_record(manifest_path)
+    assert updated.status == "registered"
+    assert updated.last_run_id is not None
+    assert (tmp_path / "state" / "queue" / f"ingest-{source_id}.json").exists()
+
+    ingest_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+
+    assert ingest_code == 0
+    page_text = page_path.read_text(encoding="utf-8")
+    assert "new.md" in page_text
+
+
+def test_cli_source_update_path_changed_bytes_reports_partial_repair(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "old.md"
+    replacement = tmp_path / "new.md"
+    source.write_text("# Brief\n\nOld bytes.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "old.md"])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    source.rename(replacement)
+    replacement.write_text("# Brief\n\nNew bytes.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "update-path", "old.md", "new.md", "--json"]
+    )
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "partial"
+    assert payload["checksum_matches"] is False
+    assert payload["queue_path"] is None
+    assert payload["next_commands"] == [
+        "splendor source refresh new.md",
+        "splendor ingest --pending",
+        "splendor source freshness",
+    ]
+    updated = load_source_record(manifest_path)
+    assert updated.source_ref == "new.md"
+    assert updated.status == "registered"
 
 
 def test_cli_source_freshness_reports_changed_workspace_sources_without_mutating(
