@@ -12,6 +12,7 @@ from hashlib import sha256
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
 from splendor.commands.source import resolve_source_query, resolve_source_query_matches
 from splendor.config import load_config
@@ -956,10 +957,7 @@ def _append_to_compiled_evidence_section(body: str, section_heading: str, block:
 
 
 def _compile_evidence_lines(summary_body: str) -> tuple[list[str], list[str]]:
-    lines, sections = _compile_evidence_lines_from_sections(summary_body, ["summary", "key facts"])
-    if lines:
-        return lines, sections
-    return _compile_evidence_lines_from_sections(summary_body, ["extract"])
+    return _compile_evidence_lines_from_sections(summary_body, ["summary", "key facts"])
 
 
 def _compile_evidence_lines_from_sections(
@@ -967,11 +965,15 @@ def _compile_evidence_lines_from_sections(
 ) -> tuple[list[str], list[str]]:
     section_text = _section_text(summary_body, set(headings))
     lines: list[str] = []
+    in_fence = False
     for raw_line in section_text.splitlines():
         line = raw_line.strip()
         if not line:
             continue
         if line.startswith("```") or line.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
             continue
         if line.startswith("#"):
             continue
@@ -992,13 +994,26 @@ def _compile_evidence_lines_from_sections(
 
 
 def _render_wiki_page(frontmatter: KnowledgePageFrontmatter, body: str) -> str:
-    return f"---\n{render_frontmatter(frontmatter)}\n---\n{body}"
+    normalized_body = body.strip()
+    return f"---\n{render_frontmatter(frontmatter)}\n---\n\n{normalized_body}\n"
 
 
 def _validate_compiled_markdown(page_ref: str, content: str) -> None:
-    frontmatter_text, body = content.removeprefix("---\n").split("\n---\n", maxsplit=1)
-    payload = yaml.safe_load(frontmatter_text) or {}
-    KnowledgePageFrontmatter.model_validate(payload)
+    try:
+        frontmatter_text, body = content.removeprefix("---\n").split("\n---\n", maxsplit=1)
+    except ValueError as exc:
+        msg = f"Compiled page {page_ref} has malformed YAML frontmatter"
+        raise ValueError(msg) from exc
+    try:
+        payload = yaml.safe_load(frontmatter_text) or {}
+    except yaml.YAMLError as exc:
+        msg = f"Compiled page {page_ref} has invalid YAML frontmatter"
+        raise ValueError(msg) from exc
+    try:
+        KnowledgePageFrontmatter.model_validate(payload)
+    except ValidationError as exc:
+        msg = f"Compiled page {page_ref} failed schema validation: {exc}"
+        raise ValueError(msg) from exc
     if not body.startswith("\n"):
         msg = f"Compiled page lost markdown body separation: {page_ref}"
         raise ValueError(msg)
