@@ -197,20 +197,24 @@ Implemented fields:
   still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
 - `splendor workspace refresh --changed` is the safe workspace-level mutating path over curated
   workspace-backed source manifests. It uses `source freshness` to select changed active manifests,
-  refuses to continue when active curated workspace sources are missing, refreshes each changed
-  source through the supersession-aware source refresh path, and can ingest only the queue records
-  created or reused for those refreshed sources with `--ingest`.
+  reports missing or unsupported active curated workspace sources as skipped unresolved diagnostics,
+  refreshes each changed source through the supersession-aware source refresh path, records
+  per-source refresh failures instead of aborting the whole command, and can ingest only the queue
+  records created or reused for successful refreshed sources with `--ingest`. The command exits
+  non-zero when unresolved skipped sources, failed source refreshes, or targeted ingest failures
+  remain, while preserving successful refresh and ingest work.
 - `splendor workspace refresh --changed --ingest --rebuild-index` rebuilds `wiki/index.md` only
   after the targeted refreshed-source ingest succeeds. JSON output reports both initial and final
-  freshness counts. `--prune-superseded` deletes superseded generated source-summary pages after a
-  current successor summary exists, removes the pruned generated-page link from the superseded
-  source manifest, and preserves historical source manifests and run records. Health treats run
-  page refs for those exact pruned superseded workspace summaries as valid historical provenance
-  without exempting unrelated broken run refs. Prune JSON reports skipped unsafe candidates with
-  reasons. `--update-topic-refs` rewrites maintained wiki page `source_refs` and generated
-  source-reference list bullets from superseded source IDs to the active content-addressed source
-  version, leaving prose and code-fence mentions untouched. The command does not perform broad repo
-  discovery, register uncurated files, or run mutating synthesis compile/update workflows.
+  freshness counts plus skipped-source and failed-refresh diagnostics. `--prune-superseded` deletes
+  superseded generated source-summary pages after a current successor summary exists, removes the pruned
+  generated-page link from the superseded source manifest, and preserves historical source
+  manifests and run records. Health treats run page refs for those exact pruned superseded
+  workspace summaries as valid historical provenance without exempting unrelated broken run refs.
+  Prune JSON reports skipped unsafe candidates with reasons. `--update-topic-refs` rewrites
+  maintained wiki page `source_refs` and generated source-reference list bullets from superseded
+  source IDs to the active content-addressed source version, leaving prose and code-fence mentions
+  untouched. The command does not perform broad repo discovery, register uncurated files, or run
+  mutating synthesis compile/update workflows.
 - `splendor ingest --changed` is the narrow stale-source ingestion path for checksum-drifted
   curated workspace-backed sources. It scans source freshness, reports missing active curated
   workspace sources as unresolved diagnostics, refreshes each changed source through the existing

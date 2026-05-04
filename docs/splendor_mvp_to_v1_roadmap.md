@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M15-P1.1`
-- Current planned slice: `Post-v1 source lifecycle repair: stale-source ingestion`
-- Current PR sub-slice: `M14-P1.5`
+- Previous completed PR sub-slice: `M14-P1.5`
+- Current planned slice: `Repo refresh missing/broken source tolerance`
+- Current PR sub-slice: `M14-P1.6`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Repo refresh missing/broken source tolerance`
-- Next planned PR sub-slice: `M14-P1.6`
+- Next planned slice: `likely source path repair commands`
+- Next planned PR sub-slice: `likely M14-P1.7`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -949,6 +949,13 @@ Milestone 14 MVP source-lifecycle repair. It adds `splendor ingest --changed` as
 from source freshness to supersession-aware source refresh and targeted ingest. The command does
 not discover uncurated files, does not drain unrelated pending jobs, and reports missing curated
 sources as unresolved diagnostics while continuing valid changed-source repair work.
+
+`M14-P1.6` addresses issue #90 by making `splendor workspace refresh --changed` use the same
+partial-progress recovery posture: missing or unsupported active curated workspace sources are
+reported as skipped unresolved diagnostics, per-source refresh failures are summarized without
+aborting the whole command, valid changed sources still refresh, `--ingest` remains limited to
+refreshed-source queue jobs, and the command exits non-zero while unresolved sources or targeted
+ingest failures remain.
 
 ## Candidate Milestone 15 — Post-v1 reviewed compile/update workflow
 

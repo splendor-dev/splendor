@@ -157,13 +157,17 @@ Relative report paths use the current working directory.
 supersession-aware refresh path for changed curated workspace-backed sources. Add `--ingest` to
 ingest only queue jobs created or reused for the refreshed sources, and add `--rebuild-index` to
 regenerate `wiki/index.md` after that targeted ingest succeeds. JSON output reports both initial
-and final freshness counts. Add `--prune-superseded` to delete superseded generated
+and final freshness counts, skipped unresolved curated sources, and failed changed-source refreshes.
+Missing, unsupported, or refresh-failed active curated sources are reported as unresolved
+diagnostics while valid changed sources still refresh; the command exits non-zero when those
+unresolved sources remain. Add `--prune-superseded` to delete superseded generated
 `wiki/sources/<source-id>.md` summaries once a current successor summary exists, while keeping
-historical source manifests and run records. Add `--update-topic-refs` to rewrite maintained wiki
-page `source_refs` and generated source-reference list bullets from superseded source IDs to the
-active source version ID. Prune JSON reports skipped unsafe candidates with reasons rather than
-deleting ambiguous state. The command does not discover or register uncurated files or mutate
-maintained synthesis content beyond that explicit source-ref migration.
+historical source manifests and run records. Add
+`--update-topic-refs` to rewrite maintained wiki page `source_refs` and generated source-reference
+list bullets from superseded source IDs to the active source version ID. Prune JSON reports skipped
+unsafe candidates with reasons rather than deleting ambiguous state. The command does not discover
+or register uncurated files or mutate maintained synthesis content beyond that explicit source-ref
+migration.
 
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
@@ -217,12 +221,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M15-P1.1`
-- Current planned slice: `Post-v1 source lifecycle repair: stale-source ingestion`
-- Current PR sub-slice: `M14-P1.5`
+- Previous completed PR sub-slice: `M14-P1.5`
+- Current planned slice: `Repo refresh missing/broken source tolerance`
+- Current PR sub-slice: `M14-P1.6`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Repo refresh missing/broken source tolerance`
-- Next planned PR sub-slice: `M14-P1.6`
+- Next planned slice: `likely source path repair commands`
+- Next planned PR sub-slice: `likely M14-P1.7`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel

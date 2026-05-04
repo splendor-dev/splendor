@@ -1503,7 +1503,13 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
 
     if args.json_output:
         print(render_workspace_refresh_json(root, result))
-        return 1 if result.ingest is not None and result.ingest.failed else 0
+        if (
+            result.skipped_sources
+            or result.failed_sources
+            or (result.ingest is not None and result.ingest.failed)
+        ):
+            return 1
+        return 0
 
     print("Workspace refresh")
     print(
@@ -1516,7 +1522,15 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         f"historical={result.initial_freshness.historical}"
     )
     if not result.refreshed:
-        print("No changed curated workspace-backed sources found.")
+        print("No changed curated workspace-backed sources were refreshed.")
+    if result.skipped_sources:
+        print("Skipped unresolved curated workspace sources:")
+        for item in result.skipped_sources:
+            print(f"- {item.canonical_path}: {item.status} ({item.message})")
+            print(f"  Source ID: {item.source.source_id}")
+            logical_id = effective_logical_id(item.source)
+            if logical_id is not None:
+                print(f"  Logical ID: {logical_id}")
     for refresh in result.refreshed:
         source_ref = canonical_source_ref(refresh.refreshed.record)
         print(f"- {source_ref}: refreshed source_id={refresh.refreshed.record.source_id}")
@@ -1528,6 +1542,13 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
             print(f"  Queued ingest: {refresh.queue_path}")
         else:
             print(f"  Refresh skipped: {refresh.message}")
+    if result.failed_sources:
+        print("Failed changed-source refreshes:")
+        for item in result.failed_sources:
+            print(f"- {item.path}: failed ({item.reason})")
+            print(f"  Source ID: {item.source_id}")
+            if item.logical_id is not None:
+                print(f"  Logical ID: {item.logical_id}")
 
     if result.ingest is not None:
         for item in result.ingest.items:
@@ -1573,6 +1594,10 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
 
     if result.ingest is not None and result.ingest.failed:
         print("Next: splendor queue inspect")
+        return 1
+    if result.skipped_sources or result.failed_sources:
+        print("Workspace refresh completed with unresolved curated sources.")
+        print("Next: splendor source freshness")
         return 1
     if result.index is None and result.ingest is None and result.refreshed:
         print("Next: splendor ingest --pending")
