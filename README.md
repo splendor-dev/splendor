@@ -188,6 +188,13 @@ curated sources without preventing valid changed sources from being processed. `
 initial/final freshness counts, missing-source diagnostics, refreshed source IDs, targeted ingest
 outcomes, and the summary.
 
+`splendor health` now includes deterministic remediation hints where a narrow repair command
+exists. JSON, human stdout, and Markdown reports surface missing active workspace source paths with
+`source update-path` / `source freshness` guidance, checksum drift with `source refresh`,
+`ingest --pending`, or `ingest --changed`, and queue repair diagnostics with `queue retry` or
+`repair ingest`. Unknown source provenance refs remain diagnostic-only rather than suggesting
+unsafe broad rewrites.
+
 `splendor pr-summary --since main` is a read-only PR handoff command over local git state. It uses
 the merge base between `HEAD` and the base ref for PR-style diff semantics, then summarizes curated
 source manifests added, refreshed, superseded, or invalid; generated source-summary pages added,
@@ -232,12 +239,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.6`
-- Current planned slice: `Source path repair commands`
-- Current PR sub-slice: `M14-P1.7`
+- Previous completed PR sub-slice: `M14-P1.7`
+- Current planned slice: `Health remediation hints`
+- Current PR sub-slice: `M14-P1.8`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely health remediation hints`
-- Next planned PR sub-slice: `likely M14-P1.8`
+- Next planned slice: `likely source identity design review or M15 compile/update, depending on roadmap`
+- Next planned PR sub-slice: `likely M14-P1.9 only if #94 is narrowed; otherwise M15-P1.2 or next roadmap notation`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel

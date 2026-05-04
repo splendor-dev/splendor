@@ -59,6 +59,8 @@ def render_report_markdown(report: MaintenanceReport) -> str:
                 detail_parts.append(f"path: `{issue.path}`")
             if issue.check_name:
                 detail_parts.append(f"check: `{issue.check_name}`")
+            if issue.remediation_hint:
+                detail_parts.append(f"hint: {issue.remediation_hint}")
             lines.append(f"- {'; '.join(detail_parts)}")
     return "\n".join(lines) + "\n"
 

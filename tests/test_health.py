@@ -45,6 +45,60 @@ def test_run_health_checks_reports_missing_source_derived_artifact(tmp_path: Pat
     assert result.issues[0].path == added.manifest_path.relative_to(tmp_path).as_posix()
 
 
+def test_run_health_checks_hints_missing_active_workspace_source_repair(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    add_source(tmp_path, source)
+    source.unlink()
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["source-health-check-failed"]
+    assert result.issues[0].remediation_hint == (
+        "Run splendor source update-path brief.md <new-path>; inspect current freshness first "
+        "with splendor source freshness."
+    )
+
+
+def test_run_health_checks_does_not_hint_update_path_for_pointer_source(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    add_source(tmp_path, source, storage_mode="pointer")
+    source.unlink()
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["source-health-check-failed"]
+    assert result.issues[0].remediation_hint == (
+        "Run splendor source freshness to inspect the missing curated source; "
+        "pointer-backed sources are not supported by source update-path yet."
+    )
+
+
+def test_run_health_checks_hints_checksum_mismatch_active_workspace_source(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    add_source(tmp_path, source)
+    source.write_text("# Brief\n\nupdated\n", encoding="utf-8")
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["source-health-check-failed"]
+    assert result.issues[0].remediation_hint == (
+        "Run splendor source refresh brief.md, then splendor ingest --pending; for all changed "
+        "curated workspace sources run splendor ingest --changed."
+    )
+
+
 def test_run_health_checks_accepts_ocr_derived_artifact_links(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "diagram.png"
@@ -577,6 +631,25 @@ def test_run_health_checks_reports_invalid_failed_queue_and_run_shapes(tmp_path:
     }
 
 
+def test_run_health_checks_hints_dead_letter_queue_repair(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    queue_record = QueueItemRecord.model_validate_json(queue_path.read_text(encoding="utf-8"))
+    dead_letter = queue_record.model_copy(update={"status": "dead_letter", "last_error": None})
+    write_queue_item(queue_path, dead_letter)
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["invalid-queue-error-state"]
+    assert result.issues[0].remediation_hint == (
+        f"Run splendor repair ingest {added.source_id} or splendor queue retry "
+        f"ingest-{added.source_id} after reviewing the dead-letter error."
+    )
+
+
 def test_run_health_checks_reports_queue_and_run_shape_mismatches(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
@@ -846,6 +919,80 @@ def test_run_health_checks_reports_run_state_and_reference_problems(tmp_path: Pa
         "succeeded-run-missing-page-refs",
         "succeeded-run-missing-generated-page-provenance",
     }
+
+
+def test_run_health_checks_hints_unknown_source_refs_without_unsafe_repair(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_run_record(
+        layout.runs_dir / "run-unknown-source.json",
+        RunRecord(
+            run_id="run-unknown-source",
+            job_id="ingest-src-missing",
+            job_type="ingest_source",
+            started_at="2026-04-20T09:00:00+00:00",
+            finished_at="2026-04-20T09:05:00+00:00",
+            status="failed",
+            input_refs=[],
+            errors=["source disappeared"],
+            pipeline_version=__version__,
+            source_ids=["src-missing"],
+            provenance_links=[ProvenanceLink(source_id="src-missing", role="input")],
+        ),
+    )
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing-run-source-id",
+        "missing-run-provenance-source-ref",
+    ]
+    assert {issue.remediation_hint for issue in result.issues} == {
+        "Diagnostic only: inspect the referenced run/page/source records and file a follow-up; "
+        "no direct provenance rewrite command is available."
+    }
+    assert all(
+        "source update-path" not in (issue.remediation_hint or "") for issue in result.issues
+    )
+
+
+def test_run_health_checks_does_not_repeat_generic_hint_for_missing_page_refs(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_run_record(
+        layout.runs_dir / "run-missing-page.json",
+        RunRecord(
+            run_id="run-missing-page",
+            job_id="ingest-src-example",
+            job_type="ingest_source",
+            started_at="2026-04-20T09:00:00+00:00",
+            finished_at="2026-04-20T09:05:00+00:00",
+            status="failed",
+            input_refs=[],
+            errors=["page disappeared"],
+            pipeline_version=__version__,
+            page_ids=["missing-page"],
+            page_refs=["wiki/topics/missing.md"],
+            provenance_links=[
+                ProvenanceLink(page_id="missing-page", role="generated-page"),
+                ProvenanceLink(path_ref="wiki/topics/missing.md", role="generated-page"),
+            ],
+        ),
+    )
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing-run-page-id",
+        "missing-run-page-ref",
+        "missing-run-provenance-page-ref",
+        "missing-run-provenance-path",
+    ]
+    assert all(issue.remediation_hint is None for issue in result.issues)
 
 
 def test_run_health_checks_reports_source_runtime_cross_reference_problems(tmp_path: Path) -> None:

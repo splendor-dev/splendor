@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -102,6 +103,7 @@ def _append_issue(
     path: str,
     record_id: str | None = None,
     check_name: str,
+    remediation_hint: str | None = None,
 ) -> None:
     issues.append(
         MaintenanceIssue(
@@ -110,7 +112,81 @@ def _append_issue(
             path=path,
             record_id=record_id,
             check_name=check_name,
+            remediation_hint=remediation_hint,
         )
+    )
+
+
+def _quote_command_arg(value: str) -> str:
+    return shlex.quote(value)
+
+
+def _source_selector(source: SourceRecord) -> str:
+    if source.source_ref:
+        return _quote_command_arg(source.source_ref)
+    if source.logical_id:
+        return _quote_command_arg(source.logical_id)
+    return _quote_command_arg(source.source_id)
+
+
+def _source_health_remediation_hint(source: SourceRecord | None, message: str) -> str | None:
+    if source is None:
+        return None
+    storage_mode = effective_storage_mode(source)
+    selector = _source_selector(source)
+    if source.source_ref_kind == "workspace_path" and source.superseded_by is None:
+        source_is_missing = "Workspace source is missing:" in message
+        source_checksum_mismatch = "checksum mismatch for ingestion" in message
+        if source_is_missing and storage_mode in {"none", "copy"}:
+            return (
+                f"Run splendor source update-path {selector} <new-path>; inspect current "
+                "freshness first with splendor source freshness."
+            )
+        if source_is_missing and storage_mode in {"pointer", "symlink"}:
+            return (
+                "Run splendor source freshness to inspect the missing curated source; "
+                f"{storage_mode}-backed sources are not supported by source update-path yet."
+            )
+        if source_checksum_mismatch:
+            return (
+                f"Run splendor source refresh {selector}, then splendor ingest --pending; "
+                "for all changed curated workspace sources run splendor ingest --changed."
+            )
+    if storage_mode in {"copy", "pointer", "symlink"} and "checksum mismatch" in message:
+        return (
+            f"Run splendor source refresh {selector}, then splendor ingest --pending if a "
+            "new queue job is created."
+        )
+    return None
+
+
+def _queue_repair_hint(queue_record: QueueItemRecord, canonical_job_id: str) -> str:
+    source_id = _source_id_from_job_id(canonical_job_id)
+    if queue_record.status == "failed":
+        return (
+            f"Run splendor queue retry {_quote_command_arg(canonical_job_id)} or "
+            f"splendor repair ingest {_quote_command_arg(source_id)}."
+        )
+    if queue_record.status == "dead_letter":
+        return (
+            f"Run splendor repair ingest {_quote_command_arg(source_id)} or "
+            f"splendor queue retry {_quote_command_arg(canonical_job_id)} after reviewing "
+            "the dead-letter error."
+        )
+    if queue_record.status == "leased":
+        return (
+            f"Run splendor queue retry {_quote_command_arg(canonical_job_id)} after confirming "
+            "the lease owner is no longer active."
+        )
+    return (
+        f"Inspect queue state with splendor queue inspect {_quote_command_arg(canonical_job_id)}."
+    )
+
+
+def _unknown_provenance_hint() -> str:
+    return (
+        "Diagnostic only: inspect the referenced run/page/source records and file a follow-up; "
+        "no direct provenance rewrite command is available."
     )
 
 
@@ -161,6 +237,7 @@ def _load_source_records(
         checked_count += 1
         source_id = manifest_path.stem
         manifest_relpath = workspace_relative_path(root, manifest_path)
+        source: SourceRecord | None = None
         try:
             source = load_source_record(manifest_path)
             _validate_storage_policy(source)
@@ -175,6 +252,7 @@ def _load_source_records(
                 path=manifest_relpath,
                 record_id=source_id,
                 check_name="source-storage",
+                remediation_hint=_source_health_remediation_hint(source, str(exc)),
             )
             continue
         for artifact_ref in source.derived_artifacts:
@@ -417,6 +495,7 @@ def _validate_queue_record(
                         path=queue_relpath,
                         record_id=canonical_job_id,
                         check_name="queue-state",
+                        remediation_hint=_queue_repair_hint(queue_record, canonical_job_id),
                     )
     elif queue_record.lease_owner is not None or queue_record.lease_expires_at is not None:
         _append_issue(
@@ -440,6 +519,7 @@ def _validate_queue_record(
                 path=queue_relpath,
                 record_id=canonical_job_id,
                 check_name="queue-state",
+                remediation_hint=_queue_repair_hint(queue_record, canonical_job_id),
             )
     elif queue_record.last_error is not None:
         _append_issue(
@@ -460,6 +540,7 @@ def _validate_queue_record(
                 path=queue_relpath,
                 record_id=canonical_job_id,
                 check_name="queue-state",
+                remediation_hint=_queue_repair_hint(queue_record, canonical_job_id),
             )
         else:
             try:
@@ -690,6 +771,7 @@ def _validate_run_record(
             path=run_relpath,
             record_id=canonical_run_id,
             check_name="run-provenance",
+            remediation_hint=_unknown_provenance_hint(),
         )
 
     page_paths_by_id = {
@@ -744,6 +826,7 @@ def _validate_run_record(
                 path=run_relpath,
                 record_id=canonical_run_id,
                 check_name="run-provenance",
+                remediation_hint=_unknown_provenance_hint(),
             )
         if link.page_id is not None and link.page_id not in wiki_pages:
             if not _is_expected_pruned_source_summary_page_id(

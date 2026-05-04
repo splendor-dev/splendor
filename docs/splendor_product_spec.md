@@ -1184,6 +1184,13 @@ Not all maintenance should use LLMs.
 - stale run references
 - unresolved source references
 
+Current health output is also a repair guide where Splendor has a narrow, existing command for the
+problem. Maintenance issues may include a `remediation_hint` in JSON, human stdout, and Markdown
+reports. Missing active workspace source paths point to `source update-path` plus `source
+freshness`; checksum drift points to `source refresh`, `ingest --pending`, or `ingest --changed`;
+queue failure diagnostics point to `queue retry` or `repair ingest`. Unknown source provenance
+references remain diagnostic-only until a safe provenance repair design exists.
+
 ### 22.2 LLM-assisted maintenance
 
 - contradiction detection

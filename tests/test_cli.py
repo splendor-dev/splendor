@@ -2691,6 +2691,32 @@ def test_cli_health_command_fails_for_invalid_sources(tmp_path: Path, capsys) ->
     assert "[source-health-check-failed]" in markdown
 
 
+def test_cli_health_command_renders_remediation_hints_in_stdout_and_reports(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source.unlink()
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "health"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    expected_hint = (
+        "Run splendor source update-path brief.md <new-path>; inspect current freshness first "
+        "with splendor source freshness."
+    )
+    assert f"Hint: {expected_hint}" in captured.out
+    json_report, markdown_report = latest_report_paths(tmp_path, "health")
+    payload = json.loads(json_report.read_text(encoding="utf-8"))
+    assert payload["issues"][0]["remediation_hint"] == expected_hint
+    markdown = markdown_report.read_text(encoding="utf-8")
+    assert f"hint: {expected_hint}" in markdown
+
+
 def test_cli_health_command_reports_top_level_errors(tmp_path: Path, capsys) -> None:
     (tmp_path / "splendor.yaml").write_text("sources: [\n", encoding="utf-8")
 

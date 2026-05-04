@@ -18,6 +18,7 @@ class MaintenanceIssue(StrictRecord):
     path: str | None = None
     record_id: str | None = None
     check_name: str | None = None
+    remediation_hint: str | None = None
 
 
 class MaintenanceReport(StrictRecord):
