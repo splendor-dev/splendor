@@ -334,7 +334,7 @@ ingest handoff, #44's query snippets, #45's web status/source detail pages, and 
 visibility as represented in current behavior. `M15-P1.1` now starts #41's deferred mutating
 compile/update workflow through #79 with explicit one-page proposal/apply semantics. `M15-P1.2`
 is implemented: bare compile/suggest output now includes ranked compile-target previews while
-preserving the explicit apply gate. Issue #47 is handled next by `M10-P3.1` as a focused
+preserving the explicit apply gate. Issue #47 is targeted next by `M10-P3.1` as a focused
 ingest/run-state timing follow-up. Issues #30 and #37
 remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
 is the parent feedback loop for the M14 source-lifecycle sequence; stable logical source

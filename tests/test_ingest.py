@@ -147,14 +147,44 @@ def test_ingest_source_records_distinct_start_and_finish_timestamps(
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
     added = add_source(tmp_path, source, storage_mode="copy")
+    events: list[str] = []
     timestamps = iter(
         [
             "2026-05-04T10:00:00.000100+00:00",
+            "2026-05-04T10:00:00.000500+00:00",
             "2026-05-04T10:00:00.000900+00:00",
         ]
     )
 
-    monkeypatch.setattr(ingest_module, "_run_timestamp_iso", lambda: next(timestamps))
+    def next_run_timestamp() -> str:
+        timestamp = next(timestamps)
+        events.append(f"timestamp:{timestamp}")
+        return timestamp
+
+    def review_after_initial_page_render(**kwargs):
+        events.append("review")
+        return contradictions_module.ContradictionReviewResult(
+            frontmatter=kwargs["current_snapshot"].frontmatter,
+            task_updates=[],
+            page_updates=[],
+            contradiction_ids=[],
+            task_ids=[],
+            warnings=[],
+        )
+
+    original_commit_success = ingest_module._commit_success
+
+    def commit_success_after_terminal_run(**kwargs):
+        events.append(f"commit:{kwargs['success_run'].finished_at}")
+        original_commit_success(**kwargs)
+
+    monkeypatch.setattr(ingest_module, "_run_timestamp_iso", next_run_timestamp)
+    monkeypatch.setattr(
+        ingest_module,
+        "review_source_summary_contradictions",
+        review_after_initial_page_render,
+    )
+    monkeypatch.setattr(ingest_module, "_commit_success", commit_success_after_terminal_run)
 
     result = ingest_source(tmp_path, added.source_id)
 
@@ -165,6 +195,13 @@ def test_ingest_source_records_distinct_start_and_finish_timestamps(
     assert datetime.fromisoformat(run_record.started_at) <= datetime.fromisoformat(
         run_record.finished_at
     )
+    assert events == [
+        "timestamp:2026-05-04T10:00:00.000100+00:00",
+        "timestamp:2026-05-04T10:00:00.000500+00:00",
+        "review",
+        "timestamp:2026-05-04T10:00:00.000900+00:00",
+        "commit:2026-05-04T10:00:00.000900+00:00",
+    ]
 
 
 def test_ingest_source_is_idempotent_when_current_pipeline_already_succeeded(

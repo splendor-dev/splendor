@@ -828,7 +828,7 @@ adding SQLite, vector search, background workers, mutating web UI, or broad refr
 `M13-P3.2` is the final release checklist and post-v1 handoff. It keeps runtime behavior stable,
 adds the concise release handoff in `docs/v1_release_handoff.md`, and makes the post-v1 queue
 explicit: #72 owns source lifecycle and agent workflow follow-up; #79 owns the deferred mutating
-compile/update path from #41; #47 owns ingest run durations and is handled by `M10-P3.1`; #30 and
+compile/update path from #41; #47 owns ingest run durations and is targeted by `M10-P3.1`; #30 and
 #37 remain independent performance/scaling follow-ups.
 
 ### M13-P3 v1 release-readiness checklist

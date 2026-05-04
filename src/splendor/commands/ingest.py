@@ -982,7 +982,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
         page_path = _page_path_for(layout.wiki_sources_dir, source.source_id)
         page_relpath = _relative_to_root(root, page_path)
         registered_path = canonical_source_ref(source)
-        finished_at = _run_timestamp_iso()
+        generated_at = _run_timestamp_iso()
         frontmatter = KnowledgePageFrontmatter(
             kind="source-summary",
             title=source.title,
@@ -991,7 +991,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             review_state="machine-generated",
             source_refs=[source.source_id],
             generated_by_run_ids=[run_id],
-            last_generated_at=finished_at,
+            last_generated_at=generated_at,
             confidence=1.0,
             tags=["source-summary", source.source_type],
             provenance_links=_page_provenance_links(
@@ -1022,7 +1022,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             f"Checksum: `{source.checksum}`",
             f"Source ref: `{canonical_source_ref(source)}`",
             f"Added at: `{source.added_at}`",
-            f"Ingested at: `{finished_at}`",
+            f"Ingested at: `{generated_at}`",
             *_build_content_key_facts(source_text),
         ]
         provenance_lines = [
@@ -1110,6 +1110,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 ),
             }
         )
+        finished_at = _run_timestamp_iso()
         success_run = run.model_copy(
             update={
                 "finished_at": finished_at,
