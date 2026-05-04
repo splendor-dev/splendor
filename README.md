@@ -194,15 +194,16 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [docs/schema_contracts.md](docs/schema_contracts.md)
 - [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
 - [docs/v1_release_handoff.md](docs/v1_release_handoff.md)
+- [docs/m14_synthbanshee_reevaluation.md](docs/m14_synthbanshee_reevaluation.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.4`
-- Current planned slice: `M14-P2`
-- Current PR sub-slice: `M14-P2.1`
+- Previous completed PR sub-slice: `M14-P2.1`
+- Current planned slice: `Source-lifecycle re-evaluation gate`
+- Current PR sub-slice: `M14-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `SynthBanshee re-evaluation gate`
-- Next planned PR sub-slice: `TBD`
+- Next planned slice: `Planning-doc authority and task-oriented agent briefs`
+- Next planned PR sub-slice: `M14-P4.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -291,9 +292,10 @@ ingest handoff, #44's query snippets, #45's web status/source detail pages, and 
 visibility as represented in current behavior. It still calls out #41's mutating compile/update
 workflow as deferred. Issue #47 remains an ingest/run-state timing follow-up. Issues #30 and #37
 remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
-stays open as the parent feedback loop; stable logical source identities, supersession lifecycle,
-safe workspace refresh, superseded summary pruning, and topic-ref migration have landed, while
-PR-summary support is now represented by `splendor pr-summary --since main`.
+is the parent feedback loop for the M14 source-lifecycle sequence; stable logical source
+identities, supersession lifecycle, safe workspace refresh, superseded summary pruning, topic-ref
+migration, and PR-summary support have landed. `M14-P3.1` recommends closing #72 once maintainers
+accept the gate result, with the narrower remaining handoff gap tracked by #86.
 Issue #79 tracks the deferred mutating compile/update path from #41.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
@@ -322,6 +324,12 @@ generated source-summary pages, maintained wiki/topic edits, generated queue/run
 latest local maintenance report status. The human output is path-first and layout-aware, and
 `--json` emits the same structure for agent handoff without mutating workspace state or depending
 on GitHub.
+
+`M14-P3.1` records the internal source-lifecycle re-evaluation gate in
+`docs/m14_synthbanshee_reevaluation.md`. The gate covers both the clean current state and a
+controlled changed-source exercise through freshness, full workspace refresh, PR summary, lint, and
+health. It is not a new external SynthBanshee report; it recommends closing #72 after maintainer
+review and moves the remaining planning-doc authority / task-brief gap to #86.
 
 ### v1 readiness checklist
 

@@ -334,18 +334,18 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P1.4`
-- Current planned slice: `M14-P2`
-- Current PR sub-slice: `M14-P2.1`
+- Previous completed PR sub-slice: `M14-P2.1`
+- Current planned slice: `Source-lifecycle re-evaluation gate`
+- Current PR sub-slice: `M14-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `SynthBanshee re-evaluation gate`
-- Next planned PR sub-slice: `TBD`
+- Next planned slice: `Planning-doc authority and task-oriented agent briefs`
+- Next planned PR sub-slice: `M14-P4.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
 shifting agent-facing value toward freshness, contested knowledge, planning state, and next
-actions. The lifecycle marker means `M13-P3.2` is in progress on feature branches and merged once
-the same committed state is observed on `main`.
+actions. The lifecycle marker means the current sub-slice is in progress on feature branches and
+merged once the same committed state is observed on `main`.
 
 ---
 
@@ -877,6 +877,8 @@ breaking the v1 file contracts.
 - `M14-P0` Post-v1 planning intake
 - `M14-P1` Source lifecycle design
 - `M14-P2` PR summary and generated-state review handoff
+- `M14-P3` Source-lifecycle re-evaluation gate
+- `M14-P4` Planning-doc authority and task-oriented agent briefs
 
 ### Candidate PR sub-slices
 - `M14-P0.1` Split #72 into child issues and assign release metadata
@@ -885,11 +887,13 @@ breaking the v1 file contracts.
 - `M14-P1.3` Safe workspace refresh path
 - `M14-P1.4` Superseded-state pruning and topic-ref migration
 - `M14-P2.1` PR summary and lower-noise generated-state review handoff
+- `M14-P3.1` Source-lifecycle re-evaluation gate
+- `M14-P4.1` Planning-doc authority and task-oriented agent briefs
 
-### SynthBanshee re-evaluation gate
+### Source-lifecycle re-evaluation gate
 
-Do not ask the SynthBanshee Claude agent for the major "try Splendor again" evaluation until the
-post-#72 lifecycle loop is substantially implemented. The intended sequence before that ask is:
+The original #72 SynthBanshee report should not be treated as resolved until the post-#72 lifecycle
+loop is substantially implemented and re-evaluated. The intended sequence before that gate is:
 
 1. `M14-P0.1` splits #72 into child issues and assigns release metadata.
 2. `M14-P1.1` adds stable logical source identities while preserving content-addressed IDs for
@@ -906,9 +910,11 @@ post-#72 lifecycle loop is substantially implemented. The intended sequence befo
 6. `M14-P2.1` adds `splendor pr-summary --since main`, a read-only PR-oriented summary with
    lower-noise generated-state review guidance over local git state.
 
-After those slices land, the external-agent retry should use a comparable real planning or
-repo-maintenance workflow and explicitly compare against #72. Earlier feedback should be requested
-only for the narrower safe-discovery, freshness, and handoff surfaces already shipped in M13.
+After those slices land, the gate should use a comparable planning or repo-maintenance workflow and
+explicitly compare against #72. If the gate is performed internally rather than by a new external
+SynthBanshee run, the result must say so and must not claim to be a fresh external-agent report.
+Earlier feedback should be requested only for the narrower safe-discovery, freshness, and handoff
+surfaces already shipped in M13.
 
 `M14-P2.1` keeps the command non-mutating and schema-version-1-compatible. It summarizes
 merge-base curated source manifests, generated source-summary pages, maintained wiki/topic pages,
@@ -916,6 +922,18 @@ queue/run/report churn, latest local lint/health reports when available, and rev
 distinguish meaningful generated knowledge from mechanical runtime records. It respects configured
 layout paths and reports malformed changed source manifests without aborting the whole handoff.
 JSON output is available for agent handoff.
+
+`M14-P3.1` records the internal source-lifecycle re-evaluation gate after the post-#72 lifecycle
+sequence. The comparable workflow in `docs/m14_synthbanshee_reevaluation.md` used source freshness,
+the full workspace refresh command, `pr-summary`, `lint`, and `health` against both the clean
+current state and a disposable changed-source exercise. The result: the original source-refresh
+lifecycle pain from #72 is materially addressed, and this PR recommends closing #72 once
+maintainers accept the gate result. The remaining agent-usefulness gap is narrower and is tracked
+by #86: planning-document authority metadata and task-oriented agent briefs.
+
+`M14-P4.1` should address #86 without implementing #79. It should improve how Splendor ranks
+current-state planning docs, roadmap docs, historical reviews, proposals, generated summaries, and
+task-specific constraints in agent-facing handoff surfaces.
 
 ### Boundaries
 - Promote these candidates to committed roadmap slices only after the child issues and GitHub
