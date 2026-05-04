@@ -54,6 +54,9 @@ For this handoff:
   maintainers accept the gate result
 - #86 tracks the planning-document authority and task-oriented agent brief gap addressed by
   `M14-P4.1`
+- #94's source-identity concern is materially addressed for curated workspace-backed sources by
+  `M14-P1.1` through `M14-P1.9`; future work should be a specific non-workspace extension or
+  regression, not a broad canonical source-ID redesign
 - #79 now owns the M15 reviewed compile/update sequence; `M15-P1.1` starts with explicit
   one-page diff/proposal-hash/apply semantics rather than broad automatic synthesis updates
 
@@ -64,7 +67,8 @@ These items are intentionally not v1 release blockers:
 - richer post-M14 authority lifecycle policy after the initial planning-doc authority briefs have
   been exercised in real repositories
 - ingest run-duration precision for #47
-- broader source identity design after the narrow health remediation hints in #95
+- source identity extensions beyond curated workspace-backed source lifecycle semantics, if real
+  repository use identifies a concrete remaining gap after #94
 - repo-scan bulk registration optimization for #30
 - web document-list scaling for #37
 
@@ -89,8 +93,12 @@ The conservative next queue after the `M14-P3.1` gate is:
 7. `M14-P1.8` handles issue #95: health diagnostics include deterministic remediation hints for
    the concrete `source update-path`, source refresh, stale-ingest, queue retry, and repair ingest
    commands now available.
-8. Continue #79 through `M15-P1.2` after any narrowed #94 source identity review follow-up.
-9. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
+8. Close or explicitly narrow #94 through `M14-P1.9`; the current identity contract keeps
+   canonical `src-...` IDs immutable as version/provenance records while logical IDs, supersession,
+   freshness, path repair, and topic-ref migration cover ordinary curated workspace edits and
+   moves.
+9. Continue #79 through `M15-P1.2` after #94 is closed or narrowed.
+10. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
 The internal source-lifecycle re-evaluation gate is now complete in `M14-P3.1`. The completed retry

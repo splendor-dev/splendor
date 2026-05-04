@@ -857,7 +857,7 @@ def test_cli_source_update_path_repairs_missing_workspace_source(tmp_path: Path,
     assert "Old path: docs/brief.md" in out
     assert "New path: moved/brief.md" in out
     assert "Status: repaired" in out
-    assert "Logical ID: source:moved/brief.md" in out
+    assert "Logical ID: source:docs/brief.md" in out
     assert "Checksum: matches manifest" in out
     assert f"Queued ingest: {tmp_path / 'state' / 'queue' / f'ingest-{source_id}.json'}" in out
     assert "Next: splendor ingest --pending" in out
@@ -865,9 +865,17 @@ def test_cli_source_update_path_repairs_missing_workspace_source(tmp_path: Path,
     assert updated.source_id == source_id
     assert updated.source_ref == "moved/brief.md"
     assert updated.path == "moved/brief.md"
-    assert updated.logical_id == "source:moved/brief.md"
-    assert updated.aliases == ["moved/brief.md"]
+    assert updated.original_path == "docs/brief.md"
+    assert updated.logical_id == "source:docs/brief.md"
+    assert updated.aliases == ["docs/brief.md", "moved/brief.md"]
     assert len(list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))) == 1
+
+    lookup_code = main(
+        ["--root", str(tmp_path), "source", "lookup", "source:docs/brief.md", "--json"]
+    )
+    assert lookup_code == 0
+    lookup_payload = json.loads(capsys.readouterr().out)
+    assert lookup_payload["sources"][0]["source_id"] == source_id
 
     freshness_code = main(["--root", str(tmp_path), "source", "freshness", "--json"])
     assert freshness_code == 0
@@ -898,12 +906,12 @@ def test_cli_source_update_path_json_reports_deterministic_payload(tmp_path: Pat
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
         "source_id": manifest.source_id,
-        "logical_id": "source:new.md",
+        "logical_id": "source:old.md",
         "old_path": "old.md",
         "new_path": "new.md",
         "status": "repaired",
         "source_ref": "new.md",
-        "aliases": ["new.md"],
+        "aliases": ["old.md", "new.md"],
         "manifest_checksum": manifest.checksum,
         "current_checksum": manifest.checksum,
         "checksum_matches": True,

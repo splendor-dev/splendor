@@ -199,6 +199,17 @@ Optional stable lookup aliases for source resolution. Workspace-backed registrat
 repo-relative path alias; lookup and freshness payloads also expose the effective logical ID as an
 alias for agent handoff.
 
+### Source identity compatibility
+
+The stable-identity layer is intentionally additive. Canonical manifest filenames, generated
+source-summary pages, queue payloads, and run provenance continue to use content-addressed
+`src-...` IDs. Workspace-backed logical IDs and aliases are selectors above those version IDs;
+source refresh records content edits with `supersedes` / `superseded_by`; source freshness keeps
+checksum drift separate from identity; and `source update-path` repairs intentional path moves for
+active curated workspace-backed sources while preserving the original logical selector and adding
+the new path alias. Issue #94 should not require schema version `1` to replace canonical `src-...`
+IDs unless a future, narrower gap is identified outside that contract.
+
 ### `source_commit_capture`
 
 Nullable intent flag controlling whether refresh should attempt source commit capture again:

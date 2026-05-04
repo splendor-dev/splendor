@@ -189,9 +189,10 @@ Implemented fields:
   implementation supports `storage_mode: none` and `storage_mode: copy` workspace sources. By
   default it requires the old workspace path to be missing; `--force` allows explicit reparenting
   while the old path still exists. It validates that the target is a supported file inside the
-  workspace, rejects paths already curated by another active source, updates `source_ref`,
-  `logical_id`, `aliases`, `original_path`, and the compatibility `path` field for
-  `storage_mode: none`, then validates and rewrites the schema-bound manifest. Same-byte repairs
+  workspace, rejects paths already curated by another active source, preserves the stable
+  `logical_id` and original-path alias, adds the new path alias, updates `source_ref`, and updates
+  the compatibility `path` field for `storage_mode: none`, then validates and rewrites the
+  schema-bound manifest. Same-byte repairs
   mark previously ingested source records as needing ingest and queue the existing source ID so
   generated source-summary provenance can refresh. Changed-byte repairs return `status: partial`,
   do not queue ingest, and point operators to `splendor source refresh <new-path>`. Human and JSON
@@ -229,6 +230,7 @@ Implemented fields:
   source IDs to the active content-addressed source version, leaving prose and code-fence mentions
   untouched. The command does not perform broad repo discovery, register uncurated files, or run
   mutating synthesis compile/update workflows.
+
 - `splendor ingest --changed` is the narrow stale-source ingestion path for checksum-drifted
   curated workspace-backed sources. It scans source freshness, reports missing active curated
   workspace sources as unresolved diagnostics, refreshes each changed source through the existing
@@ -269,6 +271,39 @@ Implemented fields:
   optional and explicitly configured; successful OCR-derived text is recorded in
   `derived_artifacts` without changing the canonical source identity. Sidecar OCR inputs are
   tracked through metadata artifacts so no-op ingest can detect sidecar checksum drift.
+
+### Source identity disposition
+
+Issue #94's stable source-identity concern is handled in schema version `1` by layering stable
+logical selectors and lifecycle links over immutable content-addressed records, rather than by
+renaming canonical IDs:
+
+- Canonical source manifests, queue payloads, generated source-summary pages, and run provenance
+  continue to use content-addressed `src-...` IDs for compatibility.
+- Workspace-backed curated sources persist or derive `source:<workspace-path>` logical IDs and path
+  aliases so operators can select the logical source across ordinary content edits. After an
+  explicit path repair, the original logical ID remains a stable selector and the new path is added
+  as a path alias.
+- Changed content is represented as a new canonical source version linked to the previous version
+  with `supersedes` / `superseded_by`; historical manifests and run records remain valid.
+- Checksum/freshness state stays on each source version and in explicit freshness reports; it is not
+  the logical identity.
+- Intentional file moves are handled by `splendor source update-path`, which updates the active
+  source ref and compatibility path fields while preserving the stable logical ID and old path
+  alias, without discovering uncurated files or rewriting historical run records.
+- Maintained topic/source refs can be migrated from superseded source IDs to active versions with
+  `workspace refresh --update-topic-refs` after refreshed successor summaries exist.
+
+This disposition keeps schema version `1` stable. Future identity work should name a specific
+remaining gap, such as non-workspace source lifecycle semantics, rather than replacing the canonical
+`src-...` compatibility contract.
+
+Legacy SHA/content-addressed manifests remain compatible. If a workspace-backed record has
+`source_ref_kind: workspace_path` but lacks `logical_id` or aliases, lookup/freshness derives the
+effective logical ID from the recorded workspace path and re-registration or path repair backfills
+the persisted selector fields. Older copied/stored-artifact records that do not carry
+workspace-backed source refs keep their canonical `src-...` identity until an operator explicitly
+re-registers or otherwise curates them as workspace-backed sources.
 
 ### Derived artifacts
 

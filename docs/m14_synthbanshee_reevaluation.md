@@ -135,6 +135,9 @@ starting.
 Keep the following issues separate unless a future re-evaluation directly proves one has become
 urgent:
 
+- #94: source identity review. `M14-P1.9` audits this separately and records the disposition that
+  curated workspace-backed identity is materially addressed by logical IDs, supersession, freshness
+  state, path repair, and topic-ref migration without changing canonical `src-...` IDs.
 - #79: mutating compile/update workflow.
 - #47: ingest run-duration precision.
 - #37: web document-list scaling.
