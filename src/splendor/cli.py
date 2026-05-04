@@ -1769,6 +1769,8 @@ def _print_maintenance_stdout(command: str, report, *, json_output: bool) -> Non
     for issue in report.issues:
         subject = issue.record_id or issue.path or issue.check_name or issue.code
         print(f"- {subject}: {issue.message}")
+        if issue.remediation_hint:
+            print(f"  Hint: {issue.remediation_hint}")
 
 
 def handle_lint(args: argparse.Namespace) -> int:

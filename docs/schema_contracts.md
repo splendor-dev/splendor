@@ -471,6 +471,26 @@ Current runtime behavior:
 - failed runs retain only the source/input-side structured provenance that was actually known at
   failure time
 
+## Maintenance report records
+
+`splendor lint` and `splendor health` write timestamped JSON and Markdown reports under
+`reports/<command>/`. `MaintenanceIssue` carries:
+
+- `code`
+- `message`
+- `path`
+- `record_id`
+- `check_name`
+- `remediation_hint`
+
+`remediation_hint` is optional and deterministic. Health uses it only when the current diagnostic
+has a known safe operator action: missing active workspace source paths point to `splendor source
+update-path ... <new-path>` and `splendor source freshness`; checksum drift points to
+`splendor source refresh ...`, `splendor ingest --pending`, or `splendor ingest --changed`;
+failed/dead-letter queue diagnostics and expired leases point to queue retry or ingest repair
+commands. Unknown run/page/source provenance references stay diagnostic-only and explicitly avoid a
+broad rewrite command.
+
 ## Repo scan
 
 The CLI now includes `splendor repo scan` for deterministic repo-native discovery.
