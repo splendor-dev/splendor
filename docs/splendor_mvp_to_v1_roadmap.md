@@ -980,7 +980,7 @@ rendered in JSON, human stdout, and Markdown reports. Active workspace source pa
 to `splendor source update-path ... <new-path>` and `splendor source freshness`; checksum drift
 points to `splendor source refresh ...`, `splendor ingest --pending`, or `splendor ingest
 --changed`; failed/dead-letter queue shape and expired lease diagnostics point to queue retry or
-ingest repair commands. Unknown provenance/source refs remain diagnostic-only and explicitly avoid
+ingest repair commands. Unknown source provenance refs remain diagnostic-only and explicitly avoid
 inventing unsafe broad repair commands.
 
 ## Candidate Milestone 15 — Post-v1 reviewed compile/update workflow

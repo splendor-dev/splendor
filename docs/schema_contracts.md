@@ -488,8 +488,8 @@ has a known safe operator action: missing active workspace source paths point to
 update-path ... <new-path>` and `splendor source freshness`; checksum drift points to
 `splendor source refresh ...`, `splendor ingest --pending`, or `splendor ingest --changed`;
 failed/dead-letter queue diagnostics and expired leases point to queue retry or ingest repair
-commands. Unknown run/page/source provenance references stay diagnostic-only and explicitly avoid a
-broad rewrite command.
+commands. Unknown source provenance references stay diagnostic-only and explicitly avoid a broad
+rewrite command.
 
 ## Repo scan
 

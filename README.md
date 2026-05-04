@@ -192,8 +192,8 @@ outcomes, and the summary.
 exists. JSON, human stdout, and Markdown reports surface missing active workspace source paths with
 `source update-path` / `source freshness` guidance, checksum drift with `source refresh`,
 `ingest --pending`, or `ingest --changed`, and queue repair diagnostics with `queue retry` or
-`repair ingest`. Unknown provenance refs remain diagnostic-only rather than suggesting unsafe broad
-rewrites.
+`repair ingest`. Unknown source provenance refs remain diagnostic-only rather than suggesting
+unsafe broad rewrites.
 
 `splendor pr-summary --since main` is a read-only PR handoff command over local git state. It uses
 the merge base between `HEAD` and the base ref for PR-style diff semantics, then summarizes curated

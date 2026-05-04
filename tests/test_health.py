@@ -63,6 +63,24 @@ def test_run_health_checks_hints_missing_active_workspace_source_repair(
     )
 
 
+def test_run_health_checks_does_not_hint_update_path_for_pointer_source(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    add_source(tmp_path, source, storage_mode="pointer")
+    source.unlink()
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["source-health-check-failed"]
+    assert result.issues[0].remediation_hint == (
+        "Run splendor source freshness to inspect the missing curated source; "
+        "pointer-backed sources are not supported by source update-path yet."
+    )
+
+
 def test_run_health_checks_hints_checksum_mismatch_active_workspace_source(
     tmp_path: Path,
 ) -> None:
@@ -938,6 +956,43 @@ def test_run_health_checks_hints_unknown_source_refs_without_unsafe_repair(
     assert all(
         "source update-path" not in (issue.remediation_hint or "") for issue in result.issues
     )
+
+
+def test_run_health_checks_does_not_repeat_generic_hint_for_missing_page_refs(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_run_record(
+        layout.runs_dir / "run-missing-page.json",
+        RunRecord(
+            run_id="run-missing-page",
+            job_id="ingest-src-example",
+            job_type="ingest_source",
+            started_at="2026-04-20T09:00:00+00:00",
+            finished_at="2026-04-20T09:05:00+00:00",
+            status="failed",
+            input_refs=[],
+            errors=["page disappeared"],
+            pipeline_version=__version__,
+            page_ids=["missing-page"],
+            page_refs=["wiki/topics/missing.md"],
+            provenance_links=[
+                ProvenanceLink(page_id="missing-page", role="generated-page"),
+                ProvenanceLink(path_ref="wiki/topics/missing.md", role="generated-page"),
+            ],
+        ),
+    )
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing-run-page-id",
+        "missing-run-page-ref",
+        "missing-run-provenance-page-ref",
+        "missing-run-provenance-path",
+    ]
+    assert all(issue.remediation_hint is None for issue in result.issues)
 
 
 def test_run_health_checks_reports_source_runtime_cross_reference_problems(tmp_path: Path) -> None:

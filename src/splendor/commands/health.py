@@ -135,12 +135,19 @@ def _source_health_remediation_hint(source: SourceRecord | None, message: str) -
     storage_mode = effective_storage_mode(source)
     selector = _source_selector(source)
     if source.source_ref_kind == "workspace_path" and source.superseded_by is None:
-        if "Workspace source is missing:" in message:
+        source_is_missing = "Workspace source is missing:" in message
+        source_checksum_mismatch = "checksum mismatch for ingestion" in message
+        if source_is_missing and storage_mode in {"none", "copy"}:
             return (
                 f"Run splendor source update-path {selector} <new-path>; inspect current "
                 "freshness first with splendor source freshness."
             )
-        if "checksum mismatch for ingestion" in message:
+        if source_is_missing and storage_mode in {"pointer", "symlink"}:
+            return (
+                "Run splendor source freshness to inspect the missing curated source; "
+                f"{storage_mode}-backed sources are not supported by source update-path yet."
+            )
+        if source_checksum_mismatch:
             return (
                 f"Run splendor source refresh {selector}, then splendor ingest --pending; "
                 "for all changed curated workspace sources run splendor ingest --changed."
@@ -783,7 +790,6 @@ def _validate_run_record(
             path=run_relpath,
             record_id=canonical_run_id,
             check_name="run-provenance",
-            remediation_hint=_unknown_provenance_hint(),
         )
 
     for page_ref in run_record.page_refs:
@@ -797,7 +803,6 @@ def _validate_run_record(
                 path=run_relpath,
                 record_id=canonical_run_id,
                 check_name="run-provenance",
-                remediation_hint=_unknown_provenance_hint(),
             )
             continue
         if not resolved.is_file():
@@ -810,7 +815,6 @@ def _validate_run_record(
                 path=run_relpath,
                 record_id=canonical_run_id,
                 check_name="run-provenance",
-                remediation_hint=_unknown_provenance_hint(),
             )
 
     for link in run_record.provenance_links:
@@ -835,7 +839,6 @@ def _validate_run_record(
                     path=run_relpath,
                     record_id=canonical_run_id,
                     check_name="run-provenance",
-                    remediation_hint=_unknown_provenance_hint(),
                 )
         if (
             link.run_id is not None
@@ -849,7 +852,6 @@ def _validate_run_record(
                 path=run_relpath,
                 record_id=canonical_run_id,
                 check_name="run-provenance",
-                remediation_hint=_unknown_provenance_hint(),
             )
         if link.path_ref is None:
             continue
@@ -863,7 +865,6 @@ def _validate_run_record(
                 path=run_relpath,
                 record_id=canonical_run_id,
                 check_name="run-provenance",
-                remediation_hint=_unknown_provenance_hint(),
             )
             continue
         if not resolved.exists():
@@ -876,7 +877,6 @@ def _validate_run_record(
                 path=run_relpath,
                 record_id=canonical_run_id,
                 check_name="run-provenance",
-                remediation_hint=_unknown_provenance_hint(),
             )
 
     if run_record.status == "succeeded":
