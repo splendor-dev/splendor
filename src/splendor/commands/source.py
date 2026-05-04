@@ -7,7 +7,7 @@ import shlex
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current
+from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
@@ -68,6 +68,42 @@ class SourceFreshnessResult:
     historical: int
     sources: list[SourceFreshnessItem]
     report_path: str | None = None
+
+
+@dataclass(frozen=True)
+class StaleIngestRefresh:
+    requested_source_id: str
+    refreshed_source_id: str | None
+    source_ref: str
+    changed: bool | None
+    queued: bool
+    queue_path: Path | None
+    status: str
+    message: str
+
+
+@dataclass(frozen=True)
+class StaleIngestRun:
+    source_id: str
+    outcome: str
+    message: str
+    queue_path: Path | None = None
+    run_id: str | None = None
+    page_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class StaleIngestResult:
+    status: str
+    initial_freshness: SourceFreshnessResult
+    final_freshness: SourceFreshnessResult
+    missing: list[SourceFreshnessItem]
+    refreshed: list[StaleIngestRefresh]
+    ingest: list[StaleIngestRun]
+    processed: int
+    succeeded: int
+    failed: int
+    skipped: int
 
 
 def list_sources(root: Path) -> list[SourceLookupResult]:
@@ -263,6 +299,127 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     )
 
 
+def ingest_changed_sources(root: Path) -> StaleIngestResult:
+    initial_freshness = scan_source_freshness(root)
+    missing_items = [item for item in initial_freshness.sources if item.status == "missing"]
+    changed_items = [item for item in initial_freshness.sources if item.status == "changed"]
+
+    refreshed_items: list[StaleIngestRefresh] = []
+    ingest_items: list[StaleIngestRun] = []
+    processed = 0
+    succeeded = 0
+    failed = 0
+    skipped = 0
+
+    for item in changed_items:
+        try:
+            refresh = refresh_source(root, item.source.source_id)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            failed += 1
+            refreshed_items.append(
+                StaleIngestRefresh(
+                    requested_source_id=item.source.source_id,
+                    refreshed_source_id=None,
+                    source_ref=item.canonical_path,
+                    changed=None,
+                    queued=False,
+                    queue_path=None,
+                    status="failed",
+                    message=str(exc),
+                )
+            )
+            continue
+
+        refreshed_items.append(
+            StaleIngestRefresh(
+                requested_source_id=refresh.requested.source_id,
+                refreshed_source_id=refresh.refreshed.record.source_id,
+                source_ref=canonical_source_ref(refresh.refreshed.record),
+                changed=refresh.changed,
+                queued=refresh.queued,
+                queue_path=refresh.queue_path,
+                status="queued" if refresh.queued else "skipped",
+                message=refresh.message,
+            )
+        )
+
+        if refresh.queue_path is None:
+            skipped += 1
+            ingest_items.append(
+                StaleIngestRun(
+                    source_id=refresh.refreshed.record.source_id,
+                    outcome="skipped",
+                    message=refresh.message,
+                )
+            )
+            continue
+
+        try:
+            ingest_result = run_ingest_job(root, refresh.queue_path)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            processed += 1
+            failed += 1
+            ingest_items.append(
+                StaleIngestRun(
+                    source_id=refresh.refreshed.record.source_id,
+                    queue_path=refresh.queue_path,
+                    outcome="failed",
+                    message=str(exc),
+                )
+            )
+            continue
+
+        if ingest_result.no_op:
+            skipped += 1
+            ingest_items.append(
+                StaleIngestRun(
+                    source_id=ingest_result.source_id,
+                    queue_path=refresh.queue_path,
+                    outcome="skipped",
+                    message="already ingested for the current pipeline version",
+                )
+            )
+            continue
+
+        processed += 1
+        succeeded += 1
+        ingest_items.append(
+            StaleIngestRun(
+                source_id=ingest_result.source_id,
+                queue_path=refresh.queue_path,
+                outcome="succeeded",
+                message=f"run {ingest_result.run_id}",
+                run_id=ingest_result.run_id,
+                page_path=ingest_result.page_path,
+            )
+        )
+
+    final_freshness = scan_source_freshness(root) if changed_items else initial_freshness
+    if failed:
+        status = "failed"
+    elif missing_items and (processed or succeeded or skipped):
+        status = "partial"
+    elif missing_items:
+        status = "blocked"
+    elif not changed_items:
+        status = "no-op"
+    else:
+        status = "succeeded"
+
+    return StaleIngestResult(
+        status=status,
+        initial_freshness=initial_freshness,
+        final_freshness=final_freshness,
+        missing=missing_items,
+        refreshed=refreshed_items,
+        ingest=ingest_items,
+        processed=processed,
+        succeeded=succeeded,
+        failed=failed,
+        skipped=skipped,
+    )
+
+
 def _select_refresh_candidate(
     source_query: str, candidates: list[SourceLookupResult]
 ) -> SourceLookupResult:
@@ -392,6 +549,21 @@ def render_source_freshness_json(root: Path, result: SourceFreshnessResult) -> s
             "historical": result.historical,
             "report_path": result.report_path,
             "sources": [_freshness_payload(root, item) for item in result.sources],
+        },
+        indent=2,
+    )
+
+
+def render_stale_ingest_json(root: Path, result: StaleIngestResult) -> str:
+    return json.dumps(
+        {
+            "status": result.status,
+            "initial_freshness": _freshness_counts(result.initial_freshness),
+            "final_freshness": _freshness_counts(result.final_freshness),
+            "missing": [_freshness_payload(root, item) for item in result.missing],
+            "refreshed": [_stale_ingest_refresh_payload(root, item) for item in result.refreshed],
+            "ingest": [_stale_ingest_run_payload(root, item) for item in result.ingest],
+            "summary": _stale_ingest_summary(result),
         },
         indent=2,
     )
@@ -595,6 +767,56 @@ def _freshness_payload(root: Path, item: SourceFreshnessItem) -> dict[str, objec
         "manifest_path": item.manifest_path.relative_to(root).as_posix(),
         "message": item.message,
         "next_commands": item.next_commands,
+    }
+
+
+def _freshness_counts(result: SourceFreshnessResult) -> dict[str, int]:
+    return {
+        "total": result.total,
+        "unchanged": result.unchanged,
+        "changed": result.changed,
+        "missing": result.missing,
+        "unsupported": result.unsupported,
+        "historical": result.historical,
+    }
+
+
+def _stale_ingest_summary(result: StaleIngestResult) -> dict[str, int]:
+    return {
+        "processed": result.processed,
+        "succeeded": result.succeeded,
+        "failed": result.failed,
+        "skipped": result.skipped,
+    }
+
+
+def _stale_ingest_refresh_payload(root: Path, item: StaleIngestRefresh) -> dict[str, object]:
+    return {
+        "requested_source_id": item.requested_source_id,
+        "refreshed_source_id": item.refreshed_source_id,
+        "source_ref": item.source_ref,
+        "changed": item.changed,
+        "queued": item.queued,
+        "queue_path": None
+        if item.queue_path is None
+        else item.queue_path.relative_to(root).as_posix(),
+        "status": item.status,
+        "message": item.message,
+    }
+
+
+def _stale_ingest_run_payload(root: Path, item: StaleIngestRun) -> dict[str, object]:
+    return {
+        "source_id": item.source_id,
+        "queue_path": None
+        if item.queue_path is None
+        else item.queue_path.relative_to(root).as_posix(),
+        "outcome": item.outcome,
+        "message": item.message,
+        "run_id": item.run_id,
+        "page_path": None
+        if item.page_path is None
+        else item.page_path.relative_to(root).as_posix(),
     }
 
 

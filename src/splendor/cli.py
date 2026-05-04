@@ -62,12 +62,14 @@ from splendor.commands.repo_scan import (
 )
 from splendor.commands.source import (
     SourceLookupResult,
+    ingest_changed_sources,
     list_sources,
     lookup_sources,
     refresh_source,
     render_source_freshness_json,
     render_source_lookup_json,
     render_source_refresh_json,
+    render_stale_ingest_json,
     resolve_source_query_exact,
     scan_source_freshness,
     write_source_freshness_report,
@@ -260,6 +262,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--pending",
         action="store_true",
         help="Drain pending ingestion jobs from the queue.",
+    )
+    ingest_parser.add_argument(
+        "--changed",
+        action="store_true",
+        help="Refresh and ingest checksum-drifted curated workspace-backed sources.",
+    )
+    ingest_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output for --changed.",
     )
     ingest_parser.set_defaults(handler=handle_ingest)
 
@@ -1044,6 +1057,9 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
 
 def handle_ingest(args: argparse.Namespace) -> int:
     root = args.root.resolve()
+    if args.changed:
+        return _handle_ingest_changed(args)
+
     if args.pending:
         try:
             result = drain_pending_ingest_jobs(root)
@@ -1096,6 +1112,73 @@ def handle_ingest(args: argparse.Namespace) -> int:
         "commit explicit reports only when they support the reviewed workspace update."
     )
     return 0
+
+
+def _handle_ingest_changed(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = ingest_changed_sources(root)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_stale_ingest_json(root, result))
+    elif result.status == "no-op":
+        print("No changed curated workspace-backed sources found.")
+        print(_format_source_freshness_counts("Freshness", result.initial_freshness))
+    else:
+        if result.status == "blocked":
+            print("Stale ingest blocked")
+        elif result.status == "partial":
+            print("Stale ingest completed with unresolved sources")
+        else:
+            print("Stale ingest")
+        print(_format_source_freshness_counts("Initial freshness", result.initial_freshness))
+        if result.missing:
+            print("Missing curated sources:")
+            for item in result.missing:
+                print(f"- {item.canonical_path}: {item.message}")
+            print("Next: repair missing source paths or run splendor source freshness")
+        for refreshed in result.refreshed:
+            if refreshed.status == "failed":
+                print(f"- {refreshed.source_ref}: refresh failed ({refreshed.message})")
+                continue
+            print(
+                f"- {refreshed.source_ref}: refreshed "
+                f"{refreshed.requested_source_id} -> {refreshed.refreshed_source_id}"
+            )
+        for item in result.ingest:
+            print(f"{item.source_id}: {item.outcome} ({item.message})")
+        print(
+            "Stale ingest summary: "
+            f"processed={result.processed} "
+            f"succeeded={result.succeeded} "
+            f"failed={result.failed} "
+            f"skipped={result.skipped}"
+        )
+        print(_format_source_freshness_counts("Final freshness", result.final_freshness))
+        if result.succeeded == 1:
+            source_id = next(
+                item.source_id for item in result.ingest if item.outcome == "succeeded"
+            )
+            print(f"Next: splendor wiki suggest {source_id}")
+        elif result.succeeded > 1:
+            print("Next: splendor wiki status")
+        elif result.failed:
+            print("Next: splendor queue inspect")
+    return 1 if result.status in {"blocked", "failed", "partial"} else 0
+
+
+def _format_source_freshness_counts(label: str, result) -> str:
+    return (
+        f"{label}: "
+        f"total={result.total} "
+        f"unchanged={result.unchanged} "
+        f"changed={result.changed} "
+        f"missing={result.missing} "
+        f"unsupported={result.unsupported} "
+        f"historical={result.historical}"
+    )
 
 
 def handle_queue_inspect(args: argparse.Namespace) -> int:
@@ -2196,8 +2279,12 @@ def handle_question_create(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "ingest" and bool(args.source_id) == bool(args.pending):
-        parser.error("ingest requires exactly one of <source_id> or --pending")
+    if args.command == "ingest":
+        mode_count = sum(bool(value) for value in [args.source_id, args.pending, args.changed])
+        if mode_count != 1:
+            parser.error("ingest requires exactly one of <source_id>, --pending, or --changed")
+        if args.json_output and not args.changed:
+            parser.error("ingest --json is currently supported only with --changed")
     return args.handler(args)
 
 

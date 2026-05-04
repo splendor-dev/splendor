@@ -800,6 +800,12 @@ Current implementation:
   active content-addressed source version, while leaving prose and code-fence mentions untouched.
   It does not discover or register uncurated files or run mutating synthesis compile/update
   workflows.
+- `splendor ingest --changed` is the focused stale-ingest repair command for checksum-drifted
+  curated workspace-backed sources. It composes the freshness scan, supersession-aware source
+  refresh, and targeted queue worker path so a changed source can be re-ingested even when its
+  previous queue record is already `done`. It does not drain unrelated pending jobs, reports no-op
+  unchanged workspaces cleanly, and reports missing-source diagnostics while continuing to process
+  valid changed sources.
 - `splendor pr-summary --since main` is a read-only PR handoff command. It uses local git
   diff/status from the merge base with the base ref, respects configured layout paths, and uses
   existing report files to group curated source lifecycle changes, generated source-summary pages,
@@ -882,8 +888,9 @@ Release-readiness boundary:
   with workspace-backed `source:<path>` aliases plus `supersedes`/`superseded_by` source-version
   links. The safe workspace refresh path over curated workspace-backed sources has also landed,
   including explicit superseded source-summary pruning and maintained-page source-ref migration.
-  The `pr-summary` surface now provides a read-only local PR handoff over that generated-state
-  churn.
+  The `ingest --changed` repair path handles checksum-drifted curated workspace sources whose
+  previous queue records are already done, and the `pr-summary` surface provides a read-only local
+  PR handoff over that generated-state churn.
 - issue #79 tracks the reviewed mutating compile/update workflow from #41; v1 shipped briefing and
   the non-mutating compile contract, and `M15-P1.1` begins the explicit one-page proposal/apply
   path.
