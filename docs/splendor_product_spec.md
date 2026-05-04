@@ -747,9 +747,13 @@ contract is trustworthy.
 
 Current `splendor wiki compile <source-id>` support remains intentionally non-mutating when no
 target page is provided. It validates the source record and prints the review-gated contract:
-inspect the source summary, run source-impact suggestions, propose synthesis-page edits with
+inspect the source summary, review ranked maintained-page suggestions, run the ready-to-run
+`wiki compile <source-id> --page <page>` preview commands, propose synthesis-page edits with
 provenance/run state, keep generated source-summary pages separate from maintained synthesis pages,
-and require human review before wiki synthesis is changed.
+and require human review before wiki synthesis is changed. `wiki suggest` exposes the same preview
+commands in human and JSON output so agent handoffs do not have to stitch together command strings
+manually. JSON output also carries structured `compile_preview_args` argv tokens alongside the
+rendered `compile_preview_command`.
 
 The first mutating slice is deliberately narrow. `splendor wiki compile <source-id|title|path>
 --page <maintained-page>` proposes a deterministic one-page update from the generated
@@ -843,11 +847,14 @@ Current implementation:
   synthesis-follow-up counts, with optional JSON output.
 - `splendor wiki suggest <source-id|title|path>` deterministically ranks existing synthesis pages using source
   metadata, source-summary text, frontmatter source refs, tags, source refs, and page content, with
-  optional JSON output.
+  optional JSON output. Human and JSON output include the matching
+  `splendor wiki compile <source-id> --page <page>` preview command for each suggestion, and JSON
+  suggestions include structured `compile_preview_args` for agent handoff.
 - `splendor wiki compile <source-id|title|path>` exposes the review-gated compile-loop contract
-  when no target page is supplied. With `--page <maintained-page>`, it proposes a deterministic
-  source-summary evidence update and unified diff for one maintained synthesis page, and
-  `--apply --proposal-hash <hash>` explicitly accepts and writes that page after frontmatter and
+  when no target page is supplied, including ranked maintained-page suggestions and ready-to-run
+  preview commands. With `--page <maintained-page>`, it proposes a deterministic source-summary
+  evidence update and unified diff for one maintained synthesis page, and `--apply
+  --proposal-hash <hash>` explicitly accepts and writes that page after frontmatter and
   proposal-hash validation.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
