@@ -1450,6 +1450,7 @@ def handle_wiki_suggest(args: argparse.Namespace) -> int:
     for suggestion in result.suggestions:
         reasons = ", ".join(suggestion.reasons)
         print(f"- {suggestion.path} [{suggestion.kind}] score={suggestion.score} reasons={reasons}")
+        print(f"  Compile preview: {suggestion.compile_preview_command}")
     return 0
 
 
@@ -1518,6 +1519,17 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
     print("Mutates wiki: no")
     for item in result.contract:
         print(f"- {item}")
+    if result.suggested_pages:
+        print("Suggested compile targets:")
+        for suggestion in result.suggested_pages:
+            reasons = ", ".join(suggestion.reasons)
+            print(
+                f"- {suggestion.path} [{suggestion.kind}] score={suggestion.score} "
+                f"reasons={reasons}"
+            )
+            print(f"  Compile preview: {suggestion.compile_preview_command}")
+    else:
+        print("Suggested compile targets: none")
     print("Next steps:")
     for item in result.next_steps:
         print(f"- {item}")

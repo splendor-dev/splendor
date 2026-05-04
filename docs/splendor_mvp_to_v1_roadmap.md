@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P1.8`
-- Current planned slice: `Source identity design review`
-- Current PR sub-slice: `M14-P1.9`
+- Previous completed PR sub-slice: `M14-P1.9`
+- Current planned slice: `Compile/update expansion after first reviewed page apply`
+- Current PR sub-slice: `M15-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely M15 compile/update expansion`
-- Next planned PR sub-slice: `likely M15-P1.2`
+- Next planned slice: `likely ingest run-duration precision or post-M15 issue triage`
+- Next planned PR sub-slice: `likely TBD, possibly issue #47`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1036,6 +1036,18 @@ match the current target/source-summary inputs.
 The first slice intentionally does not choose multiple pages automatically, call an LLM, create a
 web UI, register new sources, refresh broad workspace state, or address #47 ingest timing, #37 web
 document-list scaling, or #30 repo-scan registration performance.
+
+### M15-P1.2 compile-target discovery expansion
+
+`M15-P1.2` connects the first reviewed compile/apply loop to existing source-impact suggestions.
+Bare `splendor wiki compile <source-id|title|path>` remains non-mutating, but now includes ranked
+maintained synthesis-page suggestions and ready-to-run
+`splendor wiki compile <source-id> --page <page>` preview commands. `splendor wiki suggest
+<source-id|title|path>` emits the same compile-preview commands for human and JSON agent handoff.
+JSON suggestions include structured `compile_preview_args` alongside the rendered command string
+so agents can execute the preview command without shell parsing. This slice does not add automatic
+multi-page apply, LLM synthesis, web mutation, source registration changes, broad workspace
+refresh, or performance/scaling work from #47, #37, or #30.
 
 ### Boundaries
 - Promote these candidates to committed roadmap slices only after the child issues and GitHub

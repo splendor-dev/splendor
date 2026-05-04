@@ -240,12 +240,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P1.8`
-- Current planned slice: `Source identity design review`
-- Current PR sub-slice: `M14-P1.9`
+- Previous completed PR sub-slice: `M14-P1.9`
+- Current planned slice: `Compile/update expansion after first reviewed page apply`
+- Current PR sub-slice: `M15-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely M15 compile/update expansion`
-- Next planned PR sub-slice: `likely M15-P1.2`
+- Next planned slice: `likely ingest run-duration precision or post-M15 issue triage`
+- Next planned PR sub-slice: `likely TBD, possibly issue #47`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -421,6 +421,14 @@ that maintained page when the current target and source-summary inputs still mat
 proposal. Applied output updates schema-bound frontmatter source refs/provenance links, writes a
 managed `Compiled Source Evidence` section, and refuses generated source-summary pages as compile
 targets.
+
+`M15-P1.2` makes the reviewed loop easier to run end to end without broadening mutation. Bare
+`splendor wiki compile <source-id|title|path>` now includes ranked maintained-page suggestions and
+ready-to-run `splendor wiki compile <source-id> --page <page>` preview commands. `splendor wiki
+suggest <source-id|title|path>` exposes the same compile-preview commands in text and JSON output.
+JSON output also includes structured `compile_preview_args` argv tokens so agents do not have to
+parse shell text. Actual writes still require the explicit one-page `--apply --proposal-hash
+<hash>` gate.
 
 ### v1 readiness checklist
 

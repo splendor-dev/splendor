@@ -58,7 +58,8 @@ For this handoff:
   `M14-P1.1` through `M14-P1.9`; future work should be a specific non-workspace extension or
   regression, not a broad canonical source-ID redesign
 - #79 now owns the M15 reviewed compile/update sequence; `M15-P1.1` starts with explicit
-  one-page diff/proposal-hash/apply semantics rather than broad automatic synthesis updates
+  one-page diff/proposal-hash/apply semantics and `M15-P1.2` connects bare compile output to
+  ranked page suggestions without broad automatic synthesis updates
 
 ## Known Non-Blockers
 
@@ -97,8 +98,10 @@ The conservative next queue after the `M14-P3.1` gate is:
    canonical `src-...` IDs immutable as version/provenance records while logical IDs, supersession,
    freshness, path repair, and topic-ref migration cover ordinary curated workspace edits and
    moves.
-9. Continue #79 through `M15-P1.2` after #94 is closed or narrowed.
-10. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
+9. Continue #79 after `M15-P1.2` only through deliberately narrowed follow-ups, because compile
+   target discovery and one-page reviewed apply are now represented.
+10. Keep #47 as the likely next focused post-M15 follow-up for ingest run-duration precision.
+11. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
 The internal source-lifecycle re-evaluation gate is now complete in `M14-P3.1`. The completed retry
@@ -121,7 +124,9 @@ The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. After `
 work starts from #79 unless #86 review identifies a narrower follow-up or a new real-agent run
 reopens a source-lifecycle regression. The first #79 slice is `M15-P1.1`: keep bare compile
 non-mutating, require `--page` for a deterministic diff-backed proposal, and require
-`--apply --proposal-hash <hash>` for the explicit reviewed write.
+`--apply --proposal-hash <hash>` for the explicit reviewed write. `M15-P1.2` follows by adding
+ranked compile-target discovery, ready-to-run preview commands, and structured preview argv tokens
+to bare compile and `wiki suggest`, while preserving the one-page apply gate.
 
 ## Tagging Readiness
 

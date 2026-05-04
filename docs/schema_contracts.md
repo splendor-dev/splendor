@@ -239,15 +239,20 @@ Implemented fields:
   initial and final freshness counts, missing-source diagnostics, refreshed source IDs, targeted
   queue outcomes, and summary counts.
 - `splendor wiki compile <source-id|title|path>` remains non-mutating unless a maintained target
-  page is selected and `--apply --proposal-hash <hash>` is supplied. `--page <maintained-page>`
-  proposes a deterministic update from the generated source-summary page into one maintained
-  topic, concept, entity, architecture, or glossary page. Proposed output includes a unified diff,
-  target/source-summary SHA-256 hashes, and a proposal hash derived from those inputs plus the
-  proposed page hash. Proposed and applied updates add the source ID to frontmatter `source_refs`,
-  add provenance links with `supports` and `generated-from` roles, append a managed
-  `Compiled Source Evidence` section to the markdown body, and validate the resulting
-  `KnowledgePageFrontmatter` before reporting or writing. Generated source-summary pages are not
-  valid compile targets.
+  page is selected and `--apply --proposal-hash <hash>` is supplied. Without `--page`, it reports
+  the review-gated contract plus ranked maintained-page suggestions and ready-to-run
+  `splendor wiki compile <source-id> --page <page>` preview commands. JSON suggestions include
+  both the rendered `compile_preview_command` string for human handoff and `compile_preview_args`
+  argv tokens for tools that should not parse shell text. `splendor wiki suggest
+  <source-id|title|path>` emits the same preview command and args in human and JSON output.
+  `--page <maintained-page>` proposes a deterministic update from the generated source-summary
+  page into one maintained topic, concept, entity, architecture, or glossary page. Proposed output
+  includes a unified diff, target/source-summary SHA-256 hashes, and a proposal hash derived from
+  those inputs plus the proposed page hash. Proposed and applied updates add the source ID to
+  frontmatter `source_refs`, add provenance links with `supports` and `generated-from` roles,
+  append a managed `Compiled Source Evidence` section to the markdown body, and validate the
+  resulting `KnowledgePageFrontmatter` before reporting or writing. Generated source-summary pages
+  are not valid compile targets.
 - `splendor pr-summary --since main` is a read-only PR handoff view over local git diff/status and
   existing report files. It diffs from the merge base between `HEAD` and the base ref, respects
   configured workspace layout directories, and groups curated source manifests, generated

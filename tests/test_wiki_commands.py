@@ -436,6 +436,18 @@ def test_wiki_suggest_ranks_source_impact_pages(tmp_path: Path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["source_id"] == added.source_id
     assert payload["suggestions"][0]["path"] == "wiki/topics/wiki-maintenance.md"
+    assert (
+        payload["suggestions"][0]["compile_preview_command"]
+        == f"splendor wiki compile {added.source_id} --page wiki/topics/wiki-maintenance.md"
+    )
+    assert payload["suggestions"][0]["compile_preview_args"] == [
+        "splendor",
+        "wiki",
+        "compile",
+        added.source_id,
+        "--page",
+        "wiki/topics/wiki-maintenance.md",
+    ]
     assert "frontmatter-source-ref" in payload["suggestions"][0]["reasons"]
     assert all(
         suggestion["path"] != "wiki/architecture/unrelated.md"
@@ -470,6 +482,10 @@ def test_wiki_suggest_text_output_reports_top_suggestion(tmp_path: Path, capsys)
     assert f"Source ID: {added.source_id}" in out
     assert "Suggested pages:" in out
     assert "wiki/topics/wiki-maintenance.md" in out
+    assert (
+        f"Compile preview: splendor wiki compile {added.source_id} "
+        "--page wiki/topics/wiki-maintenance.md"
+    ) in out
 
 
 def test_wiki_suggest_path_includes_all_versions_for_that_path(tmp_path: Path, capsys) -> None:
@@ -634,7 +650,12 @@ def test_wiki_compile_reports_review_gated_contract_without_mutating(
     assert payload["source_id"] == added.source_id
     assert payload["mutates"] is False
     assert payload["status"] == "contract-only"
+    assert payload["suggested_pages"] == []
     assert "Run `splendor wiki suggest" in payload["next_steps"][0]
+    assert (
+        "Create or choose one maintained topic, concept, entity, architecture, or glossary page"
+        in payload["next_steps"][1]
+    )
     assert page_path.read_text(encoding="utf-8") == before
 
 
@@ -658,9 +679,67 @@ def test_wiki_compile_text_reports_review_gated_contract_without_mutating(
     assert f"Source ID: {added.source_id}" in out
     assert "Compile contract" in out
     assert "Mutates wiki: no" in out
+    assert "Suggested compile targets: none" in out
     assert "Next steps:" in out
     assert "Run `splendor wiki suggest" in out
+    assert "Create or choose one maintained topic" in out
     assert page_path.read_text(encoding="utf-8") == before
+
+
+def test_wiki_compile_contract_includes_suggested_page_preview_commands(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-contract.md"
+    source.write_text(
+        "# Compile contract\n\nSynthesis remains review-gated for wiki maintenance.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "compile contract.md",
+        kind="topic",
+        title="Compile contract",
+        page_id="topic-compile-contract",
+        source_refs=[added.source_id],
+        body="Maintained compile contract synthesis.",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "compile", added.source_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mutates"] is False
+    assert payload["suggested_pages"][0]["path"] == "wiki/topics/compile contract.md"
+    assert (
+        payload["suggested_pages"][0]["compile_preview_command"]
+        == f"splendor wiki compile {added.source_id} --page 'wiki/topics/compile contract.md'"
+    )
+    assert payload["suggested_pages"][0]["compile_preview_args"] == [
+        "splendor",
+        "wiki",
+        "compile",
+        added.source_id,
+        "--page",
+        "wiki/topics/compile contract.md",
+    ]
+    assert (
+        f"Preview `splendor wiki compile {added.source_id} "
+        "--page 'wiki/topics/compile contract.md'`."
+    ) in payload["next_steps"]
+
+    exit_code = main(["--root", str(tmp_path), "wiki", "compile", added.source_id])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Suggested compile targets:" in out
+    assert "wiki/topics/compile contract.md [topic]" in out
+    assert (
+        f"Compile preview: splendor wiki compile {added.source_id} "
+        "--page 'wiki/topics/compile contract.md'"
+    ) in out
 
 
 def test_wiki_compile_reports_unknown_source(tmp_path: Path, capsys) -> None:

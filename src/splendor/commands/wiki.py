@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import posixpath
 import re
+import shlex
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from difflib import unified_diff
@@ -118,6 +119,8 @@ class WikiSuggestion:
     kind: str
     score: int
     reasons: list[str] = field(default_factory=list)
+    compile_preview_args: list[str] = field(default_factory=list)
+    compile_preview_command: str = ""
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,7 @@ class WikiCompileContract:
     mutates: bool
     status: str
     contract: list[str]
+    suggested_pages: list[WikiSuggestion]
     next_steps: list[str]
 
 
@@ -635,6 +639,8 @@ def _score_page(
         kind=page.frontmatter.kind,
         score=score,
         reasons=reasons,
+        compile_preview_args=[],
+        compile_preview_command="",
     )
 
 
@@ -661,6 +667,8 @@ def _score_page_for_sources(
         kind=best.kind,
         score=max(suggestion.score for suggestion in scored),
         reasons=reasons,
+        compile_preview_args=[],
+        compile_preview_command="",
     )
 
 
@@ -685,6 +693,19 @@ def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
         if suggestion is not None
     ]
     suggestions.sort(key=lambda suggestion: (-suggestion.score, suggestion.path))
+    suggestions = [
+        WikiSuggestion(
+            path=suggestion.path,
+            page_id=suggestion.page_id,
+            title=suggestion.title,
+            kind=suggestion.kind,
+            score=suggestion.score,
+            reasons=suggestion.reasons,
+            compile_preview_args=_compile_preview_args(source.source_id, suggestion.path),
+            compile_preview_command=_compile_preview_command(source.source_id, suggestion.path),
+        )
+        for suggestion in suggestions
+    ]
     return WikiSuggestResult(
         source_id=source.source_id,
         source_ids=[matched_source.source_id for matched_source in sources],
@@ -696,28 +717,48 @@ def suggest_source_pages(root: Path, source_id: str) -> WikiSuggestResult:
 
 
 def describe_wiki_compile_contract(root: Path, source_id: str) -> WikiCompileContract:
-    source = resolve_source_query(root, source_id).source
+    suggest_result = suggest_source_pages(root, source_id)
     return WikiCompileContract(
-        source_id=source.source_id,
-        source_title=source.title,
-        source_ref=canonical_source_ref(source),
-        source_status=source.status,
+        source_id=suggest_result.source_id,
+        source_title=suggest_result.source_title,
+        source_ref=suggest_result.source_ref,
+        source_status=suggest_result.source_status,
         mutates=False,
         status="contract-only",
         contract=[
             "Validate the source record and current source-summary page.",
-            "Use `splendor wiki suggest <source-id>` to identify affected synthesis pages.",
+            "Use ranked maintained-page suggestions to choose one explicit compile target.",
             "Propose synthesis-page edits with source refs, provenance links, run state, "
             "and review state.",
             "Keep generated source-summary pages separate from maintained synthesis pages.",
             "Require human review before mutating wiki synthesis pages.",
         ],
+        suggested_pages=suggest_result.suggestions,
         next_steps=[
-            f"Run `splendor wiki suggest {source.source_id}`.",
-            "Review suggested synthesis pages and apply changes through a reviewed future "
-            "compile loop.",
+            f"Run `splendor wiki suggest {suggest_result.source_id}` to inspect ranking reasons.",
+            *[
+                f"Preview `{suggestion.compile_preview_command}`."
+                for suggestion in suggest_result.suggestions[:3]
+            ],
+            *(
+                []
+                if suggest_result.suggestions
+                else [
+                    "Create or choose one maintained topic, concept, entity, architecture, "
+                    "or glossary page, then rerun `splendor wiki compile "
+                    f"{suggest_result.source_id} --page <page>`."
+                ]
+            ),
         ],
     )
+
+
+def _compile_preview_args(source_id: str, page_path: str) -> list[str]:
+    return ["splendor", "wiki", "compile", source_id, "--page", page_path]
+
+
+def _compile_preview_command(source_id: str, page_path: str) -> str:
+    return shlex.join(_compile_preview_args(source_id, page_path))
 
 
 def compile_source_into_page(
