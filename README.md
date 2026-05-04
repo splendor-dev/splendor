@@ -116,7 +116,7 @@ Implemented today:
   `splendor source refresh <source-id|title|path>`
 - `splendor workspace refresh --changed` with optional `--ingest`, `--rebuild-index`,
   `--prune-superseded`, and `--update-topic-refs`
-- `splendor ingest <source-id>` and `splendor ingest --pending`
+- `splendor ingest <source-id>`, `splendor ingest --pending`, and `splendor ingest --changed`
 - `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
 - `splendor repair ingest <source-id>`
 - `splendor materialize-source <source-id>`
@@ -165,6 +165,13 @@ active source version ID. Prune JSON reports skipped unsafe candidates with reas
 deleting ambiguous state. The command does not discover or register uncurated files or mutate
 maintained synthesis content beyond that explicit source-ref migration.
 
+`splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
+workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
+source versions through the same supersession-aware source lifecycle, ingests only those refreshed
+queue jobs, reports a clean no-op when no curated source bytes changed, and blocks with diagnostics
+when active curated sources are missing. `--json` emits initial/final freshness counts, refreshed
+source IDs, targeted ingest outcomes, and the summary.
+
 `splendor pr-summary --since main` is a read-only PR handoff command over local git state. It uses
 the merge base between `HEAD` and the base ref for PR-style diff semantics, then summarizes curated
 source manifests added, refreshed, superseded, or invalid; generated source-summary pages added,
@@ -209,12 +216,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M14-P4.1`
-- Current planned slice: `Post-v1 mutating compile/update workflow`
-- Current PR sub-slice: `M15-P1.1`
+- Previous completed PR sub-slice: `M15-P1.1`
+- Current planned slice: `Post-v1 source lifecycle repair: stale-source ingestion`
+- Current PR sub-slice: `M14-P1.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Compile/update expansion after first reviewed page apply`
-- Next planned PR sub-slice: `M15-P1.2`
+- Next planned slice: `Repo refresh missing/broken source tolerance`
+- Next planned PR sub-slice: `M14-P1.6`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -329,6 +336,12 @@ only the refreshed sources' ingest jobs, and rebuilds the wiki index.
 exists, and `--update-topic-refs` migrates maintained wiki source references to the active
 content-addressed source version while schema version `1` continues to validate `source_refs`
 against source manifests. Historical manifests and run records remain valid.
+
+`M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
+`splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes
+them into current canonical source versions, and ingests only those refreshed queue jobs even when
+the previous queue item was already `done`. Missing curated sources are reported before mutation so
+operators can repair paths separately.
 
 `M14-P2.1` adds the read-only PR handoff surface:
 `splendor pr-summary --since main` groups merge-base changes into curated source lifecycle records,

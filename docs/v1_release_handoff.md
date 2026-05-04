@@ -64,6 +64,8 @@ These items are intentionally not v1 release blockers:
 - richer post-M14 authority lifecycle policy after the initial planning-doc authority briefs have
   been exercised in real repositories
 - ingest run-duration precision for #47
+- repo refresh tolerance for missing or broken curated sources after the narrower #93 stale-ingest
+  repair
 - repo-scan bulk registration optimization for #30
 - web document-list scaling for #37
 
@@ -77,9 +79,13 @@ The conservative next queue after the `M14-P3.1` gate is:
    task-oriented authority brief ranking.
 3. Keep using `splendor pr-summary --since main` during review handoff to explain source
    lifecycle, maintained wiki, source-summary, and mechanical generated-state changes.
-4. Continue #79 through `M15-P1.1`, the first reviewed compile/apply loop from source-summary
-   evidence into a single maintained synthesis page.
-5. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
+4. Use `M14-P1.5` for issue #93 before continuing post-MVP expansion: add an explicit
+   `splendor ingest --changed` path for checksum-drifted curated sources whose old queue items are
+   already done.
+5. Use `M14-P1.6` for issue #90 after #93: repo/workspace refresh should skip missing or broken
+   curated sources with diagnostics while continuing valid refresh work.
+6. Continue #79 through `M15-P1.2` after the open Milestone 14 P1 repair issues are handled.
+7. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
    either one urgent.
 
 The internal source-lifecycle re-evaluation gate is now complete in `M14-P3.1`. The completed retry

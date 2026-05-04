@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M14-P4.1`
-- Current planned slice: `Post-v1 mutating compile/update workflow`
-- Current PR sub-slice: `M15-P1.1`
+- Previous completed PR sub-slice: `M15-P1.1`
+- Current planned slice: `Post-v1 source lifecycle repair: stale-source ingestion`
+- Current PR sub-slice: `M14-P1.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `Compile/update expansion after first reviewed page apply`
-- Next planned PR sub-slice: `M15-P1.2`
+- Next planned slice: `Repo refresh missing/broken source tolerance`
+- Next planned PR sub-slice: `M14-P1.6`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -886,6 +886,8 @@ breaking the v1 file contracts.
 - `M14-P1.2` Supersession-aware source refresh
 - `M14-P1.3` Safe workspace refresh path
 - `M14-P1.4` Superseded-state pruning and topic-ref migration
+- `M14-P1.5` Stale-source ingestion for checksum-drifted curated sources
+- `M14-P1.6` Repo refresh missing/broken source tolerance
 - `M14-P2.1` PR summary and lower-noise generated-state review handoff
 - `M14-P3.1` Source-lifecycle re-evaluation gate
 - `M14-P4.1` Planning-doc authority and task-oriented agent briefs
@@ -907,7 +909,12 @@ loop is substantially implemented and re-evaluated. The intended sequence before
    `splendor workspace refresh --changed --ingest --rebuild-index`, limited to curated
    workspace-backed source manifests.
 5. `M14-P1.4` handles superseded generated-state pruning and topic-ref migration.
-6. `M14-P2.1` adds `splendor pr-summary --since main`, a read-only PR-oriented summary with
+6. `M14-P1.5` adds explicit stale-source ingestion with `splendor ingest --changed`, so
+   checksum-drifted curated sources can be refreshed and ingested even when previous queue jobs are
+   already `done`.
+7. `M14-P1.6` should make repo/workspace refresh tolerate missing or broken curated sources by
+   skipping them with diagnostics while continuing valid refresh work.
+8. `M14-P2.1` adds `splendor pr-summary --since main`, a read-only PR-oriented summary with
    lower-noise generated-state review guidance over local git state.
 
 After those slices land, the gate should use a comparable planning or repo-maintenance workflow and
@@ -936,6 +943,12 @@ metadata for configured planning/docs files and optional maintained wiki frontma
 `brief --agent-context` and `suggest-next` to rank current authority, roadmap, historical review,
 proposal, reference, and generated-summary context for a stated goal. Generated source-summary
 artifacts remain separate from maintained authority ranking.
+
+`M14-P1.5` temporarily supersedes the documented M15 follow-up because issue #93 is an open
+Milestone 14 MVP source-lifecycle repair. It adds `splendor ingest --changed` as a narrow bridge
+from source freshness to supersession-aware source refresh and targeted ingest. The command does
+not discover uncurated files, does not drain unrelated pending jobs, and reports missing curated
+sources before mutation so path-repair work can remain separate.
 
 ## Candidate Milestone 15 — Post-v1 reviewed compile/update workflow
 

@@ -22,7 +22,12 @@ from splendor.commands.file_answer import (
     file_answer_from_last_query,
 )
 from splendor.commands.health import run_health_checks
-from splendor.commands.ingest import drain_pending_ingest_jobs, enqueue_ingest_job, ingest_source
+from splendor.commands.ingest import (
+    drain_pending_ingest_jobs,
+    enqueue_ingest_job,
+    ingest_source,
+    run_ingest_job,
+)
 from splendor.commands.init import initialize_workspace
 from splendor.commands.lint import run_lint_checks
 from splendor.commands.maintenance import execute_maintenance_command, render_report_json
@@ -260,6 +265,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--pending",
         action="store_true",
         help="Drain pending ingestion jobs from the queue.",
+    )
+    ingest_parser.add_argument(
+        "--changed",
+        action="store_true",
+        help="Refresh and ingest checksum-drifted curated workspace-backed sources.",
+    )
+    ingest_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output for --changed.",
     )
     ingest_parser.set_defaults(handler=handle_ingest)
 
@@ -1044,6 +1060,9 @@ def handle_source_freshness(args: argparse.Namespace) -> int:
 
 def handle_ingest(args: argparse.Namespace) -> int:
     root = args.root.resolve()
+    if args.changed:
+        return _handle_ingest_changed(args)
+
     if args.pending:
         try:
             result = drain_pending_ingest_jobs(root)
@@ -1096,6 +1115,229 @@ def handle_ingest(args: argparse.Namespace) -> int:
         "commit explicit reports only when they support the reviewed workspace update."
     )
     return 0
+
+
+def _handle_ingest_changed(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        freshness = scan_source_freshness(root)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    missing_items = [item for item in freshness.sources if item.status == "missing"]
+    if missing_items:
+        payload = {
+            "status": "blocked",
+            "initial_freshness": _source_freshness_counts(freshness),
+            "missing": [_freshness_item_payload(root, item) for item in missing_items],
+            "refreshed": [],
+            "ingest": [],
+            "summary": {"processed": 0, "succeeded": 0, "failed": 0, "skipped": 0},
+        }
+        if args.json_output:
+            print(json.dumps(payload, indent=2))
+        else:
+            print("Stale ingest blocked")
+            print(_format_source_freshness_counts("Freshness", freshness))
+            print("Missing curated sources:")
+            for item in missing_items:
+                print(f"- {item.canonical_path}: {item.message}")
+            print("Next: splendor source freshness")
+        return 1
+
+    changed_items = [item for item in freshness.sources if item.status == "changed"]
+    if not changed_items:
+        payload = {
+            "status": "no-op",
+            "initial_freshness": _source_freshness_counts(freshness),
+            "missing": [],
+            "refreshed": [],
+            "ingest": [],
+            "summary": {"processed": 0, "succeeded": 0, "failed": 0, "skipped": 0},
+        }
+        if args.json_output:
+            print(json.dumps(payload, indent=2))
+        else:
+            print("No changed curated workspace-backed sources found.")
+            print(_format_source_freshness_counts("Freshness", freshness))
+        return 0
+
+    refreshed_payloads: list[dict[str, object]] = []
+    ingest_payloads: list[dict[str, object]] = []
+    processed = 0
+    succeeded = 0
+    failed = 0
+    skipped = 0
+
+    for item in changed_items:
+        try:
+            refresh = refresh_source(root, item.source.source_id)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            failed += 1
+            refreshed_payloads.append(
+                {
+                    "requested_source_id": item.source.source_id,
+                    "source_ref": item.canonical_path,
+                    "status": "failed",
+                    "message": str(exc),
+                }
+            )
+            continue
+
+        refreshed_payloads.append(
+            {
+                "requested_source_id": refresh.requested.source_id,
+                "refreshed_source_id": refresh.refreshed.record.source_id,
+                "source_ref": canonical_source_ref(refresh.refreshed.record),
+                "changed": refresh.changed,
+                "queued": refresh.queued,
+                "queue_path": (
+                    None
+                    if refresh.queue_path is None
+                    else refresh.queue_path.relative_to(root).as_posix()
+                ),
+                "message": refresh.message,
+            }
+        )
+
+        if refresh.queue_path is None:
+            skipped += 1
+            ingest_payloads.append(
+                {
+                    "source_id": refresh.refreshed.record.source_id,
+                    "outcome": "skipped",
+                    "message": refresh.message,
+                }
+            )
+            continue
+
+        try:
+            ingest_result = run_ingest_job(root, refresh.queue_path)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            processed += 1
+            failed += 1
+            ingest_payloads.append(
+                {
+                    "source_id": refresh.refreshed.record.source_id,
+                    "queue_path": refresh.queue_path.relative_to(root).as_posix(),
+                    "outcome": "failed",
+                    "message": str(exc),
+                }
+            )
+            continue
+
+        if ingest_result.no_op:
+            skipped += 1
+            ingest_payloads.append(
+                {
+                    "source_id": ingest_result.source_id,
+                    "queue_path": refresh.queue_path.relative_to(root).as_posix(),
+                    "outcome": "skipped",
+                    "message": "already ingested for the current pipeline version",
+                }
+            )
+            continue
+
+        processed += 1
+        succeeded += 1
+        ingest_payloads.append(
+            {
+                "source_id": ingest_result.source_id,
+                "queue_path": refresh.queue_path.relative_to(root).as_posix(),
+                "outcome": "succeeded",
+                "message": f"run {ingest_result.run_id}",
+                "run_id": ingest_result.run_id,
+                "page_path": (
+                    None
+                    if ingest_result.page_path is None
+                    else ingest_result.page_path.relative_to(root).as_posix()
+                ),
+            }
+        )
+
+    final_freshness = scan_source_freshness(root)
+    payload = {
+        "status": "failed" if failed else "succeeded",
+        "initial_freshness": _source_freshness_counts(freshness),
+        "final_freshness": _source_freshness_counts(final_freshness),
+        "missing": [],
+        "refreshed": refreshed_payloads,
+        "ingest": ingest_payloads,
+        "summary": {
+            "processed": processed,
+            "succeeded": succeeded,
+            "failed": failed,
+            "skipped": skipped,
+        },
+    }
+    if args.json_output:
+        print(json.dumps(payload, indent=2))
+    else:
+        print("Stale ingest")
+        print(_format_source_freshness_counts("Initial freshness", freshness))
+        for refreshed in refreshed_payloads:
+            if refreshed.get("status") == "failed":
+                print(f"- {refreshed['source_ref']}: refresh failed ({refreshed['message']})")
+                continue
+            print(
+                f"- {refreshed['source_ref']}: refreshed "
+                f"{refreshed['requested_source_id']} -> {refreshed['refreshed_source_id']}"
+            )
+        for item in ingest_payloads:
+            print(f"{item['source_id']}: {item['outcome']} ({item['message']})")
+        print(
+            "Stale ingest summary: "
+            f"processed={processed} "
+            f"succeeded={succeeded} "
+            f"failed={failed} "
+            f"skipped={skipped}"
+        )
+        print(_format_source_freshness_counts("Final freshness", final_freshness))
+        if succeeded == 1:
+            source_id = next(
+                item["source_id"] for item in ingest_payloads if item["outcome"] == "succeeded"
+            )
+            print(f"Next: splendor wiki suggest {source_id}")
+        elif succeeded > 1:
+            print("Next: splendor wiki status")
+        elif failed:
+            print("Next: splendor queue inspect")
+    return 1 if failed else 0
+
+
+def _source_freshness_counts(result) -> dict[str, int]:
+    return {
+        "total": result.total,
+        "unchanged": result.unchanged,
+        "changed": result.changed,
+        "missing": result.missing,
+        "unsupported": result.unsupported,
+        "historical": result.historical,
+    }
+
+
+def _format_source_freshness_counts(label: str, result) -> str:
+    counts = _source_freshness_counts(result)
+    return (
+        f"{label}: "
+        f"total={counts['total']} "
+        f"unchanged={counts['unchanged']} "
+        f"changed={counts['changed']} "
+        f"missing={counts['missing']} "
+        f"unsupported={counts['unsupported']} "
+        f"historical={counts['historical']}"
+    )
+
+
+def _freshness_item_payload(root: Path, item) -> dict[str, object]:
+    return {
+        "source_id": item.source.source_id,
+        "source_ref": item.canonical_path,
+        "manifest_path": item.manifest_path.relative_to(root).as_posix(),
+        "status": item.status,
+        "message": item.message,
+        "next_commands": item.next_commands,
+    }
 
 
 def handle_queue_inspect(args: argparse.Namespace) -> int:
@@ -2196,8 +2438,12 @@ def handle_question_create(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "ingest" and bool(args.source_id) == bool(args.pending):
-        parser.error("ingest requires exactly one of <source_id> or --pending")
+    if args.command == "ingest":
+        mode_count = sum(bool(value) for value in [args.source_id, args.pending, args.changed])
+        if mode_count != 1:
+            parser.error("ingest requires exactly one of <source_id>, --pending, or --changed")
+        if args.json_output and not args.changed:
+            parser.error("ingest --json is currently supported only with --changed")
     return args.handler(args)
 
 

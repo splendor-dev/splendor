@@ -1848,6 +1848,114 @@ def test_cli_ingest_command_no_op(tmp_path: Path, capsys) -> None:
     assert "already ingested" in captured.out
 
 
+def test_cli_ingest_changed_refreshes_completed_queue_source(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", original_id])
+    manual_page = tmp_path / "wiki" / "topics" / "manual.md"
+    manual_page.parent.mkdir(parents=True, exist_ok=True)
+    manual_content = (
+        "---\nschema_version: '1'\nkind: topic\ntitle: Manual\npage_id: manual\n---\nKept.\n"
+    )
+    manual_page.write_text(manual_content, encoding="utf-8")
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--changed"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Stale ingest" in out
+    assert "Stale ingest summary: processed=1 succeeded=1 failed=0 skipped=0" in out
+    manifests = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    assert len(manifests) == 2
+    records = {path.stem: load_source_record(path) for path in manifests}
+    refreshed_id = next(source_id for source_id in records if source_id != original_id)
+    assert records[original_id].superseded_by == refreshed_id
+    assert records[refreshed_id].supersedes == [original_id]
+    assert load_queue_item(tmp_path / "state" / "queue" / f"ingest-{original_id}.json").status == (
+        "done"
+    )
+    assert load_queue_item(tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").status == (
+        "done"
+    )
+    assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
+    assert manual_page.read_text(encoding="utf-8") == manual_content
+
+
+def test_cli_ingest_changed_noops_for_unchanged_workspace(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", source_id])
+    before_manifests = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    before_runs = sorted((tmp_path / "state" / "runs").glob("*.json"))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--changed"])
+
+    assert exit_code == 0
+    assert "No changed curated workspace-backed sources found." in capsys.readouterr().out
+    assert sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json")) == before_manifests
+    assert sorted((tmp_path / "state" / "runs").glob("*.json")) == before_runs
+
+
+def test_cli_ingest_changed_reports_missing_sources_without_mutating(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "missing.md"
+    source.write_text("# Missing\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.unlink()
+    before_manifest = (
+        tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+    ).read_text(encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--changed"])
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "Stale ingest blocked" in out
+    assert "- missing.md: canonical workspace source file is missing" in out
+    assert not list((tmp_path / "state" / "runs").glob("*.json"))
+    assert (tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json").read_text(
+        encoding="utf-8"
+    ) == before_manifest
+
+
+def test_cli_ingest_changed_json_reports_refreshed_ingest(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "ingest", original_id])
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--changed", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "succeeded"
+    assert payload["initial_freshness"]["changed"] == 1
+    assert payload["final_freshness"]["changed"] == 0
+    assert payload["summary"] == {"processed": 1, "succeeded": 1, "failed": 0, "skipped": 0}
+    assert payload["refreshed"][0]["requested_source_id"] == original_id
+    refreshed_id = payload["refreshed"][0]["refreshed_source_id"]
+    assert payload["ingest"][0]["source_id"] == refreshed_id
+    assert payload["ingest"][0]["outcome"] == "succeeded"
+    load_source_record(tmp_path / "state" / "manifests" / "sources" / f"{refreshed_id}.json")
+
+
 def test_cli_ingest_command_reports_missing_source(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
 
@@ -1864,6 +1972,12 @@ def test_cli_ingest_requires_exactly_one_target_mode() -> None:
 
     with pytest.raises(SystemExit):
         main(["ingest", "src-123", "--pending"])
+
+    with pytest.raises(SystemExit):
+        main(["ingest", "src-123", "--changed"])
+
+    with pytest.raises(SystemExit):
+        main(["ingest", "--pending", "--json"])
 
 
 def test_cli_ingest_pending_reports_no_jobs(tmp_path: Path, capsys) -> None:
