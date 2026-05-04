@@ -963,10 +963,12 @@ maintenance loop without weakening the generated-versus-maintained page boundary
 surface and adds a narrow reviewed implementation behind explicit page selection. Operators run
 `splendor wiki compile <source-id|title|path> --page <maintained-page>` to preview a deterministic
 update from the generated source-summary page into one maintained topic, concept, entity,
-architecture, or glossary page. The command appends a bounded source-evidence block, adds the
-source ID to `source_refs`, records provenance links to the source and source-summary page, and
-validates schema-version-1 frontmatter before reporting the proposal. It writes only when the
-operator repeats the command with `--apply`.
+architecture, or glossary page. The preview reports a unified diff, target/source-summary SHA-256
+hashes, and a proposal hash. The command appends a managed `Compiled Source Evidence` section,
+adds the source ID to `source_refs`, records provenance links to the source and source-summary
+page, and validates schema-version-1 frontmatter before reporting the proposal. It writes only
+when the operator repeats the command with `--apply --proposal-hash <hash>`, and that hash must
+match the current target/source-summary inputs.
 
 The first slice intentionally does not choose multiple pages automatically, call an LLM, create a
 web UI, register new sources, refresh broad workspace state, or address #47 ingest timing, #37 web

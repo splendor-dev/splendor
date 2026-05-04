@@ -240,7 +240,17 @@ def test_cli_wiki_compile_parser_accepts_reviewed_apply_page() -> None:
     parser = build_parser()
 
     args = parser.parse_args(
-        ["wiki", "compile", "src-example", "--page", "wiki/topics/example.md", "--apply", "--json"]
+        [
+            "wiki",
+            "compile",
+            "src-example",
+            "--page",
+            "wiki/topics/example.md",
+            "--apply",
+            "--proposal-hash",
+            "abc123",
+            "--json",
+        ]
     )
 
     assert args.command == "wiki"
@@ -248,6 +258,7 @@ def test_cli_wiki_compile_parser_accepts_reviewed_apply_page() -> None:
     assert args.source_id == "src-example"
     assert args.page == "wiki/topics/example.md"
     assert args.apply is True
+    assert args.proposal_hash == "abc123"
     assert args.json_output is True
 
 

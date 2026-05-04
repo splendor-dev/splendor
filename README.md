@@ -130,8 +130,8 @@ Implemented today:
 - `splendor wiki status`
 - `splendor wiki suggest <source-id>`
 - `splendor wiki compile <source-id>` as a non-mutating review-gated contract description, plus
-  `splendor wiki compile <source-id> --page <page> --apply` for explicit reviewed synthesis-page
-  updates
+  `splendor wiki compile <source-id> --page <page>` for diff-backed proposals and
+  `--apply --proposal-hash <hash>` for explicit reviewed synthesis-page updates
 - `splendor wiki rebuild-index`
 - `splendor brief [goal]` and `splendor brief --agent-context [goal]`
 - config-backed authority briefs for maintained planning/docs context through
@@ -354,9 +354,12 @@ artifacts separate from maintained authority.
 `splendor wiki compile <source-id|title|path>` remains non-mutating and prints the review contract.
 Adding `--page <maintained-page>` produces a deterministic proposed update from the generated
 source-summary page into a single maintained topic/concept/entity/architecture/glossary page.
-Adding `--apply` is the explicit operator acceptance step that writes only that maintained page,
-updates schema-bound frontmatter source refs/provenance links, and refuses generated
-source-summary pages as compile targets.
+The proposal includes a unified diff, target/source-summary SHA-256 hashes, and a proposal hash.
+Adding `--apply --proposal-hash <hash>` is the explicit operator acceptance step that writes only
+that maintained page when the current target and source-summary inputs still match the reviewed
+proposal. Applied output updates schema-bound frontmatter source refs/provenance links, writes a
+managed `Compiled Source Evidence` section, and refuses generated source-summary pages as compile
+targets.
 
 ### v1 readiness checklist
 

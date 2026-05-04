@@ -55,7 +55,7 @@ For this handoff:
 - #86 tracks the planning-document authority and task-oriented agent brief gap addressed by
   `M14-P4.1`
 - #79 now owns the M15 reviewed compile/update sequence; `M15-P1.1` starts with explicit
-  one-page proposal/apply semantics rather than broad automatic synthesis updates
+  one-page diff/proposal-hash/apply semantics rather than broad automatic synthesis updates
 
 ## Known Non-Blockers
 
@@ -101,8 +101,8 @@ bundle is:
 The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. After `M14-P4.1`, future
 work starts from #79 unless #86 review identifies a narrower follow-up or a new real-agent run
 reopens a source-lifecycle regression. The first #79 slice is `M15-P1.1`: keep bare compile
-non-mutating, require `--page` for a deterministic proposal, and require `--apply` for the
-explicit reviewed write.
+non-mutating, require `--page` for a deterministic diff-backed proposal, and require
+`--apply --proposal-hash <hash>` for the explicit reviewed write.
 
 ## Tagging Readiness
 

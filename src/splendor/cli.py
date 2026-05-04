@@ -346,6 +346,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apply the proposed page update after explicit operator review.",
     )
     wiki_compile_parser.add_argument(
+        "--proposal-hash",
+        help="Proposal hash from a reviewed `wiki compile --page` preview. Required with --apply.",
+    )
+    wiki_compile_parser.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
@@ -1312,6 +1316,12 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     if args.apply and not args.page:
         return _print_error(ValueError("wiki compile --apply requires --page"))
+    if args.apply and not args.proposal_hash:
+        return _print_error(ValueError("wiki compile --apply requires --proposal-hash"))
+    if args.proposal_hash and not args.apply:
+        return _print_error(
+            ValueError("wiki compile --proposal-hash can only be used with --apply")
+        )
     try:
         if args.page:
             result = compile_source_into_page(
@@ -1319,6 +1329,7 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
                 args.source_id,
                 page_query=args.page,
                 apply=args.apply,
+                proposal_hash=args.proposal_hash,
             )
         else:
             result = describe_wiki_compile_contract(root, args.source_id)
@@ -1341,14 +1352,20 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
         print(f"Source summary: {result.source_summary_path}")
         print(f"Compile status: {result.status}")
         print(f"Mutates wiki: {'yes' if result.mutates else 'no'}")
+        print(f"Target SHA-256: {result.target_sha256}")
+        print(f"Source summary SHA-256: {result.source_summary_sha256}")
+        print(f"Proposal hash: {result.proposal_hash}")
         print("Evidence:")
         for line in result.evidence_lines:
             print(f"- {line}")
+        if result.proposed_diff:
+            print("Proposed diff:")
+            print(result.proposed_diff, end="" if result.proposed_diff.endswith("\n") else "\n")
         if not args.apply and result.changed:
             print("Next steps:")
             print(
-                f"- Review the proposed markdown, then run "
-                f"`splendor wiki compile {result.source_id} --page {result.target_path} --apply`."
+                f"- Review the diff, then run `splendor wiki compile {result.source_id} "
+                f"--page {result.target_path} --apply --proposal-hash {result.proposal_hash}`."
             )
         return 0
 

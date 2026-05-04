@@ -212,11 +212,13 @@ Implemented fields:
   version, leaving prose and code-fence mentions untouched. The command does not perform broad repo
   discovery, register uncurated files, or run mutating synthesis compile/update workflows.
 - `splendor wiki compile <source-id|title|path>` remains non-mutating unless a maintained target
-  page is selected and `--apply` is supplied. `--page <maintained-page>` proposes a deterministic
-  update from the generated source-summary page into one maintained topic, concept, entity,
-  architecture, or glossary page. Proposed and applied updates add the source ID to frontmatter
-  `source_refs`, add provenance links with `supports` and `generated-from` roles, append a bounded
-  source-evidence block to the markdown body, and validate the resulting
+  page is selected and `--apply --proposal-hash <hash>` is supplied. `--page <maintained-page>`
+  proposes a deterministic update from the generated source-summary page into one maintained
+  topic, concept, entity, architecture, or glossary page. Proposed output includes a unified diff,
+  target/source-summary SHA-256 hashes, and a proposal hash derived from those inputs plus the
+  proposed page hash. Proposed and applied updates add the source ID to frontmatter `source_refs`,
+  add provenance links with `supports` and `generated-from` roles, append a managed
+  `Compiled Source Evidence` section to the markdown body, and validate the resulting
   `KnowledgePageFrontmatter` before reporting or writing. Generated source-summary pages are not
   valid compile targets.
 - `splendor pr-summary --since main` is a read-only PR handoff view over local git diff/status and

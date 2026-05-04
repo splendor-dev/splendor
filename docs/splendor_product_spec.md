@@ -754,11 +754,13 @@ and require human review before wiki synthesis is changed.
 The first mutating slice is deliberately narrow. `splendor wiki compile <source-id|title|path>
 --page <maintained-page>` proposes a deterministic one-page update from the generated
 source-summary page into a maintained topic, concept, entity, architecture, or glossary page. The
-proposal adds bounded source evidence to the page body, adds the source ID to frontmatter
-`source_refs`, records provenance links to the source and generated source-summary page, and
-validates schema-version-1 frontmatter before reporting output. The command writes only when the
-operator supplies `--apply`, making apply the explicit reviewed accept step. Generated
-source-summary pages are rejected as compile targets.
+proposal reports a unified diff, target/source-summary SHA-256 hashes, and a proposal hash. It
+adds a managed `Compiled Source Evidence` section to the page body, adds the source ID to
+frontmatter `source_refs`, records provenance links to the source and generated source-summary
+page, and validates schema-version-1 frontmatter before reporting output. The command writes only
+when the operator supplies `--apply --proposal-hash <hash>`, making apply an explicit reviewed
+accept step bound to the current target and source-summary inputs. Generated source-summary pages
+are rejected as compile targets.
 
 Command output should support the workflow without becoming noisy. After `add-source`, Splendor
 should print the exact next ingest command or enqueue the source for pending ingestion. After
@@ -825,8 +827,9 @@ Current implementation:
   optional JSON output.
 - `splendor wiki compile <source-id|title|path>` exposes the review-gated compile-loop contract
   when no target page is supplied. With `--page <maintained-page>`, it proposes a deterministic
-  source-summary evidence update for one maintained synthesis page, and `--apply` explicitly
-  accepts and writes that page after frontmatter validation.
+  source-summary evidence update and unified diff for one maintained synthesis page, and
+  `--apply --proposal-hash <hash>` explicitly accepts and writes that page after frontmatter and
+  proposal-hash validation.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
   pages themselves.

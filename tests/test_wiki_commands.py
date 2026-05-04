@@ -717,7 +717,13 @@ def test_wiki_compile_proposes_maintained_page_update_without_mutating(
     assert payload["target_path"] == "wiki/topics/compile-loop.md"
     assert payload["source_summary_path"] == f"wiki/sources/{added.source_id}.md"
     assert added.source_id in payload["proposed_source_refs"]
+    assert payload["target_sha256"]
+    assert payload["source_summary_sha256"]
+    assert payload["proposal_hash"]
+    assert "--- wiki/topics/compile-loop.md" in payload["proposed_diff"]
+    assert "+++ wiki/topics/compile-loop.md (proposed)" in payload["proposed_diff"]
     assert "<!-- splendor-compile:start" in payload["proposed_markdown"]
+    assert "## Compiled Source Evidence" in payload["proposed_markdown"]
     assert "Reviewed compile turns source evidence" in payload["proposed_markdown"]
     assert target_path.read_text(encoding="utf-8") == before
 
@@ -742,6 +748,22 @@ def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, 
     )
     capsys.readouterr()
 
+    preview_exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            "topic-compile-loop",
+            "--json",
+        ]
+    )
+
+    assert preview_exit_code == 0
+    preview_payload = json.loads(capsys.readouterr().out)
+
     exit_code = main(
         [
             "--root",
@@ -752,6 +774,8 @@ def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, 
             "--page",
             "topic-compile-loop",
             "--apply",
+            "--proposal-hash",
+            preview_payload["proposal_hash"],
             "--json",
         ]
     )
@@ -766,7 +790,8 @@ def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, 
     assert [link.source_id for link in target.frontmatter.provenance_links if link.source_id] == [
         added.source_id
     ]
-    assert "## Source Evidence: compile loop" in target.body
+    assert "## Compiled Source Evidence" in target.body
+    assert "### compile loop" in target.body
     assert "Compile apply records evidence" in target.body
     assert source_summary_path.read_text(encoding="utf-8") == source_summary_before
 
@@ -779,7 +804,6 @@ def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, 
             added.source_id,
             "--page",
             "topic-compile-loop",
-            "--apply",
             "--json",
         ]
     )
@@ -788,6 +812,61 @@ def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "no-op"
     assert payload["mutates"] is False
+
+
+def test_wiki_compile_apply_rejects_stale_proposal_hash(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-loop.md"
+    source.write_text(
+        "# Compile loop\n\n## Summary\n\nCompile apply needs a fresh proposal.\n",
+        encoding="utf-8",
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    target_path = tmp_path / "wiki" / "topics" / "compile-loop.md"
+    write_wiki_page(
+        target_path,
+        kind="topic",
+        title="Compile loop",
+        page_id="topic-compile-loop",
+        body="# Compile loop\n\n## Summary\n\nExisting synthesis.\n",
+    )
+    capsys.readouterr()
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            "topic-compile-loop",
+            "--json",
+        ]
+    )
+    preview_payload = json.loads(capsys.readouterr().out)
+    target_path.write_text(
+        target_path.read_text(encoding="utf-8") + "\nManual reviewer edit.\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            "topic-compile-loop",
+            "--apply",
+            "--proposal-hash",
+            preview_payload["proposal_hash"],
+        ]
+    )
+
+    assert exit_code == 1
+    assert "requires the proposal hash from the reviewed preview" in capsys.readouterr().out
 
 
 def test_wiki_compile_rejects_generated_source_summary_target(tmp_path: Path, capsys) -> None:
@@ -823,6 +902,29 @@ def test_wiki_compile_apply_requires_page(tmp_path: Path, capsys) -> None:
 
     assert exit_code == 1
     assert "wiki compile --apply requires --page" in capsys.readouterr().out
+
+
+def test_wiki_compile_apply_requires_proposal_hash(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "compile-loop.md"
+    source.write_text("# Compile loop\n\nSynthesis belongs elsewhere.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "wiki",
+            "compile",
+            added.source_id,
+            "--page",
+            "topic-compile-loop",
+            "--apply",
+        ]
+    )
+
+    assert exit_code == 1
+    assert "wiki compile --apply requires --proposal-hash" in capsys.readouterr().out
 
 
 def test_brief_json_includes_goal_state_matches_planning_and_next_actions(
