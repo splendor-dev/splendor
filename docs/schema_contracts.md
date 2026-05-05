@@ -570,7 +570,7 @@ Current runtime behavior:
 - mutating scan registration requires `repo refresh --apply-scan` plus `--class ...` or `--all`;
   large apply runs also require `--allow-large-apply`
 
-## v1 readiness notes
+## v0.2.0 / v1 readiness notes
 
 - The current schema version remains `1`; M13-P3.1 does not introduce a migration or rewrite
   existing manifests.
@@ -584,9 +584,9 @@ Current runtime behavior:
 - Lint validates present workspace-backed logical identity fields: `logical_id` must match
   `source:<source_ref>`, persisted aliases must stay scoped to the canonical workspace path, and
   exact identities must not point at conflicting canonical source refs.
-- The final v1 handoff in `docs/v1_release_handoff.md` treats schema version `1`, legacy manifest
-  compatibility, and deferred source-lifecycle fields as release checklist items rather than
-  implicit assumptions.
+- The current `v0.2.0` evaluation release keeps schema version `1`; the final v1-style handoff in
+  `docs/v1_release_handoff.md` treats schema version `1`, legacy manifest compatibility, and
+  deferred source-lifecycle fields as release checklist items rather than implicit assumptions.
 
 ## Review config
 

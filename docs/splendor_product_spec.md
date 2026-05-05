@@ -897,7 +897,8 @@ M13-P2 repo-discovery contracts:
 
 Release-readiness boundary:
 
-- v1 treats content-addressed source IDs as the persisted compatibility contract.
+- `v0.2.0` evaluation release readiness treats content-addressed source IDs as the persisted
+  compatibility contract.
 - readable paths, titles, source refs, and logical IDs are lookup and display aids above that
   compatibility contract; generated source-summary pages and run provenance still use `src-...`
   identifiers.
@@ -920,11 +921,10 @@ Release-readiness boundary:
   selector while adding the new path alias for intentional moves, and maintained topic refs can be
   migrated after refreshed successor summaries exist. This does not require a schema-version change
   or a canonical source-ID migration.
-- issue #79 tracks the reviewed mutating compile/update workflow from #41; v1 shipped briefing and
-  the non-mutating compile contract, and `M15-P1.1` begins the explicit one-page proposal/apply
-  path.
-- `docs/v1_release_handoff.md` is the v1 handoff checklist for final validation, GitHub metadata,
-  issue state, known non-blockers, and the conservative post-v1 queue.
+- issue #79 tracked the reviewed mutating compile/update workflow from #41; `M15-P1.1`,
+  `M15-P1.2`, and `M15-P1.3` now represent and disposition the one-page proposal/apply path.
+- `docs/v1_release_handoff.md` remains the historical v1-style handoff checklist for validation
+  and GitHub metadata expectations, but the immediate evaluation release target is `v0.2.0`.
 
 Later optional support:
 - additional OCR providers

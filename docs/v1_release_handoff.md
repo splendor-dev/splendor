@@ -4,21 +4,36 @@ This checklist is the release handoff for `M13-P3.2`. It does not add runtime be
 the final v1 verification path, issue state, GitHub metadata expectations, known non-blockers, and
 post-v1 queue after the `M13-P2` redesign and `M13-P3.1` release-hardening audit.
 
+## v0.2.0 Evaluation Release Note
+
+The immediate tag target after the post-M15 issue-disposition pass is `v0.2.0`, not `v1.0.0`.
+This document remains the historical v1-style handoff and validation checklist, but the current
+release-prep PR uses it only to avoid stale release-state claims. The `v0.2.0` tag should be
+created only after the release-prep PR merges, `main` is green, and the version metadata plus
+`docs/v0_2_0_release_notes.md` are present on `main`.
+
 ## Release Validation
 
-Run these commands from the repository root before tagging or publishing a v1 release:
+Run these commands from the repository root before tagging or publishing the `v0.2.0` evaluation
+release:
 
 ```bash
-uv run pytest
+env -u OPENAI_API_KEY uv run pytest
 uv run ruff format --check .
 uv run ruff check .
 uv run splendor lint
+uv run splendor health
+uv build
 ```
 
-For a CI-equivalent test job with coverage:
+The pytest command intentionally unsets `OPENAI_API_KEY` so release validation uses the
+deterministic offline path instead of attempting live contradiction-review calls when local
+credentials are configured.
+
+For a CI-equivalent test job with coverage, also use the deterministic offline path:
 
 ```bash
-uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml
+env -u OPENAI_API_KEY uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml
 ```
 
 Before publishing release notes, verify that:
@@ -37,33 +52,25 @@ Release PRs should be non-draft and should carry:
 
 - a detailed body covering changes, validation, limitations, and follow-up work
 - focused labels such as `type/docs`, `area/docs`, `area/planning`, and `release/post-mvp`
-- the `Milestone 13` milestone when it exists
+- the most relevant milestone when one exists; this `v0.2.0` release-prep PR has no issue-backed
+  milestone unless maintainers create a dedicated evaluation-release milestone
 - explicit issue linkage for issues that are closed or intentionally kept open
 
-For this handoff:
+For the current `v0.2.0` evaluation-release handoff:
 
-- #70 is closed and should remain the completed parent feedback loop for the `M13-P2` redesign
-- #72 remains open as the parent source-refresh lifecycle and agent-workflow feedback loop
-- #41-#46 are closed as completed v1 dogfood issues after closing comments named the shipped scope
-  and any deferred work; #79 tracks the deferred mutating compile/update path from #41
-- #47 is targeted by `M10-P3.1` as the focused ingest run-duration precision bug
-- #30 remains open as post-v1 repo-scan registration performance work
-- #37 remains open as post-v1 web document-list scaling work
-- #72 is unblocked after `M14-P2.1`; the `M14-P3.1` source-lifecycle re-evaluation gate records
-  that the source-refresh lifecycle pain is materially addressed and recommends closing #72 once
-  maintainers accept the gate result
-- #86 tracks the planning-document authority and task-oriented agent brief gap addressed by
-  `M14-P4.1`
-- #94's source-identity concern is materially addressed for curated workspace-backed sources by
-  `M14-P1.1` through `M14-P1.9`; future work should be a specific non-workspace extension or
-  regression, not a broad canonical source-ID redesign
-- #79 now owns the M15 reviewed compile/update sequence; `M15-P1.1` starts with explicit
-  one-page diff/proposal-hash/apply semantics and `M15-P1.2` connects bare compile output to
-  ranked page suggestions without broad automatic synthesis updates
+- GitHub has no open issues as of the release-prep handoff.
+- #70 remains the completed parent feedback loop for the `M13-P2` redesign.
+- #72, #86, #94, #47, #30, #37, and #79 are closed or dispositioned by merged M14/M15 follow-ups.
+- #79's reviewed compile/update scope is represented by `M15-P1.1`, `M15-P1.2`, and the
+  `M15-P1.3` disposition: one-page proposal diffs, proposal hashes, explicit apply semantics,
+  ranked compile-target suggestions, schema-bound frontmatter validation, and generated/maintained
+  page separation.
+- No new issue-backed implementation slice is required before the `v0.2.0` tag unless the
+  release-prep validation suite finds a concrete blocker.
 
 ## Known Non-Blockers
 
-These items are intentionally not v1 release blockers:
+These items are intentionally not `v0.2.0` release blockers:
 
 - richer post-M14 authority lifecycle policy after the initial planning-doc authority briefs have
   been exercised in real repositories
@@ -71,40 +78,17 @@ These items are intentionally not v1 release blockers:
   old runtime ledger entries
 - source identity extensions beyond curated workspace-backed source lifecycle semantics, if real
   repository use identifies a concrete remaining gap after #94
-- repo-scan bulk registration optimization for #30
-- web document-list scaling for #37
+- repo-scan and web-listing work beyond the closed #30 and #37 follow-ups, if renewed evaluation
+  identifies a concrete scaling gap
 
 ## Post-v1 Queue
 
-The conservative next queue after the `M14-P3.1` gate is:
-
-1. Close #72 once maintainers accept the gate PR, because its broad source-refresh lifecycle and PR
-   handoff asks have landed and been re-evaluated.
-2. Review #86 through `M14-P4.1`, which adds initial planning-document authority metadata and
-   task-oriented authority brief ranking.
-3. Keep using `splendor pr-summary --since main` during review handoff to explain source
-   lifecycle, maintained wiki, source-summary, and mechanical generated-state changes.
-4. Use `M14-P1.5` for issue #93 before continuing post-MVP expansion: add an explicit
-   `splendor ingest --changed` path for checksum-drifted curated sources whose old queue items are
-   already done.
-5. `M14-P1.6` handles issue #90: workspace refresh skips missing curated sources and summarizes
-   per-source refresh failures with diagnostics while continuing valid refresh work, then exits
-   non-zero while unresolved sources remain.
-6. `M14-P1.7` handles issue #89: `splendor source update-path` repairs moved active curated
-   workspace-backed source paths without manual manifest JSON edits or broad discovery.
-7. `M14-P1.8` handles issue #95: health diagnostics include deterministic remediation hints for
-   the concrete `source update-path`, source refresh, stale-ingest, queue retry, and repair ingest
-   commands now available.
-8. Close or explicitly narrow #94 through `M14-P1.9`; the current identity contract keeps
-   canonical `src-...` IDs immutable as version/provenance records while logical IDs, supersession,
-   freshness, path repair, and topic-ref migration cover ordinary curated workspace edits and
-   moves.
-9. Continue #79 after `M15-P1.2` only through deliberately narrowed follow-ups, because compile
-   target discovery and one-page reviewed apply are now represented.
-10. Complete #47 through `M10-P3.1` once the focused ingest run-duration precision PR merges,
-    without rewriting historical runtime records.
-11. Keep #30 and #37 as independent performance/scaling follow-ups unless real repository use makes
-   either one urgent.
+The historical post-v1 queue recorded by `M13-P3.2` has now been worked down through the M14 and
+M15 follow-ups. The current queue before tagging `v0.2.0` is release validation only: confirm local
+tests, formatting, lint, Splendor lint/health, build output, green `main` CI, package metadata
+`0.2.0`, release notes, and no open GitHub issues. After `v0.2.0` is released, the next product
+step is sending Splendor back to evaluation by the Claude Code agent user developing
+SynthBanshee.
 
 The internal source-lifecycle re-evaluation gate is now complete in `M14-P3.1`. The completed retry
 bundle is:
@@ -122,40 +106,36 @@ bundle is:
    including a controlled changed-source exercise, and record the close-or-split recommendation for
    #72.
 
-The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. After `M14-P4.1`, future
-work starts from #79 unless #86 review identifies a narrower follow-up or a new real-agent run
-reopens a source-lifecycle regression. The first #79 slice is `M15-P1.1`: keep bare compile
-non-mutating, require `--page` for a deterministic diff-backed proposal, and require
-`--apply --proposal-hash <hash>` for the explicit reviewed write. `M15-P1.2` follows by adding
-ranked compile-target discovery, ready-to-run preview commands, and structured preview argv tokens
-to bare compile and `wiki suggest`, while preserving the one-page apply gate.
+The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. The subsequent
+`M14-P4.1`, `M15-P1.1`, `M15-P1.2`, and `M15-P1.3` work is also complete: planning-authority
+briefs landed, the reviewed one-page compile/apply loop landed, compile-target discovery landed,
+and #79 was dispositioned. Future work should now come from the post-`v0.2.0`
+SynthBanshee/Claude Code evaluation rather than from the closed historical issue queue.
 
 ## Tagging Readiness
 
-After the release PR merges, v1 tagging is ready when `main` has:
+After the release-prep PR merges, `v0.2.0` tagging is ready when `main` has:
 
-- package version metadata updated for the intended v1 tag in both `pyproject.toml` and
+- package version metadata updated to `0.2.0` in both `pyproject.toml` and
   `src/splendor/__init__.py`
-- a release-notes entry or GitHub release draft that names completed M13 work, validation, and the
-  explicit post-v1 queue
+- `docs/v0_2_0_release_notes.md` or a GitHub release draft that names completed stabilization,
+  validation, current no-open-issues state, and the post-release SynthBanshee/Claude Code
+  evaluation step
 - green CI for formatting, linting, tests, and coverage
 - a passing `splendor lint` planning-state check
-- no open issue mislabeled as a v1 blocker
+- no open GitHub issues unless a newly found release blocker has been deliberately filed
 
 Use this final tagging sequence after those checks pass:
 
 ```bash
 git switch main
 git pull --ff-only origin main
-git tag -a v1.0.0 -m "Splendor v1.0.0"
-git push origin v1.0.0
 uv build
-```
-
-Before publishing artifacts outside GitHub, verify the built wheel/sdist from `dist/` in a clean
-environment with:
-
-```bash
 uv pip install dist/splendor-*.whl
 splendor --version
+git tag -a v0.2.0 -m "Splendor v0.2.0"
+git push origin v0.2.0
 ```
+
+The build and wheel smoke test must pass before the tag is pushed. If either fails, fix the release
+prep on a PR branch instead of publishing and then repairing a bad tag.

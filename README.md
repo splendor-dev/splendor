@@ -240,12 +240,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M9-P3.1`
-- Current planned slice: `Issue #79 compile/update disposition`
-- Current PR sub-slice: `M15-P1.3`
+- Previous completed PR sub-slice: `M15-P1.3`
+- Current planned slice: `v0.2.0 evaluation release tagging readiness`
+- Current PR sub-slice: `v0.2.0-release-tag-prep`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely no open issue after #79 closes; release/tagging readiness`
-- Next planned PR sub-slice: `TBD`
+- Next planned slice: `post-v0.2.0 SynthBanshee/Claude Code evaluation`
+- Next planned PR sub-slice: `TBD after evaluation feedback`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -342,6 +342,12 @@ frontmatter validation, and focused regression coverage. The detailed dispositio
 Issue #79 should close with the `M15-P1.3` disposition PR unless maintainers identify a new narrow
 follow-up outside the current reviewed one-page compile/apply contract.
 
+The current release-prep PR is not an issue-backed milestone slice. It prepares the `v0.2.0`
+evaluation release by updating package version metadata, adding versioned release notes, and
+reframing stale v1-tagging language so the next concrete action after merge and green `main` is the
+`v0.2.0` tag. The product follow-up after that tag is a fresh SynthBanshee/Claude Code evaluation
+run.
+
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
 workspace-backed manifests now persist `source:<workspace-path>` logical IDs and path aliases while
 keeping `src-...` IDs as the compatibility contract.
@@ -436,7 +442,7 @@ parse shell text. Actual writes still require the explicit one-page `--apply --p
 `finished_at` only when the run reaches terminal success or failure. Historical run records are not
 rewritten.
 
-### v1 readiness checklist
+### v0.2.0 evaluation readiness checklist
 
 - [x] Safe repo discovery is non-mutating by default and requires explicit apply flags.
 - [x] Curated source manifests remain the durable registry instead of a broad file mirror.
@@ -447,3 +453,5 @@ rewritten.
 - [x] Final release handoff names validation, issue state, GitHub metadata, known non-blockers,
   and the post-v1 queue.
 - [x] PR-summary tooling gives reviewers a lower-noise generated-state handoff.
+- [ ] `v0.2.0` package metadata, release notes, local validation, and green `main` CI are confirmed
+  before tagging.

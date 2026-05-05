@@ -217,9 +217,10 @@ directory.
 Refresh does not override active ingest leases or dead-letter protections; use `queue retry` or
 `repair ingest` for those recovery cases.
 
-For release verification, use `docs/v1_release_handoff.md` as the checklist. It keeps the
-quickstart focused on normal operator workflow while the handoff records validation commands,
-GitHub metadata expectations, issue state, and post-v1 follow-up boundaries.
+For release verification, use `docs/v1_release_handoff.md` together with
+`docs/v0_2_0_release_notes.md`. The handoff keeps the quickstart focused on normal operator
+workflow while the release notes name the immediate `v0.2.0` evaluation tag target, validation
+commands, issue state, and post-release SynthBanshee/Claude Code evaluation step.
 
 For a read-only browser view over the same status and source-detail contracts:
 
