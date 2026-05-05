@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M15-P1.3`
-- Current planned slice: `v0.2.0 evaluation release tagging readiness`
-- Current PR sub-slice: `v0.2.0-release-tag-prep`
+- Previous completed PR sub-slice: `v0.2.0-release-tag-prep`
+- Current planned slice: `M16 v0.3 evaluation intake and roadmap decomposition`
+- Current PR sub-slice: `M16-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `post-v0.2.0 SynthBanshee/Claude Code evaluation`
-- Next planned PR sub-slice: `TBD after evaluation feedback`
+- Next planned slice: `M16-P1 source hygiene and registry recovery`
+- Next planned PR sub-slice: `M16-P1.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -829,11 +829,11 @@ threads. Later M14 slices added stable logical source identities, supersedes/sup
 semantics, safe workspace refresh, pruning, topic-ref migration, and PR-summary tooling without
 adding SQLite, vector search, background workers, mutating web UI, or broad refresh discovery.
 
-`M13-P3.2` is the final release checklist and post-v1 handoff. It keeps runtime behavior stable,
-adds the concise release handoff in `docs/v1_release_handoff.md`, and makes the post-v1 queue
-explicit: #72 owns source lifecycle and agent workflow follow-up; #79 owns the deferred mutating
-compile/update path from #41; #47 owns ingest run durations and is targeted by `M10-P3.1`; #30 and
-#37 remain independent performance/scaling follow-ups.
+`M13-P3.2` is the final release checklist and historical post-v1 handoff. It keeps runtime
+behavior stable and adds the concise release handoff in `docs/v1_release_handoff.md`. Its original
+post-v1 queue was later worked through by the M14/M15 follow-ups: #72 covered source lifecycle and
+agent workflow work, #79 covered the deferred mutating compile/update path from #41, #47 was
+targeted by `M10-P3.1`, and #30/#37 were dispositioned independently.
 
 `M13-P3.3` handles issue #30 as a focused repo-scan apply performance/refactor slice. It preserves
 safe non-mutating scan previews, explicit apply gates, source IDs, manifest validation, and queue
@@ -859,10 +859,10 @@ registration.
   generated/maintained page separation.
 - [x] Final release handoff records validation commands, docs state, issue state, GitHub metadata,
   known non-blockers, and the post-v1 queue.
-- [x] No GitHub issues remain open after the M15 disposition pass.
-- [ ] Tagging should happen only after the full validation suite, green CI on `main`, package
-  metadata set to `0.2.0`, and release notes that call out completed stabilization plus the next
-  SynthBanshee/Claude Code evaluation step.
+- [x] No GitHub issues remained open after the M15 disposition pass and before the post-`v0.2.0`
+  evaluation reopened the roadmap with M16/M17/M18 follow-ups.
+- [x] The `v0.2.0` tag was published from green `main` after PR #107, and the follow-up
+  SynthBanshee/Claude Code evaluation was captured as the input for the v0.3 roadmap.
 
 ### Exit criteria
 - the product is stable enough for sustained real-world use
@@ -1096,6 +1096,88 @@ schema version remain unchanged, and historical run records are not rewritten.
 - Preserve curated source manifests as the durable registry.
 - Keep #30 and #37 independent performance/scaling follow-ups unless real repository use makes
   either one urgent.
+
+---
+
+## Milestone 16 — v0.3 source hygiene and registry recovery
+
+### Goal
+Make Splendor safe to retry on a real external agent workflow after the post-`v0.2.0`
+SynthBanshee/Claude Code evaluation. The release target is not broader product surface; it is
+recoverability, source-registration hygiene, and trustworthy validation.
+
+### Input signal
+The sanitized evaluation intake lives in `docs/v0_2_synthbanshee_evaluation.md`. A fixture archive
+is preserved outside the repository at
+`/Users/shaypalachy/archive/splendor-fixtures/splendor-fixture-2026-05-05.tar.gz` with SHA-256
+`8b2fea5e3cd04c99d52d79398347ff7a38b41a30c410a3a1ab1985fbe63b162c`.
+
+### Planned PR slices
+- `M16-P0` Evaluation intake and roadmap decomposition.
+- `M16-P1` Source hygiene and registry recovery.
+- `M16-P2` Validation correctness.
+- `M16-P3` Workflow polish and trial-install polish.
+
+### Planned PR sub-slices
+- `M16-P0.1` Record v0.3 evaluation intake and issue decomposition.
+- `M16-P1.1` Harden repo scan ignores and `.splendorignore` (#111).
+- `M16-P1.2` Add `splendor source forget` recovery command (#109).
+- `M16-P1.3` Reconcile duplicate canonical source versions (#110).
+- `M16-P2.1` Fix source validation health false positives (#112).
+- `M16-P2.2` Align lint path checks with live source refs (#113).
+- `M16-P3.1` Loosen workspace maintenance flag coupling (#121).
+- `M16-P3.2` Add JSON output for pending ingest drains (#122).
+- `M16-P3.3` Publish release artifacts for easier trial installs (#120).
+
+### Minimum v0.3 retry bar
+- Repo scan honors `.gitignore` and project-specific ignore rules across documentation scans,
+  `--all`, class-filtered scans, and apply paths.
+- Operators can clean polluted registries through `source forget` without deleting manifests by
+  hand.
+- Duplicate active source versions for the same canonical source ref can be reconciled through a
+  documented command or automatic scan reconciliation.
+- Lint reads the live source model after source refresh, path repair, and supersession repair.
+- Health resolves run source IDs against the manifest store without false unknown-source errors.
+
+### Exit criteria
+- `splendor lint` and `splendor health` are trustworthy diagnostics on the acceptance fixture.
+- A polluted registry has a documented, tested recovery path.
+- The same Claude Code evaluator can retry Splendor on SynthBanshee without manual manifest
+  surgery.
+
+## Milestone 17 — v1 public readiness
+
+### Goal
+Prepare Splendor for public v1 evaluation after v0.3 proves safe on the real SynthBanshee workflow.
+This milestone is about acceptance fixtures, external evaluator ergonomics, and higher-signal agent
+handoff.
+
+### Planned PR slices
+- `M17-P1.1` Create a public mock client acceptance repository (#114).
+- `M17-P2.1` Expand planning authority lifecycle (#116).
+- `M17-P3.1` Improve semantic ranking for agent handoff (#115).
+- `M17-P4.1` Reduce contradiction-review task noise (#117).
+
+### Public mock client guidance
+The public mock client should model a realistic small CLI/data project with human-authored specs,
+implementation plans, decision records, research notes that contain real contradictions, a
+non-trivial PR history, populated ignored cache directories in local scenarios, and dedicated
+failure branches or fixtures for polluted manifests, dangling active sources, and renamed-file
+repairs. Healthy `main` should be useful for first-run evaluation; intentionally broken states
+belong in scenario branches or fixtures.
+
+## Milestone 18 — v2 advanced product track
+
+### Goal
+Keep larger product bets visible without pulling them into the v0.3 recovery release or the public
+v1 readiness gate.
+
+### Candidate PR slices
+- `M18-P1.1` Add advanced semantic search or a vector index (#118).
+- `M18-P2.1` Explore mutating web review workflows (#119).
+
+These remain post-v1 unless a later external evaluation shows they are more important than the
+source hygiene, recovery, validation, and public-readiness work above.
 
 ---
 

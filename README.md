@@ -237,15 +237,16 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
 - [docs/v1_release_handoff.md](docs/v1_release_handoff.md)
 - [docs/m14_synthbanshee_reevaluation.md](docs/m14_synthbanshee_reevaluation.md)
+- [docs/v0_2_synthbanshee_evaluation.md](docs/v0_2_synthbanshee_evaluation.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M15-P1.3`
-- Current planned slice: `v0.2.0 evaluation release tagging readiness`
-- Current PR sub-slice: `v0.2.0-release-tag-prep`
+- Previous completed PR sub-slice: `v0.2.0-release-tag-prep`
+- Current planned slice: `M16 v0.3 evaluation intake and roadmap decomposition`
+- Current PR sub-slice: `M16-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `post-v0.2.0 SynthBanshee/Claude Code evaluation`
-- Next planned PR sub-slice: `TBD after evaluation feedback`
+- Next planned slice: `M16-P1 source hygiene and registry recovery`
+- Next planned PR sub-slice: `M16-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -342,11 +343,17 @@ frontmatter validation, and focused regression coverage. The detailed dispositio
 Issue #79 should close with the `M15-P1.3` disposition PR unless maintainers identify a new narrow
 follow-up outside the current reviewed one-page compile/apply contract.
 
-The current release-prep PR is not an issue-backed milestone slice. It prepares the `v0.2.0`
+The `v0.2.0-release-tag-prep` PR was not an issue-backed milestone slice. It prepared the
 evaluation release by updating package version metadata, adding versioned release notes, and
-reframing stale v1-tagging language so the next concrete action after merge and green `main` is the
-`v0.2.0` tag. The product follow-up after that tag is a fresh SynthBanshee/Claude Code evaluation
-run.
+reframing stale v1-tagging language around the immediate `v0.2.0` tag. The tag is published, and
+the SynthBanshee/Claude Code evaluation has now become the input for `M16`.
+
+`M16-P0.1` records the post-`v0.2.0` SynthBanshee/Claude Code evaluation intake. The evaluation
+found that the source-refresh model and compact agent handoff are useful, but v0.3 must focus on
+source hygiene, registry recovery, and validation correctness before another trial release. The
+sanitized intake is in [docs/v0_2_synthbanshee_evaluation.md](docs/v0_2_synthbanshee_evaluation.md).
+Milestone 16 tracks v0.3 blockers and polish; Milestone 17 tracks public v1 readiness; Milestone
+18 tracks v2 product bets.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
 workspace-backed manifests now persist `source:<workspace-path>` logical IDs and path aliases while
@@ -453,5 +460,13 @@ rewritten.
 - [x] Final release handoff names validation, issue state, GitHub metadata, known non-blockers,
   and the post-v1 queue.
 - [x] PR-summary tooling gives reviewers a lower-noise generated-state handoff.
-- [ ] `v0.2.0` package metadata, release notes, local validation, and green `main` CI are confirmed
+- [x] `v0.2.0` package metadata, release notes, local validation, and green `main` CI are confirmed
   before tagging.
+
+### v0.3 recovery readiness checklist
+
+- [ ] Repo scan ignores and `.splendorignore` prevent cache/local-agent source pollution.
+- [ ] `splendor source forget` provides safe single and bulk source-registry recovery.
+- [ ] Duplicate canonical source versions can be reconciled without manual manifest edits.
+- [ ] Health resolves existing manifest source IDs without false unknown-source diagnostics.
+- [ ] Lint validates live source refs after path repair and supersession.
