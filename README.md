@@ -274,18 +274,19 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [docs/schema_contracts.md](docs/schema_contracts.md)
 - [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
 - [docs/release_artifacts.md](docs/release_artifacts.md)
+- [docs/public_mock_client_acceptance.md](docs/public_mock_client_acceptance.md)
 - [docs/v1_release_handoff.md](docs/v1_release_handoff.md)
 - [docs/m14_synthbanshee_reevaluation.md](docs/m14_synthbanshee_reevaluation.md)
 - [docs/v0_2_synthbanshee_evaluation.md](docs/v0_2_synthbanshee_evaluation.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P3.2`
-- Current planned slice: `M16-P3 workflow polish and trial-install polish`
-- Current PR sub-slice: `M16-P3.3`
+- Previous completed PR sub-slice: `M16-P3.3`
+- Current planned slice: `M17 v1 public readiness`
+- Current PR sub-slice: `M17-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P1.1`
+- Next planned PR sub-slice: `M17-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -421,6 +422,13 @@ pruning, and topic-ref migration can run without pretending source bytes changed
 for agents to consume without parsing human text.
 `M16-P3.3` adds GitHub Release artifact publishing for tagged releases and documents the canonical
 wheel-based trial install path for external v0.3 evaluators.
+`M17-P1.1` creates the public
+[`splendor-dev/mock-client-acceptance`](https://github.com/splendor-dev/mock-client-acceptance)
+repository and documents its baseline, source-refresh, polluted-registry, and renamed-source
+acceptance workflows in [docs/public_mock_client_acceptance.md](docs/public_mock_client_acceptance.md).
+The reviewed external state is pinned by the `m17-p1.1-acceptance-main` and
+`m17-p1.1-source-refresh-scenario` tags, and the mock repository includes merged PR history for
+external evaluator exercises.
 
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes
