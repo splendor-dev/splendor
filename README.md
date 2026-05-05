@@ -200,6 +200,10 @@ provided, and reports the manifest lifecycle edits needed to complete one-way or
 active versions as superseded by the selected current version. Cross-canonical selections and
 ambiguous `--current` selectors are rejected without rewriting manifests.
 
+`splendor ingest --pending --json` emits machine-readable pending-drain results with queue totals,
+processed/succeeded/failed/skipped counts, per-item outcomes, and deterministic next actions so
+agents do not need to parse human queue-drain text.
+
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
 source versions through the same supersession-aware source lifecycle, ingests only those refreshed
@@ -261,12 +265,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P2.2`
+- Previous completed PR sub-slice: `M16-P3.1`
 - Current planned slice: `M16-P3 workflow polish and trial-install polish`
-- Current PR sub-slice: `M16-P3.1`
+- Current PR sub-slice: `M16-P3.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M16-P3 workflow polish and trial-install polish`
-- Next planned PR sub-slice: `M16-P3.2`
+- Next planned PR sub-slice: `M16-P3.3`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -495,3 +499,4 @@ rewritten.
 - [x] Health resolves existing manifest source IDs without false unknown-source diagnostics.
 - [x] Lint validates live source refs after path repair and supersession.
 - [x] Workspace maintenance actions can run without unnecessary changed-source coupling.
+- [x] Pending ingest drains provide JSON output for agent handoff.

@@ -107,6 +107,46 @@ class DrainResult:
     items: list[DrainItemResult]
 
 
+def render_pending_ingest_json(root: Path, result: DrainResult) -> str:
+    return json.dumps(
+        {
+            "total": result.total,
+            "summary": {
+                "processed": result.processed,
+                "succeeded": result.succeeded,
+                "failed": result.failed,
+                "skipped": result.skipped,
+            },
+            "items": [_drain_item_payload(root, item) for item in result.items],
+            "next_actions": pending_ingest_next_actions(result),
+        },
+        indent=2,
+    )
+
+
+def pending_ingest_next_actions(result: DrainResult) -> list[str]:
+    if result.total == 0:
+        return []
+    if result.failed:
+        return ["splendor queue inspect"]
+
+    succeeded_source_ids = [item.source_id for item in result.items if item.outcome == "succeeded"]
+    if len(succeeded_source_ids) == 1:
+        return [f"splendor wiki suggest {succeeded_source_ids[0]}"]
+    if len(succeeded_source_ids) > 1:
+        return ["splendor wiki status"]
+    return ["splendor queue inspect"]
+
+
+def _drain_item_payload(root: Path, item: DrainItemResult) -> dict[str, str]:
+    return {
+        "source_id": item.source_id,
+        "queue_path": _relative_to_root(root, item.queue_path),
+        "outcome": item.outcome,
+        "message": item.message,
+    }
+
+
 def _make_run_id(source_id: str) -> str:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     return f"run-{source_id}-{stamp}"

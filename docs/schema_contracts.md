@@ -260,6 +260,9 @@ Implemented fields:
   reports a clean no-op when no curated workspace-backed source bytes changed. `--json` emits
   initial and final freshness counts, missing-source diagnostics, refreshed source IDs, targeted
   queue outcomes, and summary counts.
+- `splendor ingest --pending --json` emits the same pending queue drain contract as human output in
+  structured form: queue total, processed/succeeded/failed/skipped summary counts, per-item source
+  IDs, workspace-relative queue paths, outcomes, messages, and deterministic next actions.
 - `splendor wiki compile <source-id|title|path>` remains non-mutating unless a maintained target
   page is selected and `--apply --proposal-hash <hash>` is supplied. Without `--page`, it reports
   the review-gated contract plus ranked maintained-page suggestions and ready-to-run

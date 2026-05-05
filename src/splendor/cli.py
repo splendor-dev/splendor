@@ -22,7 +22,13 @@ from splendor.commands.file_answer import (
     file_answer_from_last_query,
 )
 from splendor.commands.health import run_health_checks
-from splendor.commands.ingest import drain_pending_ingest_jobs, enqueue_ingest_job, ingest_source
+from splendor.commands.ingest import (
+    drain_pending_ingest_jobs,
+    enqueue_ingest_job,
+    ingest_source,
+    pending_ingest_next_actions,
+    render_pending_ingest_json,
+)
 from splendor.commands.init import initialize_workspace
 from splendor.commands.lint import run_lint_checks
 from splendor.commands.maintenance import execute_maintenance_command, render_report_json
@@ -1242,6 +1248,10 @@ def handle_ingest(args: argparse.Namespace) -> int:
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             return _print_error(exc)
 
+        if args.json_output:
+            print(render_pending_ingest_json(root, result))
+            return 1 if result.failed else 0
+
         if result.total == 0:
             print("No pending ingest jobs")
             return 0
@@ -1255,13 +1265,9 @@ def handle_ingest(args: argparse.Namespace) -> int:
             f"failed={result.failed} "
             f"skipped={result.skipped}"
         )
-        succeeded_source_ids = [
-            item.source_id for item in result.items if item.outcome == "succeeded"
-        ]
-        if len(succeeded_source_ids) == 1:
-            print(f"Next: splendor wiki suggest {succeeded_source_ids[0]}")
-        elif len(succeeded_source_ids) > 1:
-            print("Next: splendor wiki status")
+        for action in pending_ingest_next_actions(result):
+            if action != "splendor queue inspect":
+                print(f"Next: {action}")
         return 1 if result.failed else 0
 
     try:
@@ -2556,8 +2562,8 @@ def main(argv: list[str] | None = None) -> int:
         mode_count = sum(bool(value) for value in [args.source_id, args.pending, args.changed])
         if mode_count != 1:
             parser.error("ingest requires exactly one of <source_id>, --pending, or --changed")
-        if args.json_output and not args.changed:
-            parser.error("ingest --json is currently supported only with --changed")
+        if args.json_output and not (args.changed or args.pending):
+            parser.error("ingest --json is currently supported only with --pending or --changed")
     return args.handler(args)
 
 

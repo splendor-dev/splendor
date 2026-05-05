@@ -3289,7 +3289,7 @@ def test_cli_ingest_requires_exactly_one_target_mode() -> None:
         main(["ingest", "src-123", "--changed"])
 
     with pytest.raises(SystemExit):
-        main(["ingest", "--pending", "--json"])
+        main(["ingest", "src-123", "--json"])
 
 
 def test_cli_ingest_pending_reports_no_jobs(tmp_path: Path, capsys) -> None:
@@ -3300,6 +3300,22 @@ def test_cli_ingest_pending_reports_no_jobs(tmp_path: Path, capsys) -> None:
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "No pending ingest jobs" in captured.out
+
+
+def test_cli_ingest_pending_json_reports_no_jobs(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "total": 0,
+        "summary": {"processed": 0, "succeeded": 0, "failed": 0, "skipped": 0},
+        "items": [],
+        "next_actions": [],
+    }
 
 
 def test_cli_ingest_pending_reports_skipped_items(tmp_path: Path, capsys) -> None:
@@ -3347,6 +3363,51 @@ def test_cli_ingest_pending_prints_summary(tmp_path: Path, capsys) -> None:
     assert "Drain summary: processed=1 succeeded=1 failed=0 skipped=0" in captured.out
 
 
+def test_cli_ingest_pending_json_reports_single_success_next_action(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["total"] == 1
+    assert payload["summary"] == {"processed": 1, "succeeded": 1, "failed": 0, "skipped": 0}
+    assert payload["next_actions"] == [f"splendor wiki suggest {source_id}"]
+    assert payload["items"] == [
+        {
+            "source_id": source_id,
+            "queue_path": f"state/queue/ingest-{source_id}.json",
+            "outcome": "succeeded",
+            "message": payload["items"][0]["message"],
+        }
+    ]
+    assert payload["items"][0]["message"].startswith("run run-")
+
+
+def test_cli_ingest_pending_json_reports_batch_success_next_action(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    first = tmp_path / "first.md"
+    second = tmp_path / "second.md"
+    first.write_text("# First\n\nhello\n", encoding="utf-8")
+    second.write_text("# Second\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(first)])
+    main(["--root", str(tmp_path), "add-source", str(second)])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {"processed": 2, "succeeded": 2, "failed": 0, "skipped": 0}
+    assert payload["next_actions"] == ["splendor wiki status"]
+    assert [item["outcome"] for item in payload["items"]] == ["succeeded", "succeeded"]
+
+
 def test_cli_ingest_pending_continues_after_failure(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
 
@@ -3371,6 +3432,35 @@ def test_cli_ingest_pending_continues_after_failure(tmp_path: Path, capsys) -> N
     assert f"{ok_source_id}: succeeded" in captured.out
     assert f"{bad_source_id}: failed" in captured.out
     assert "Drain summary: processed=2 succeeded=1 failed=1 skipped=0" in captured.out
+
+
+def test_cli_ingest_pending_json_reports_partial_failure(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    ok_source = tmp_path / "brief.md"
+    ok_source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(ok_source)])
+    ok_source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+
+    bad_source = tmp_path / "broken.bin"
+    bad_source.write_bytes(b"\x00\x01\x02")
+    main(["--root", str(tmp_path), "add-source", str(bad_source)])
+    failing_source_id = next(
+        path.stem
+        for path in sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+        if path.stem != ok_source_id
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {"processed": 2, "succeeded": 1, "failed": 1, "skipped": 0}
+    assert payload["next_actions"] == ["splendor queue inspect"]
+    outcomes = {item["source_id"]: item["outcome"] for item in payload["items"]}
+    assert outcomes[ok_source_id] == "succeeded"
+    assert outcomes[failing_source_id] == "failed"
 
 
 def test_cli_ingest_pending_reports_failed_and_skipped_mix(tmp_path: Path, capsys) -> None:
@@ -3402,6 +3492,56 @@ def test_cli_ingest_pending_reports_failed_and_skipped_mix(tmp_path: Path, capsy
     )
     assert f"{failing_source_id}: failed (Workspace source is missing: missing.md)" in captured.out
     assert "Drain summary: processed=1 succeeded=0 failed=1 skipped=1" in captured.out
+
+
+def test_cli_ingest_pending_json_reports_skipped_queue_states(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    updates = [
+        (
+            "leased.md",
+            {
+                "status": "leased",
+                "lease_owner": "local-cli:123",
+                "lease_expires_at": "2099-01-01T00:00:00+00:00",
+            },
+        ),
+        (
+            "backoff.md",
+            {
+                "status": "failed",
+                "last_error": "broken",
+                "next_attempt_at": "2099-01-01T00:00:00+00:00",
+            },
+        ),
+        ("dead.md", {"status": "dead_letter", "last_error": "broken"}),
+        ("done.md", {"status": "done"}),
+    ]
+    source_ids: dict[str, str] = {}
+    for filename, queue_update in updates:
+        source = tmp_path / filename
+        source.write_text(f"# {filename}\n\nhello\n", encoding="utf-8")
+        main(["--root", str(tmp_path), "add-source", str(source)])
+        source_id = next(
+            path.stem
+            for path in sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+            if path.stem not in source_ids.values()
+        )
+        source_ids[filename] = source_id
+        queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+        write_queue_item(queue_path, load_queue_item(queue_path).model_copy(update=queue_update))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {"processed": 0, "succeeded": 0, "failed": 0, "skipped": 4}
+    assert payload["next_actions"] == ["splendor queue inspect"]
+    messages = {item["source_id"]: item["message"] for item in payload["items"]}
+    assert "lease active until 2099-01-01T00:00:00+00:00" in messages.values()
+    assert "retry after 2099-01-01T00:00:00+00:00" in messages.values()
+    assert "status=dead_letter" in messages.values()
+    assert "status=done" in messages.values()
 
 
 def test_cli_materialize_source_command(tmp_path: Path, capsys) -> None:
