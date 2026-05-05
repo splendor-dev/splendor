@@ -69,7 +69,17 @@ def test_release_artifacts_workflow_contract() -> None:
     assert "actions/checkout@v4" in uses
     assert "actions/upload-artifact@v4" in uses
     assert any("rm -rf dist" in run and "uv build" in run for run in runs if run)
+    assert not any("exec(" in run for run in runs if run)
     assert any(
-        'wheel="dist/splendor-${RELEASE_TAG#v}-py3-none-any.whl"' in run for run in runs if run
+        "wheels=(dist/splendor-${RELEASE_TAG#v}-*.whl)" in run
+        and "splendor --root /tmp/splendor-release-smoke init" in run
+        and "splendor --root /tmp/splendor-release-smoke lint" in run
+        for run in runs
+        if run
+    )
+    assert any(
+        "GitHub Release %s does not exist. Create release notes before publishing artifacts." in run
+        for run in runs
+        if run
     )
     assert any('gh release upload "$RELEASE_TAG" dist/* --clobber' in run for run in runs if run)

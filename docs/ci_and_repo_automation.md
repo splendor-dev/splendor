@@ -131,9 +131,11 @@ What it does:
 - installs Python 3.12 and `uv`
 - verifies that the tag version matches `pyproject.toml` and `src/splendor/__init__.py`
 - runs `uv build`
-- smoke-installs the built wheel and runs `splendor --version`
+- smoke-installs the built wheel and exercises the installed CLI with `splendor --version`,
+  `splendor --help`, `splendor init`, and `splendor lint`
 - uploads `dist/*` as a GitHub Actions artifact
-- creates or reuses the matching GitHub Release and uploads the wheel and source distribution
+- requires the matching GitHub Release to already exist with release notes
+- uploads the wheel and source distribution to that release
 
 Permissions:
 

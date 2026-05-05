@@ -141,6 +141,7 @@ git push origin v0.2.0
 
 The build and wheel smoke test must pass before the tag is pushed. If either fails, fix the release
 prep on a PR branch instead of publishing and then repairing a bad tag.
-After the tag is pushed, the release-artifacts workflow should attach the built wheel and source
-distribution to the matching GitHub Release. For manual backfill of an existing tag, run the
-`Release artifacts` workflow with the exact tag name.
+Before the tag is pushed, prepare the matching GitHub Release with real release notes. After the
+tag is pushed, the release-artifacts workflow should attach the built wheel and source distribution
+to that release. For manual backfill of an existing tag, run the `Release artifacts` workflow with
+the exact tag name after confirming the release page already exists.

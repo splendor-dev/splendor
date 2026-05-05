@@ -44,12 +44,14 @@ splendor --help
 For external trial installs, use the wheel attached to the matching GitHub Release:
 
 ```bash
-uv tool install https://github.com/splendor-dev/splendor/releases/download/v0.3.0/splendor-0.3.0-py3-none-any.whl
+TAG="v..."
+VERSION="${TAG#v}"
+uv tool install "https://github.com/splendor-dev/splendor/releases/download/${TAG}/splendor-${VERSION}-py3-none-any.whl"
 splendor --help
 ```
 
-Replace `v0.3.0` and `0.3.0` with the exact release tag under evaluation. Maintainer publishing
-details live in [docs/release_artifacts.md](docs/release_artifacts.md).
+Set `TAG` to the exact published release under evaluation. Maintainer publishing details and the
+release-page fallback live in [docs/release_artifacts.md](docs/release_artifacts.md).
 
 ## 5 Minute Quickstart
 
