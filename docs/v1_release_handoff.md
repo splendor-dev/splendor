@@ -45,6 +45,8 @@ Before publishing release notes, verify that:
 - `docs/quickstart.md` demonstrates the current safe source workflow
 - `docs/ci_and_repo_automation.md` and `docs/github_automation_architecture.md` still describe
   GitHub automation as optional around the local CLI
+- `docs/release_artifacts.md` names the GitHub Release wheel as the canonical trial-install path
+  for external v0.3 evaluators
 
 ## GitHub Handoff
 
@@ -139,3 +141,6 @@ git push origin v0.2.0
 
 The build and wheel smoke test must pass before the tag is pushed. If either fails, fix the release
 prep on a PR branch instead of publishing and then repairing a bad tag.
+After the tag is pushed, the release-artifacts workflow should attach the built wheel and source
+distribution to the matching GitHub Release. For manual backfill of an existing tag, run the
+`Release artifacts` workflow with the exact tag name.

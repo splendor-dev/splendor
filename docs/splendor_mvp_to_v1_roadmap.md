@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M16-P3.1`
+- Previous completed PR sub-slice: `M16-P3.2`
 - Current planned slice: `M16-P3 workflow polish and trial-install polish`
-- Current PR sub-slice: `M16-P3.2`
+- Current PR sub-slice: `M16-P3.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M16-P3 workflow polish and trial-install polish`
-- Next planned PR sub-slice: `M16-P3.3`
+- Next planned slice: `M17 v1 public readiness`
+- Next planned PR sub-slice: `M17-P1.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1130,6 +1130,12 @@ is preserved outside the repository at
 - `M16-P3.1` Loosen workspace maintenance flag coupling (#121).
 - `M16-P3.2` Add JSON output for pending ingest drains (#122).
 - `M16-P3.3` Publish release artifacts for easier trial installs (#120).
+
+`M16-P3.3` adds a GitHub Actions release-artifact workflow for `v*` tags, supports manual
+backfill for existing tags, verifies the tag matches package metadata, builds wheel/sdist outputs,
+smoke-installs the wheel, and uploads `dist/*` to the matching GitHub Release. The canonical
+external trial-install path is the GitHub Release wheel documented in `docs/release_artifacts.md`.
+PyPI publishing remains a separate maintainer decision outside the v0.3 recovery loop.
 
 ### Minimum v0.3 retry bar
 - Repo scan honors `.gitignore`, `.splendorignore`, and safe built-in ignore rules across

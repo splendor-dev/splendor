@@ -39,6 +39,18 @@ uv pip install dist/splendor-*.whl
 splendor --help
 ```
 
+### Trial release install
+
+For external trial installs, use the wheel attached to the matching GitHub Release:
+
+```bash
+uv tool install https://github.com/splendor-dev/splendor/releases/download/v0.3.0/splendor-0.3.0-py3-none-any.whl
+splendor --help
+```
+
+Replace `v0.3.0` and `0.3.0` with the exact release tag under evaluation. Maintainer publishing
+details live in [docs/release_artifacts.md](docs/release_artifacts.md).
+
 ## 5 Minute Quickstart
 
 This is the primary MVP flow: one repository that contains both your project files and the
@@ -259,18 +271,19 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md)
 - [docs/schema_contracts.md](docs/schema_contracts.md)
 - [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
+- [docs/release_artifacts.md](docs/release_artifacts.md)
 - [docs/v1_release_handoff.md](docs/v1_release_handoff.md)
 - [docs/m14_synthbanshee_reevaluation.md](docs/m14_synthbanshee_reevaluation.md)
 - [docs/v0_2_synthbanshee_evaluation.md](docs/v0_2_synthbanshee_evaluation.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P3.1`
+- Previous completed PR sub-slice: `M16-P3.2`
 - Current planned slice: `M16-P3 workflow polish and trial-install polish`
-- Current PR sub-slice: `M16-P3.2`
+- Current PR sub-slice: `M16-P3.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M16-P3 workflow polish and trial-install polish`
-- Next planned PR sub-slice: `M16-P3.3`
+- Next planned slice: `M17 v1 public readiness`
+- Next planned PR sub-slice: `M17-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -402,6 +415,10 @@ against source manifests. Historical manifests and run records remain valid.
 `M16-P3.1` loosens workspace maintenance flag coupling: index rebuilds, superseded-summary
 pruning, and topic-ref migration can run without pretending source bytes changed, while
 `--changed --ingest` remains a targeted drain of only refreshed-source ingest jobs.
+`M16-P3.2` adds JSON output for `splendor ingest --pending`, making pending-drain results easier
+for agents to consume without parsing human text.
+`M16-P3.3` adds GitHub Release artifact publishing for tagged releases and documents the canonical
+wheel-based trial install path for external v0.3 evaluators.
 
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes
@@ -500,3 +517,5 @@ rewritten.
 - [x] Lint validates live source refs after path repair and supersession.
 - [x] Workspace maintenance actions can run without unnecessary changed-source coupling.
 - [x] Pending ingest drains provide JSON output for agent handoff.
+- [x] GitHub Release wheels and source distributions are documented as the canonical trial-install
+  artifact path.

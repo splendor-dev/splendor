@@ -116,6 +116,34 @@ Review expectations:
 - distinguish reviewer-significant generated artifacts from mechanical timestamp-only churn
 - manually dispatch or rerun normal CI if repository policy requires checks on the generated PR
 
+## `Release artifacts`
+
+File: `.github/workflows/release-artifacts.yml`
+
+Runs on:
+
+- `v*` tag pushes
+- manual dispatch for an existing tag
+
+What it does:
+
+- checks out the selected tag
+- installs Python 3.12 and `uv`
+- verifies that the tag version matches `pyproject.toml` and `src/splendor/__init__.py`
+- runs `uv build`
+- smoke-installs the built wheel and runs `splendor --version`
+- uploads `dist/*` as a GitHub Actions artifact
+- creates or reuses the matching GitHub Release and uploads the wheel and source distribution
+
+Permissions:
+
+- `contents: write`
+
+Secrets and external dependencies:
+
+- no secret is required
+- release upload uses the repository `GITHUB_TOKEN` through the GitHub CLI
+
 ## `planning-validator`
 
 File: `.github/workflows/planning-validator.yml`
@@ -305,6 +333,8 @@ Required secrets:
   artifacts.
 - `Splendor generated-change PR` proposes deterministic repo-refresh output as a reviewable PR
   without making GitHub part of the core runtime.
+- `Release artifacts` publishes tag-built wheels and source distributions on GitHub Releases for
+  lower-friction trial installs.
 - `Claude Code Review` provides automated AI code review after CI `lint` and `test` pass, plus
   interactive follow-up.
 - `pr-agent-context` turns CI, review, and failing-check state into a maintained PR handoff comment.
@@ -324,7 +354,9 @@ package their output, but they do not replace the operator-reviewed local valida
 For the current `v0.2.0` evaluation-release prep, `docs/v1_release_handoff.md` remains the
 historical v1-style checklist that connects local validation, GitHub PR metadata, issue state, and
 known non-blockers, while `docs/v0_2_0_release_notes.md` names the immediate tag target and
-post-release SynthBanshee/Claude Code evaluation step. GitHub automation remains supporting
+post-release SynthBanshee/Claude Code evaluation step. `docs/release_artifacts.md` names GitHub
+Release wheels as the canonical trial-install channel for v0.3 evaluators. GitHub automation
+remains supporting
 infrastructure around the local CLI, not a substitute for the explicit validation commands named in
 that handoff.
 

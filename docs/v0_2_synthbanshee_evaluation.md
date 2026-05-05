@@ -95,6 +95,8 @@ M16-P3 polish covers standalone workspace maintenance actions, JSON output for p
 drains, and easier release artifacts for trial installs. M16-P3.1 specifically removes the need to
 pair idempotent index rebuilds, superseded-summary pruning, and topic-ref migration with
 changed-source refresh.
+M16-P3.3 makes GitHub Release wheels and source distributions the documented trial-install
+artifact path for v0.3 evaluators, while keeping PyPI publishing as a separate maintainer decision.
 
 ## Public Mock Client Acceptance Workflows
 
