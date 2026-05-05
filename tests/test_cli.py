@@ -16,9 +16,16 @@ from splendor.commands.ingest import enqueue_ingest_job
 from splendor.commands.source import ingest_changed_sources, refresh_source
 from splendor.config import load_config, write_config
 from splendor.layout import resolve_layout
-from splendor.schemas import KnowledgePageFrontmatter, MaintenanceIssue, MaintenanceReport
+from splendor.schemas import (
+    KnowledgePageFrontmatter,
+    MaintenanceIssue,
+    MaintenanceReport,
+    ProvenanceLink,
+    QueueItemRecord,
+    RunRecord,
+)
 from splendor.state.query_snapshot import last_query_path_for, load_query_snapshot
-from splendor.state.runtime import load_queue_item
+from splendor.state.runtime import load_queue_item, write_queue_item, write_run_record
 from splendor.state.source_registry import load_source_record, write_source_record
 
 
@@ -102,6 +109,9 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     freshness = parser.parse_args(
         ["source", "freshness", "--report", "reports/freshness.json", "--json"]
     )
+    forget = parser.parse_args(
+        ["source", "forget", "--matching", ".mypy_cache/**", "--apply", "--json"]
+    )
 
     assert lookup.command == "source"
     assert lookup.source_command == "lookup"
@@ -118,6 +128,430 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert freshness.source_command == "freshness"
     assert freshness.report == Path("reports/freshness.json")
     assert freshness.json_output is True
+    assert forget.source_command == "forget"
+    assert forget.matching == ".mypy_cache/**"
+    assert forget.apply is True
+    assert forget.json_output is True
+
+
+def test_cli_source_forget_preview_is_non_mutating(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nKeep preview safe.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+    summary_path = tmp_path / "wiki" / "sources" / f"{source_id}.md"
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    source_record = load_source_record(manifest_path)
+    run_path = tmp_path / "state" / "runs" / f"{source_record.last_run_id}.json"
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", source_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["applied"] is False
+    assert payload["summary"]["candidates"] == 1
+    assert {action["status"] for action in payload["actions"]} == {"planned"}
+    assert manifest_path.exists()
+    assert summary_path.exists()
+    assert queue_path.exists()
+    assert run_path.exists()
+
+
+def test_cli_source_forget_apply_removes_source_owned_state(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nRemove generated state.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+    summary_path = tmp_path / "wiki" / "sources" / f"{source_id}.md"
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    derived_path = tmp_path / "derived" / "parsed" / f"{source_id}.txt"
+    derived_path.parent.mkdir(parents=True, exist_ok=True)
+    derived_path.write_text("derived text\n", encoding="utf-8")
+    source_record = load_source_record(manifest_path)
+    run_path = tmp_path / "state" / "runs" / f"{source_record.last_run_id}.json"
+    write_source_record(
+        manifest_path,
+        source_record.model_copy(
+            update={"derived_artifacts": [derived_path.relative_to(tmp_path).as_posix()]}
+        ),
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", source_id, "--apply", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["applied"] is True
+    assert {action["status"] for action in payload["actions"]} == {"removed"}
+    assert not manifest_path.exists()
+    assert not summary_path.exists()
+    assert not queue_path.exists()
+    assert not run_path.exists()
+    assert not derived_path.exists()
+    assert f"`{source_id}`" not in (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+
+
+def test_cli_source_forget_matching_removes_only_globbed_sources(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    polluted = tmp_path / ".mypy_cache" / "cache.py"
+    keep = tmp_path / "docs" / "keep.md"
+    polluted.parent.mkdir()
+    keep.parent.mkdir()
+    polluted.write_text("cache\n", encoding="utf-8")
+    keep.write_text("keep\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(polluted)])
+    main(["--root", str(tmp_path), "add-source", str(keep)])
+    sources = {
+        load_source_record(path).source_ref: path
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    }
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "source",
+            "forget",
+            "--matching",
+            ".mypy_cache/**",
+            "--apply",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [source["source_ref"] for source in payload["sources"]] == [".mypy_cache/cache.py"]
+    assert not sources[".mypy_cache/cache.py"].exists()
+    assert sources["docs/keep.md"].exists()
+
+
+@pytest.mark.parametrize("selector", ["docs/brief.md", "source:docs/brief.md", "brief"])
+def test_cli_source_forget_resolves_exact_selectors(tmp_path: Path, capsys, selector: str) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "docs" / "brief.md"
+    source_path.parent.mkdir()
+    source_path.write_text("# Brief\n\nSelector test.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", selector, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [source["source_id"] for source in payload["sources"]] == [source_id]
+
+
+def test_cli_source_forget_reports_residual_maintained_refs(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nReferenced by a topic.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(["--root", str(tmp_path), "add-topic", "Brief Notes", "--source-refs", source_id])
+    topic_path = tmp_path / "wiki" / "topics" / "brief-notes.md"
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", source_id, "--apply", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["residual_references"] == [
+        {
+            "kind": "wiki_source_ref",
+            "path": "wiki/topics/brief-notes.md",
+            "source_id": source_id,
+            "reason": "maintained wiki page source_refs contains source ID",
+        },
+        {
+            "kind": "wiki_text",
+            "path": "wiki/topics/brief-notes.md",
+            "source_id": source_id,
+            "reason": "wiki page text contains source ID",
+        },
+    ]
+    assert source_id in topic_path.read_text(encoding="utf-8")
+
+
+def test_cli_source_forget_rejects_ambiguous_titles(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    first = tmp_path / "a" / "brief.md"
+    second = tmp_path / "b" / "brief.md"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    first.write_text("first\n", encoding="utf-8")
+    second.write_text("second\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(first)])
+    main(["--root", str(tmp_path), "add-source", str(second)])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", "brief"])
+
+    assert exit_code == 1
+    assert "Source lookup is ambiguous" in capsys.readouterr().out
+
+
+def test_cli_source_forget_rejects_missing_or_duplicate_selection_modes(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+
+    no_selector = main(["--root", str(tmp_path), "source", "forget"])
+    both_selectors = main(
+        [
+            "--root",
+            str(tmp_path),
+            "source",
+            "forget",
+            "src-123",
+            "--matching",
+            "docs/**",
+        ]
+    )
+    empty_matching = main(["--root", str(tmp_path), "source", "forget", "--matching", ""])
+    absolute_matching = main(["--root", str(tmp_path), "source", "forget", "--matching", "/tmp/**"])
+
+    output = capsys.readouterr().out
+    assert no_selector == 1
+    assert both_selectors == 1
+    assert empty_matching == 1
+    assert absolute_matching == 1
+    assert "requires exactly one" in output
+    assert "requires a non-empty workspace-relative glob" in output
+    assert "must be a workspace-relative glob" in output
+
+
+def test_cli_source_forget_matching_can_preview_no_matches(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "forget", "--matching", ".mypy_cache/**", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {
+        "candidates": 0,
+        "actions": 0,
+        "skipped": 0,
+        "residual_references": 0,
+    }
+    assert payload["sources"] == []
+
+
+def test_cli_source_forget_reports_skipped_unsafe_cleanup(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nUnsafe cleanup branches.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+    source_summary = tmp_path / "wiki" / "sources" / f"{source_id}.md"
+    source_summary.parent.mkdir(parents=True, exist_ok=True)
+    source_summary.write_text("not frontmatter\n", encoding="utf-8")
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue_path.write_text("{bad json}\n", encoding="utf-8")
+    unsafe_artifact = tmp_path / "scratch" / f"{source_id}.txt"
+    unsafe_artifact.parent.mkdir()
+    unsafe_artifact.write_text("unsafe\n", encoding="utf-8")
+    source_record = load_source_record(manifest_path)
+    write_source_record(
+        manifest_path,
+        source_record.model_copy(
+            update={
+                "derived_artifacts": [
+                    "../outside.txt",
+                    unsafe_artifact.relative_to(tmp_path).as_posix(),
+                ],
+                "linked_pages": [
+                    source_summary.relative_to(tmp_path).as_posix(),
+                    "../bad.md",
+                ],
+            }
+        ),
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", source_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    skipped = {(item["kind"], item["path"]) for item in payload["skipped"]}
+    assert ("source_summary_page", f"wiki/sources/{source_id}.md") in skipped
+    assert ("source_summary_page", "../bad.md") in skipped
+    assert ("queue_record", f"state/queue/ingest-{source_id}.json") in skipped
+    assert ("artifact", "../outside.txt") in skipped
+    assert ("artifact", f"scratch/{source_id}.txt") in skipped
+
+
+def test_cli_source_forget_reports_valid_but_unsupported_queue_records(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nQueue mismatch.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue = QueueItemRecord.model_validate_json(queue_path.read_text(encoding="utf-8"))
+    write_queue_item(queue_path, queue.model_copy(update={"job_type": "other"}))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", source_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert {(item["kind"], item["path"], item["reason"]) for item in payload["skipped"]} == {
+        (
+            "queue_record",
+            f"state/queue/ingest-{source_id}.json",
+            "queue record is not the expected source-owned ingest job",
+        )
+    }
+
+
+def test_cli_source_forget_reports_mixed_run_and_provenance_residuals(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nMixed references.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    mixed_run_path = layout.runs_dir / "run-mixed.json"
+    write_run_record(
+        mixed_run_path,
+        RunRecord(
+            run_id="run-mixed",
+            job_id="custom-job",
+            job_type="ingest_source",
+            started_at="2026-05-05T00:00:00Z",
+            finished_at="2026-05-05T00:00:01Z",
+            status="succeeded",
+            pipeline_version=__version__,
+            source_ids=[source_id, "src-other"],
+        ),
+    )
+    invalid_run_path = layout.runs_dir / "run-invalid.json"
+    invalid_run_path.write_text("{bad json}\n", encoding="utf-8")
+    other_run_path = layout.runs_dir / "run-other.json"
+    write_run_record(
+        other_run_path,
+        RunRecord(
+            run_id="run-other",
+            job_id="ingest-src-other",
+            job_type="ingest_source",
+            started_at="2026-05-05T00:00:00Z",
+            finished_at="2026-05-05T00:00:01Z",
+            status="succeeded",
+            pipeline_version=__version__,
+            source_ids=["src-other"],
+        ),
+    )
+    page_path = tmp_path / "wiki" / "topics" / "provenance.md"
+    frontmatter = KnowledgePageFrontmatter(
+        kind="topic",
+        title="Provenance",
+        page_id="topic-provenance",
+        status="active",
+        source_refs=[],
+        provenance_links=[ProvenanceLink(source_id=source_id, role="supports")],
+    )
+    page_path.parent.mkdir(parents=True, exist_ok=True)
+    page_path.write_text(
+        f"---\n{yaml.safe_dump(frontmatter.model_dump(mode='json'), sort_keys=False)}"
+        "---\n\nBody.\n",
+        encoding="utf-8",
+    )
+    malformed_page = tmp_path / "wiki" / "topics" / "malformed.md"
+    malformed_page.write_text(f"body mentions {source_id}\n", encoding="utf-8")
+    planning_path = tmp_path / "planning" / "tasks" / "task-ref.md"
+    planning_path.write_text(f"mentions {source_id}\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", source_id, "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert {
+        (item["kind"], item["path"]) for item in payload["skipped"] if item["kind"] == "run_record"
+    } == {("run_record", "state/runs/run-mixed.json")}
+    assert {(item["kind"], item["path"]) for item in payload["residual_references"]} == {
+        ("planning_text", "planning/tasks/task-ref.md"),
+        ("wiki_text", "wiki/topics/malformed.md"),
+        ("wiki_provenance", "wiki/topics/provenance.md"),
+    }
+
+
+def test_cli_source_forget_human_output_reports_next_commands(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nHuman output.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    capsys.readouterr()
+
+    preview_exit = main(["--root", str(tmp_path), "source", "forget", source_id])
+    preview_output = capsys.readouterr().out
+    apply_exit = main(["--root", str(tmp_path), "source", "forget", source_id, "--apply"])
+    apply_output = capsys.readouterr().out
+
+    assert preview_exit == 0
+    assert "Source forget preview" in preview_output
+    assert f"Next: splendor source forget {source_id} --apply" in preview_output
+    assert apply_exit == 0
+    assert "Source forget applied" in apply_output
+    assert "Next: splendor lint" in apply_output
+    assert "Next: splendor health" in apply_output
+
+
+def test_cli_source_forget_human_output_reports_empty_matching_preview(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", "--matching", "missing/**"])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "Source forget preview" in output
+    assert "No matching sources." in output
+
+
+def test_cli_source_forget_removes_materialized_copy_artifacts(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "external.md"
+    source_path.write_text("# External\n\nCopied.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source_path), "--storage-mode", "copy"])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+    materialized_path = tmp_path / "raw" / "sources" / source_id / "external.md"
+    assert materialized_path.exists()
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "forget", source_id, "--apply", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert {(item["kind"], item["path"]) for item in payload["actions"]} >= {
+        ("materialized_artifact", f"raw/sources/{source_id}/external.md"),
+        ("source_manifest", f"state/manifests/sources/{source_id}.json"),
+    }
+    assert not materialized_path.exists()
+    assert not materialized_path.parent.exists()
+    assert not manifest_path.exists()
 
 
 def test_cli_workspace_refresh_parser_accepts_safe_refresh_flags() -> None:
