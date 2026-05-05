@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M9-P3.1`
-- Current planned slice: `Issue #79 compile/update disposition`
-- Current PR sub-slice: `M15-P1.3`
+- Previous completed PR sub-slice: `M15-P1.3`
+- Current planned slice: `v0.2.0 evaluation release tagging readiness`
+- Current PR sub-slice: `v0.2.0-release-tag-prep`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely no open issue after #79 closes; release/tagging readiness`
-- Next planned PR sub-slice: `TBD`
+- Next planned slice: `post-v0.2.0 SynthBanshee/Claude Code evaluation`
+- Next planned PR sub-slice: `TBD after evaluation feedback`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -840,7 +840,7 @@ safe non-mutating scan previews, explicit apply gates, source IDs, manifest vali
 handoff behavior while avoiding repeated config loading and layout resolution during bulk
 registration.
 
-### M13-P3 v1 release-readiness checklist
+### M13-P3 / v0.2.0 evaluation release-readiness checklist
 
 - [x] M13-P2 safe discovery, source freshness, agent handoff, and path-first source-summary UX have
   landed.
@@ -857,8 +857,10 @@ registration.
   the shipped v1 briefing and non-mutating compile-contract scope.
 - [x] Final release handoff records validation commands, docs state, issue state, GitHub metadata,
   known non-blockers, and the post-v1 queue.
-- [ ] Tagging should happen only after the full validation suite, green CI on `main`, and release
-  notes that call out completed M13 work plus the explicit post-v1 queue.
+- [x] No GitHub issues remain open after the M15 disposition pass.
+- [ ] Tagging should happen only after the full validation suite, green CI on `main`, package
+  metadata set to `0.2.0`, and release notes that call out completed stabilization plus the next
+  SynthBanshee/Claude Code evaluation step.
 
 ### Exit criteria
 - the product is stable enough for sustained real-world use

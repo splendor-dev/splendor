@@ -314,18 +314,19 @@ Required secrets:
 - `pre-commit.ci autofix trigger` bridges bot PRs and `pre-commit.ci` label-based autofix behavior.
 - `weekly-repo-review` is scheduled maintenance, not a merge gate.
 
-## v1 release-hardening boundaries
+## v0.2.0 / v1 release-hardening boundaries
 
 The current automation layer supports CI, maintenance reports, generated-change PRs, PR context
-refresh, review automation, and optional weekly repo review. It does not yet provide stable logical
-source identities, supersession-aware pruning, a one-command full workspace refresh, or
-`splendor pr-summary --since main`. Those belong to later source-lifecycle or PR-summary slices,
-not the M13-P3.1 release-hardening pass.
+refresh, review automation, and optional weekly repo review. Source lifecycle, workspace refresh,
+and `splendor pr-summary --since main` remain local CLI contracts; GitHub workflows can report or
+package their output, but they do not replace the operator-reviewed local validation path.
 
-For the M13-P3.2 release handoff, `docs/v1_release_handoff.md` is the checklist that connects local
-validation, GitHub PR metadata, issue state, and known non-blockers. GitHub automation remains
-supporting infrastructure around the local CLI, not a substitute for the explicit validation
-commands named in that handoff.
+For the current `v0.2.0` evaluation-release prep, `docs/v1_release_handoff.md` remains the
+historical v1-style checklist that connects local validation, GitHub PR metadata, issue state, and
+known non-blockers, while `docs/v0_2_0_release_notes.md` names the immediate tag target and
+post-release SynthBanshee/Claude Code evaluation step. GitHub automation remains supporting
+infrastructure around the local CLI, not a substitute for the explicit validation commands named in
+that handoff.
 
 ## Planning update rule for PRs
 
