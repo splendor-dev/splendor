@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `v0.2.0-release-tag-prep`
-- Current planned slice: `M16 v0.3 evaluation intake and roadmap decomposition`
-- Current PR sub-slice: `M16-P0.1`
+- Previous completed PR sub-slice: `M16-P0.1`
+- Current planned slice: `M16-P1 source hygiene and registry recovery`
+- Current PR sub-slice: `M16-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M16-P1 source hygiene and registry recovery`
-- Next planned PR sub-slice: `M16-P1.1`
+- Next planned PR sub-slice: `M16-P1.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1130,8 +1130,8 @@ is preserved outside the repository at
 - `M16-P3.3` Publish release artifacts for easier trial installs (#120).
 
 ### Minimum v0.3 retry bar
-- Repo scan honors `.gitignore` and project-specific ignore rules across documentation scans,
-  `--all`, class-filtered scans, and apply paths.
+- Repo scan honors `.gitignore`, `.splendorignore`, and safe built-in ignore rules across
+  documentation scans, `--all`, class-filtered scans, and apply paths.
 - Operators can clean polluted registries through `source forget` without deleting manifests by
   hand.
 - Duplicate active source versions for the same canonical source ref can be reconciled through a

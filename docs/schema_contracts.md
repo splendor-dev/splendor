@@ -548,11 +548,13 @@ Current runtime behavior:
 - candidates include repo-relative paths, source classes, labels, status, and already-curated
   source identity when a workspace-backed source manifest already tracks the path
 - ignored paths include a deterministic reason such as `managed_or_transient`, `gitignore`,
-  `include_patterns`, `exclude_patterns`, or `class_filter`
+  `splendorignore`, `include_patterns`, `exclude_patterns`, or `class_filter`; pruned ignored
+  directories are reported with trailing slash paths
 - mutating registration requires `--apply` plus `--class ...` or `--all`
 - large apply runs require `--allow-large-apply` after preview review
 - scan honors `sources.include_patterns`, `sources.exclude_patterns`, and
-  `sources.repo_scan_default_classes` from `splendor.yaml`
+  `sources.repo_scan_default_classes` from `splendor.yaml`, plus optional root `.splendorignore`
+  project-specific ignore patterns
 - scan skips Git-ignored files, Splendor-managed directories, dependency directories, and
   transient cache/build directories by default
 

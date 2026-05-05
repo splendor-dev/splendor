@@ -51,6 +51,23 @@ def _write_mixed_repo(root: Path) -> None:
     (workflows_dir / "ci.yml").write_text("name: CI\n", encoding="utf-8")
 
 
+def _write_populated_ignored_dirs(root: Path) -> None:
+    ignored_sources = {
+        ".claude/settings.local.json": "{}\n",
+        ".mypy_cache/module.data.json": "{}\n",
+        ".pytest_cache/v/cache/nodeids": "[]\n",
+        ".ruff_cache/0.11.0/file.py": "print('ignored')\n",
+        ".venv/lib/site-packages/pkg.py": "print('ignored')\n",
+        "build/lib/generated.py": "print('ignored')\n",
+        "dist/package.json": "{}\n",
+        "src/__pycache__/main.py": "print('ignored')\n",
+    }
+    for relative_path, contents in ignored_sources.items():
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+
 def test_repo_scan_previews_and_classifies_supported_workspace_files(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
@@ -210,6 +227,96 @@ def test_repo_scan_ignores_managed_and_transient_directories(tmp_path: Path) -> 
     assert result.scanned == 1
     assert result.registered == 0
     assert [item.path for item in result.candidate_sources] == ["README.md"]
+
+
+def test_repo_scan_default_excludes_populated_local_tooling_dirs(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    _write_populated_ignored_dirs(tmp_path)
+
+    result = scan_repo(tmp_path)
+
+    assert [item.path for item in result.candidate_sources] == [
+        "README.md",
+        "docs/guide.md",
+    ]
+    ignored = {item.path: item.reason for item in result.ignored_paths}
+    assert ignored[".claude/"] == "managed_or_transient"
+    assert ignored[".mypy_cache/"] == "managed_or_transient"
+    assert ignored[".pytest_cache/"] == "managed_or_transient"
+    assert ignored[".ruff_cache/"] == "managed_or_transient"
+    assert ignored[".venv/"] == "managed_or_transient"
+    assert ignored["build/"] == "managed_or_transient"
+    assert ignored["dist/"] == "managed_or_transient"
+    assert ignored["src/__pycache__/"] == "managed_or_transient"
+
+
+def test_repo_scan_all_and_class_filters_exclude_populated_local_tooling_dirs(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    _write_populated_ignored_dirs(tmp_path)
+
+    all_result = scan_repo(tmp_path, all_classes=True)
+    class_filtered_result = scan_repo(tmp_path, class_filters=["documentation", "code"])
+
+    assert [item.path for item in all_result.candidate_sources] == [
+        "README.md",
+        "src/main.py",
+    ]
+    assert [item.path for item in class_filtered_result.candidate_sources] == [
+        "README.md",
+        "src/main.py",
+    ]
+    assert all(
+        not item.path.startswith((".claude", ".mypy_cache", ".pytest_cache", ".ruff_cache"))
+        for item in all_result.candidate_sources
+    )
+
+
+def test_repo_scan_apply_excludes_populated_local_tooling_dirs(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    _write_populated_ignored_dirs(tmp_path)
+
+    result = apply_repo_scan(tmp_path, all_classes=True)
+
+    assert [item.path for item in result.touched_sources] == ["README.md", "src/main.py"]
+    manifest_refs = {load_source_record(path).source_ref for path in _manifest_paths(tmp_path)}
+    assert manifest_refs == {"README.md", "src/main.py"}
+
+
+def test_render_repo_scan_json_reports_pruned_ignored_directories(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    _write_populated_ignored_dirs(tmp_path)
+
+    payload = json.loads(render_repo_scan_json(scan_repo(tmp_path, all_classes=True)))
+
+    ignored = {item["path"]: item["reason"] for item in payload["ignored_paths"]}
+    assert ignored[".claude/"] == "managed_or_transient"
+    assert ignored[".mypy_cache/"] == "managed_or_transient"
+    assert ignored[".pytest_cache/"] == "managed_or_transient"
+    assert ignored[".ruff_cache/"] == "managed_or_transient"
+    assert ignored[".venv/"] == "managed_or_transient"
+    assert ignored["build/"] == "managed_or_transient"
+    assert ignored["dist/"] == "managed_or_transient"
 
 
 def test_repo_scan_reports_unsupported_files(tmp_path: Path) -> None:
@@ -571,6 +678,55 @@ def test_repo_scan_prunes_gitignored_directories_before_walking(tmp_path: Path) 
 
     assert [item.path for item in result.candidate_sources] == ["README.md"]
     assert "vendor/skip.md" not in {item.path for item in result.ignored_paths}
+    assert {item.path: item.reason for item in result.ignored_paths}["vendor/"] == "gitignore"
+
+
+def test_repo_scan_respects_splendorignore_file_patterns(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / ".splendorignore").write_text(
+        "# local scan policy\nsecret.md\ndocs/private/*.md\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    (tmp_path / "secret.md").write_text("# Secret\n", encoding="utf-8")
+    private_dir = tmp_path / "docs" / "private"
+    private_dir.mkdir(parents=True)
+    (private_dir / "note.md").write_text("# Private\n", encoding="utf-8")
+    (private_dir / "keep.txt").write_text("Keep\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path, all_classes=True)
+
+    assert [item.path for item in result.candidate_sources] == [
+        "README.md",
+        "docs/private/keep.txt",
+    ]
+    ignored = {item.path: item.reason for item in result.ignored_paths}
+    assert ignored["secret.md"] == "splendorignore"
+    assert ignored["docs/private/note.md"] == "splendorignore"
+
+
+def test_repo_scan_respects_splendorignore_directory_patterns(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / ".splendorignore").write_text(
+        "local-agent/\ndocs/private-cache/\n", encoding="utf-8"
+    )
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    local_agent_dir = tmp_path / "local-agent"
+    local_agent_dir.mkdir()
+    (local_agent_dir / "settings.json").write_text("{}\n", encoding="utf-8")
+    private_cache_dir = tmp_path / "docs" / "private-cache"
+    private_cache_dir.mkdir(parents=True)
+    (private_cache_dir / "skip.md").write_text("# Skip\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path, all_classes=True)
+
+    assert [item.path for item in result.candidate_sources] == ["README.md"]
+    ignored = {item.path: item.reason for item in result.ignored_paths}
+    assert ignored["local-agent/"] == "splendorignore"
+    assert ignored["docs/private-cache/"] == "splendorignore"
+    assert "local-agent/settings.json" not in ignored
 
 
 def test_repo_scan_apply_requires_explicit_class_or_all(tmp_path: Path) -> None:

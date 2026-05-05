@@ -148,7 +148,10 @@ Not implemented yet:
 - mutating web UI actions such as add-source forms
 
 `splendor repo scan` is safe by default: it previews candidates without writing manifests or
-derived state. Registration requires `repo scan --apply` plus `--class ...` or `--all`.
+derived state. Registration requires `repo scan --apply` plus `--class ...` or `--all`. Scan
+previews honor `.gitignore`, root `.splendorignore`, Splendor-managed paths, dependency
+directories, local-agent directories, and transient cache/build directories before class filtering
+or apply registration.
 `splendor source freshness` is also non-mutating by default: it compares workspace-backed curated
 source files to their manifest checksums, reports unchanged/changed/missing/unsupported sources,
 and prints exact `source refresh`/`ingest --pending` next commands for stale paths. `--json` emits
@@ -241,12 +244,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `v0.2.0-release-tag-prep`
-- Current planned slice: `M16 v0.3 evaluation intake and roadmap decomposition`
-- Current PR sub-slice: `M16-P0.1`
+- Previous completed PR sub-slice: `M16-P0.1`
+- Current planned slice: `M16-P1 source hygiene and registry recovery`
+- Current PR sub-slice: `M16-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M16-P1 source hygiene and registry recovery`
-- Next planned PR sub-slice: `M16-P1.1`
+- Next planned PR sub-slice: `M16-P1.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -465,7 +468,7 @@ rewritten.
 
 ### v0.3 recovery readiness checklist
 
-- [ ] Repo scan ignores and `.splendorignore` prevent cache/local-agent source pollution.
+- [x] Repo scan ignores and `.splendorignore` prevent cache/local-agent source pollution.
 - [ ] `splendor source forget` provides safe single and bulk source-registry recovery.
 - [ ] Duplicate canonical source versions can be reconciled without manual manifest edits.
 - [ ] Health resolves existing manifest source IDs without false unknown-source diagnostics.

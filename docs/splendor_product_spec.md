@@ -876,9 +876,10 @@ M13-P2 repo-discovery contracts:
   requires `--report PATH`, and that path writes only report JSON.
 - Mutating registration from scan requires `--apply` plus either `--class ...` or `--all`; the bare
   command says it is preview-only and prints the explicit apply command.
-- Repo scan supports class filters, include/exclude patterns from `splendor.yaml`, and large
-  candidate-set guards before registration. Exclude patterns win over include patterns, and class
-  filters apply after include/exclude filtering.
+- Repo scan supports class filters, include/exclude patterns from `splendor.yaml`, optional root
+  `.splendorignore` project-specific ignore patterns, and large candidate-set guards before
+  registration. Exclude patterns win over include patterns, and class filters apply after
+  include/exclude filtering.
 - Broad registration refuses large candidate sets unless the operator passes
   `--allow-large-apply` after reviewing the preview/report.
 - `splendor.yaml` supports `sources.include_patterns`, `sources.exclude_patterns`, and
@@ -1331,11 +1332,12 @@ Current source settings:
 - `sources.repo_scan_default_classes`: class policy for non-mutating candidate discovery, applied
   after include/exclude filtering, default `["documentation"]`
 
-Repo scan should skip Git-ignored files, Splendor state/output directories, dependency directories,
-build artifacts, and other generated paths by default unless a future explicit override flag
-documents the extra churn. Class filters narrow the already-filtered candidate set; they should not
-override excludes. The default class policy should bias toward documentation and curated knowledge
-over all supported files.
+Repo scan should skip Git-ignored files, root `.splendorignore` project-specific ignores, Splendor
+state/output directories, dependency directories, build artifacts, local-agent directories, and
+other generated paths by default unless a future explicit override flag documents the extra churn.
+Class filters narrow the already-filtered candidate set; they should not override excludes. The
+default class policy should bias toward documentation and curated knowledge over all supported
+files.
 
 ## 28. Minimum Opinionated Core
 
