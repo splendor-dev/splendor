@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M16-P3.2`
-- Current planned slice: `M16-P3 workflow polish and trial-install polish`
-- Current PR sub-slice: `M16-P3.3`
+- Previous completed PR sub-slice: `M16-P3.3`
+- Current planned slice: `M17 v1 public readiness`
+- Current PR sub-slice: `M17-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P1.1`
+- Next planned PR sub-slice: `M17-P2.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1167,12 +1167,14 @@ handoff.
 - `M17-P4.1` Reduce contradiction-review task noise (#117).
 
 ### Public mock client guidance
-The public mock client should model a realistic small CLI/data project with human-authored specs,
-implementation plans, decision records, research notes that contain real contradictions, a
-non-trivial PR history, populated ignored cache directories in local scenarios, and dedicated
-failure branches or fixtures for polluted manifests, dangling active sources, and renamed-file
-repairs. Healthy `main` should be useful for first-run evaluation; intentionally broken states
-belong in scenario branches or fixtures.
+`M17-P1.1` creates
+[`splendor-dev/mock-client-acceptance`](https://github.com/splendor-dev/mock-client-acceptance) as
+the public mock client acceptance repository. It models a realistic small CLI/data project with
+human-authored specs, implementation plans, decision records, contradictory research notes, a
+non-trivial commit history, a healthy Splendor workspace on `main`, a source-refresh scenario
+branch, and isolated recovery fixtures for polluted registries and renamed-source repair. The
+operator-facing workflow is documented in
+[public mock client acceptance](public_mock_client_acceptance.md).
 
 ## Milestone 18 — v2 advanced product track
 
