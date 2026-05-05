@@ -324,6 +324,22 @@ def test_run_lint_checks_reports_missing_active_source_ref(tmp_path: Path) -> No
     assert result.issues[0].path == added.manifest_path.relative_to(tmp_path).as_posix()
 
 
+def test_run_lint_checks_requires_source_ref_for_workspace_sources(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    manifest = load_source_record(added.manifest_path).model_copy(
+        update={"source_ref": None, "path": "brief.md"}
+    )
+    write_source_record(added.manifest_path, manifest)
+
+    result = _run_lint(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["missing-source-live-path"]
+    assert result.issues[0].message == "Workspace source manifest is missing a live source_ref."
+
+
 def test_run_lint_checks_validates_source_supersession_refs(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "brief.md"
@@ -605,6 +621,7 @@ def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path
         update={
             "provenance_links": [
                 ProvenanceLink(page_id="missing-page", role="generated-page"),
+                ProvenanceLink(path_ref="wiki/sources/missing.md", role="generated-page"),
                 ProvenanceLink(path_ref="../outside.md", role="input"),
             ]
         }
@@ -633,6 +650,7 @@ def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path
         or issue.code.startswith("invalid-provenance")
         or issue.code.startswith("source-summary")
     } == {
+        "missing-provenance-path",
         "missing-provenance-page-ref",
         "invalid-provenance-path-ref",
         "source-summary-source-ref-mismatch",

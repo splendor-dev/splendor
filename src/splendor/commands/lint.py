@@ -441,7 +441,9 @@ def _run_reference_integrity_checks(
                 valid_source_ids=valid_source_ids,
                 valid_page_ids=valid_page_ids,
                 check_name="source-provenance",
-                require_existing_paths=False,
+                missing_path_is_allowed=lambda link, source=manifest.record: (
+                    _is_historical_source_input_path(source, link)
+                ),
             )
         )
 
@@ -532,8 +534,7 @@ def _source_live_path_issues(root: Path, manifest: _SourceInventory) -> list[Mai
         return []
 
     manifest_relpath = workspace_relative_path(root, manifest.manifest_path)
-    live_ref = source.source_ref or source.path
-    if not live_ref:
+    if not source.source_ref:
         return [
             MaintenanceIssue(
                 code="missing-source-live-path",
@@ -545,7 +546,7 @@ def _source_live_path_issues(root: Path, manifest: _SourceInventory) -> list[Mai
         ]
 
     try:
-        resolved = resolve_workspace_path(root, live_ref, context="Workspace source")
+        resolved = resolve_workspace_path(root, source.source_ref, context="Workspace source")
     except ValueError as exc:
         return [
             MaintenanceIssue(
@@ -561,12 +562,22 @@ def _source_live_path_issues(root: Path, manifest: _SourceInventory) -> list[Mai
     return [
         MaintenanceIssue(
             code="missing-source-live-path",
-            message=f"Workspace source live path does not exist: {live_ref}",
+            message=f"Workspace source live path does not exist: {source.source_ref}",
             path=manifest_relpath,
             record_id=source.source_id,
             check_name="source-live-path",
         )
     ]
+
+
+def _is_historical_source_input_path(source: SourceRecord, link) -> bool:
+    if link.role != "input" or link.path_ref is None:
+        return False
+    if source.source_ref_kind != "workspace_path":
+        return False
+    if source.superseded_by is not None:
+        return True
+    return source.source_ref is not None and link.path_ref != source.source_ref
 
 
 def _source_lifecycle_issues(
@@ -1342,7 +1353,7 @@ def _provenance_link_issues(
     valid_source_ids: set[str],
     valid_page_ids: set[str],
     check_name: str,
-    require_existing_paths: bool = True,
+    missing_path_is_allowed=None,
 ) -> list[MaintenanceIssue]:
     issues: list[MaintenanceIssue] = []
     for link in links:
@@ -1381,9 +1392,9 @@ def _provenance_link_issues(
                 )
             )
             continue
-        if not require_existing_paths:
-            continue
         if not resolved.exists():
+            if missing_path_is_allowed is not None and missing_path_is_allowed(link):
+                continue
             issues.append(
                 MaintenanceIssue(
                     code="missing-provenance-path",
