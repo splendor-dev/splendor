@@ -1764,7 +1764,7 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         f"unsupported={result.initial_freshness.unsupported} "
         f"historical={result.initial_freshness.historical}"
     )
-    if not result.refreshed:
+    if args.changed and not result.refreshed:
         print("No changed curated workspace-backed sources were refreshed.")
     if result.skipped_sources:
         print("Skipped unresolved curated workspace sources:")
@@ -1842,8 +1842,11 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         print("Workspace refresh completed with unresolved curated sources.")
         print("Next: splendor source freshness")
         return 1
-    if result.index is None and result.ingest is None and result.refreshed:
-        print("Next: splendor ingest --pending")
+    if result.ingest is None and result.refreshed:
+        if result.index is not None:
+            print("Next: splendor ingest --pending, then splendor wiki rebuild-index")
+        else:
+            print("Next: splendor ingest --pending")
     elif result.index is None and result.ingest is not None and result.ingest.succeeded:
         print("Next: splendor wiki rebuild-index")
     else:

@@ -237,10 +237,13 @@ Implemented fields:
   records created or reused for successful refreshed sources with `--ingest`. The command exits
   non-zero when unresolved skipped sources, failed source refreshes, or targeted ingest failures
   remain, while preserving successful refresh and ingest work.
-- `splendor workspace refresh --changed --ingest --rebuild-index` rebuilds `wiki/index.md` only
-  after the targeted refreshed-source ingest succeeds. JSON output reports both initial and final
-  freshness counts plus skipped-source and failed-refresh diagnostics. `--prune-superseded` deletes
-  superseded generated source-summary pages after a current successor summary exists, removes the pruned
+- `splendor workspace refresh --rebuild-index` rebuilds `wiki/index.md` as standalone maintenance
+  or after any requested changed-source refresh, targeted ingest, pruning, or topic-ref migration.
+  `--changed --ingest` drains only refreshed-source queue records, not unrelated pending ingest
+  jobs. JSON output reports both initial and final freshness counts plus skipped-source,
+  failed-refresh, targeted-ingest, index, pruning, and topic-ref migration diagnostics.
+  `--prune-superseded` deletes superseded generated source-summary pages after a current successor
+  summary exists, removes the pruned
   generated-page link from the superseded source manifest, and preserves historical source
   manifests and run records. Health treats run page refs for those exact pruned superseded
   workspace summaries as valid historical provenance without exempting unrelated broken run refs.

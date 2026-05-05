@@ -240,8 +240,14 @@ is the artifact being reviewed.
 
 `source refresh` creates a new canonical content-addressed source version when bytes change.
 Workspace-backed sources keep stable logical IDs, and `workspace refresh --changed` can combine
-changed-source refresh, targeted ingest, index rebuild, superseded generated-summary pruning, and
-maintained-page topic-ref migration through explicit flags.
+changed-source refresh with targeted ingest. `--changed --ingest` drains only queue jobs created or
+reused for refreshed sources, leaving unrelated pending jobs alone. Index rebuilds, superseded
+generated-summary pruning, and maintained-page topic-ref migration can run standalone with
+`workspace refresh --rebuild-index`, `workspace refresh --prune-superseded`, or
+`workspace refresh --update-topic-refs`, or in one pass with
+`workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index`.
+If pruning runs before successor source-summary pages exist, rerun
+`workspace refresh --prune-superseded` after the refreshed sources are ingested.
 
 ## 5. Add a planning record
 

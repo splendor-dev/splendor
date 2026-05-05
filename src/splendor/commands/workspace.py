@@ -93,32 +93,28 @@ def refresh_workspace(
     prune_superseded: bool = False,
     update_topic_refs: bool = False,
 ) -> WorkspaceRefreshResult:
-    if not changed:
-        msg = "workspace refresh requires --changed in this release"
+    if ingest and not changed:
+        msg = "workspace refresh --ingest requires --changed"
         raise ValueError(msg)
-    if rebuild_index and not ingest:
-        msg = "workspace refresh --rebuild-index requires --ingest"
+    if not any([changed, rebuild_index, prune_superseded, update_topic_refs]):
+        msg = (
+            "workspace refresh requires at least one maintenance action: "
+            "--changed, --rebuild-index, --prune-superseded, or --update-topic-refs"
+        )
         raise ValueError(msg)
 
     initial_freshness = scan_source_freshness(root)
     skipped_sources = _unresolved_active_workspace_sources(initial_freshness)
-    changed_items = [item for item in initial_freshness.sources if item.status == "changed"]
+    changed_items = (
+        [item for item in initial_freshness.sources if item.status == "changed"] if changed else []
+    )
     refreshed, failed_sources = _refresh_changed_items(root, changed_items)
 
     ingest_result = _drain_refreshed_ingest_jobs(root, refreshed) if ingest else None
-    index_result = None
-    if rebuild_index and (ingest_result is None or ingest_result.failed == 0):
-        index_result = rebuild_wiki_index(root)
     topic_ref_migration_result = migrate_superseded_topic_refs(root) if update_topic_refs else None
     pruning_result = prune_superseded_source_summaries(root) if prune_superseded else None
-    if rebuild_index and (
-        (pruning_result is not None and pruning_result.pruned)
-        or (
-            topic_ref_migration_result is not None
-            and topic_ref_migration_result.updated
-            and index_result is None
-        )
-    ):
+    index_result = None
+    if rebuild_index and (ingest_result is None or ingest_result.failed == 0):
         index_result = rebuild_wiki_index(root)
     final_freshness = scan_source_freshness(root)
 
