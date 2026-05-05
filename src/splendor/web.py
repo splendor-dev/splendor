@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 import bleach
 import markdown as markdown_lib
+import yaml
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
@@ -716,14 +717,68 @@ def _empty_workspace_panel() -> str:
 
 
 def _document_summary(root: Path, layout: ResolvedLayout, path: Path) -> _DocumentSummary:
-    detail = _document_detail(root, layout, path)
+    relative_path = path.relative_to(root).as_posix()
+    metadata = _read_listing_metadata(path)
+    if path.is_relative_to(layout.wiki_dir):
+        document_class = "wiki"
+        default_kind = None
+    else:
+        document_class = "planning"
+        default_kind = _planning_kind(layout, path)
     return _DocumentSummary(
-        path=detail.path,
-        title=detail.title,
-        document_class=detail.document_class,
-        kind=detail.kind,
-        status=detail.status,
+        path=relative_path,
+        title=metadata.get("title") or _title_from_path(relative_path),
+        document_class=document_class,
+        kind=metadata.get("kind") or default_kind,
+        status=metadata.get("status"),
     )
+
+
+def _read_listing_metadata(path: Path) -> dict[str, str | None]:
+    """Read only frontmatter and the first heading needed for browse rows."""
+    frontmatter_lines: list[str] = []
+    heading: str | None = None
+    frontmatter: dict[str, object] = {}
+    frontmatter_closed = False
+
+    with path.open("r", encoding="utf-8") as handle:
+        first_line = handle.readline()
+        if first_line.replace("\r\n", "\n").replace("\r", "\n") == "---\n":
+            for line in handle:
+                normalized = line.replace("\r\n", "\n").replace("\r", "\n")
+                if normalized == "---\n":
+                    frontmatter_closed = True
+                    break
+                frontmatter_lines.append(normalized)
+            if frontmatter_closed:
+                frontmatter = _load_listing_frontmatter(frontmatter_lines)
+        else:
+            heading = _heading_from_line(first_line)
+
+        if heading is None and not _frontmatter_string(frontmatter, "title"):
+            for line in handle:
+                heading = _heading_from_line(line)
+                if heading is not None:
+                    break
+
+    return {
+        "title": _frontmatter_string(frontmatter, "title") or heading,
+        "kind": _frontmatter_string(frontmatter, "kind"),
+        "status": _frontmatter_string(frontmatter, "status"),
+    }
+
+
+def _load_listing_frontmatter(frontmatter_lines: list[str]) -> dict[str, object]:
+    try:
+        loaded = yaml.safe_load("".join(frontmatter_lines))
+    except yaml.YAMLError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _frontmatter_string(frontmatter: dict[str, object], key: str) -> str | None:
+    value = frontmatter.get(key)
+    return value if isinstance(value, str) and value else None
 
 
 def _document_detail(root: Path, layout: ResolvedLayout, path: Path) -> _DocumentDetail:
@@ -840,10 +895,23 @@ def _render_markdown(markdown_text: str) -> str:
 
 def _title_from_markdown(markdown_text: str, fallback: str) -> str:
     for line in markdown_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            return stripped.removeprefix("# ").strip() or fallback
+        heading = _heading_from_line(line)
+        if heading is not None:
+            return heading or fallback
     return fallback
+
+
+def _heading_from_line(line: str) -> str | None:
+    stripped = line.strip()
+    if stripped.startswith("# "):
+        return stripped.removeprefix("# ").strip()
+    return None
+
+
+def _title_from_path(path: str) -> str:
+    stem = PurePosixPath(path).stem
+    title = stem.replace("-", " ").replace("_", " ").strip()
+    return title.title() if title else path
 
 
 def _document_row(document: _DocumentSummary) -> str:

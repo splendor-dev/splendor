@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M10-P3.1`
-- Current planned slice: `Repo-scan registration overhead`
-- Current PR sub-slice: `M13-P3.3`
+- Previous completed PR sub-slice: `M13-P3.3`
+- Current planned slice: `Local web UI document-list scaling`
+- Current PR sub-slice: `M9-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely local web UI document-list scaling or issue #79 disposition`
-- Next planned PR sub-slice: `likely TBD, possibly #37 or a narrowed #79 follow-up`
+- Next planned slice: `likely issue #79 disposition or narrowed compile/update follow-up`
+- Next planned PR sub-slice: `likely TBD, possibly M15-P1.3 if a concrete #79 follow-up is defined`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -555,6 +555,7 @@ Provide a modest but useful human UI without changing the system’s center of g
 - `M10-P0.2` Project briefing and compile-loop contract
 - `M10-P0.3` Dogfood workflow polish and web status surfaces
 - `M9-P2.1` Planning/runs UI views
+- `M9-P3.1` Local web UI document-list scaling
 
 ### Milestone 9 status
 
@@ -570,7 +571,9 @@ work. `M10-P0.2` adds project briefing and a documented, non-mutating review-gat
 contract. `M10-P0.3` polishes the visible dogfood workflow with query snippet improvements,
 restrained next-action hints, and read-only web status/source-detail surfaces. `M9-P2.1` adds
 read-only planning record lists plus queue and run inspection views to the same local web shell.
-Mutating web actions and add-source forms remain deferred to later `M9` slices.
+`M9-P3.1` keeps browse and home listing lightweight by deriving rows from paths plus cheap markdown
+metadata while deferring full document parsing to detail and search. Mutating web actions and
+add-source forms remain deferred to later `M9` slices.
 
 ---
 

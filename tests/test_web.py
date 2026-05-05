@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 from fastapi.testclient import TestClient
 
+import splendor.web as web
 from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
@@ -93,6 +94,91 @@ def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
     assert "Ship web shell" in response.text
     assert "wiki/concepts/web-shell.md" in response.text
     assert "planning/tasks/task-ship-web-shell.md" in response.text
+
+
+def test_home_and_browse_listing_do_not_parse_full_documents(tmp_path: Path, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    wiki_path = tmp_path / "wiki" / "concepts" / "large-web-shell.md"
+    write_wiki_page(
+        wiki_path,
+        title="Large web shell",
+        page_id="concept-large-web-shell",
+        body="# Large web shell\n\n" + ("Body text that listing should not parse.\n" * 500),
+    )
+    create_task(
+        tmp_path,
+        "Track web scaling",
+        record_id="task-track-web-scaling",
+        status="todo",
+        priority="medium",
+        owner=None,
+        milestone_refs=[],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+    )
+    planning_path = tmp_path / "planning" / "tasks" / "task-track-web-scaling.md"
+
+    def fail_detail(*args, **kwargs):
+        raise AssertionError("listing should not use full document detail parsing")
+
+    def fail_wiki_parse(*args, **kwargs):
+        raise AssertionError("listing should not parse full wiki documents")
+
+    def fail_planning_parse(*args, **kwargs):
+        raise AssertionError("listing should not parse full planning documents")
+
+    monkeypatch.setattr(web, "_document_detail", fail_detail)
+    monkeypatch.setattr(web, "parse_wiki_markdown", fail_wiki_parse)
+    monkeypatch.setattr(web, "parse_planning_document", fail_planning_parse)
+    real_open = Path.open
+    guarded_paths = {wiki_path.resolve(), planning_path.resolve()}
+
+    class FrontmatterOnlyGuard:
+        def __init__(self, handle):
+            self._handle = handle
+            self._frontmatter_closed = False
+
+        def __enter__(self):
+            self._handle.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self._handle.__exit__(*args)
+
+        def readline(self, *args, **kwargs):
+            return self._handle.readline(*args, **kwargs)
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self._frontmatter_closed:
+                raise AssertionError("listing should not read document bodies")
+            line = next(self._handle)
+            if line.replace("\r\n", "\n").replace("\r", "\n") == "---\n":
+                self._frontmatter_closed = True
+            return line
+
+    def guarded_open(path, *args, **kwargs):
+        handle = real_open(path, *args, **kwargs)
+        if Path(path).resolve() in guarded_paths:
+            return FrontmatterOnlyGuard(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", guarded_open)
+    client = TestClient(create_app(tmp_path))
+
+    home = client.get("/")
+    browse = client.get("/browse")
+
+    assert home.status_code == 200
+    assert browse.status_code == 200
+    assert "Large web shell" in browse.text
+    assert "Track web scaling" in browse.text
+    assert "wiki/concepts/large-web-shell.md" in browse.text
+    assert "planning/tasks/task-track-web-scaling.md" in browse.text
 
 
 def test_browse_page_separates_index_and_log_as_special_files(tmp_path: Path) -> None:
