@@ -198,9 +198,10 @@ references for review instead of rewritten.
 `splendor source reconcile <source-id|logical-id|title|path>` is the preview-first repair path for
 duplicate active canonical source versions. It resolves one canonical source-ref group, chooses the
 latest active source version as current unless an exact source ID or `--current` selector is
-provided, and reports the manifest lifecycle edits needed to complete the `supersedes` /
-`superseded_by` graph. Add `--apply` to mark older active versions as superseded by the selected
-current version. Cross-canonical or ambiguous selections are rejected without rewriting manifests.
+provided, and reports the manifest lifecycle edits needed to complete one-way or missing
+`supersedes` / `superseded_by` links around that current version. Add `--apply` to mark older
+active versions as superseded by the selected current version. Cross-canonical selections and
+ambiguous `--current` selectors are rejected without rewriting manifests.
 
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed

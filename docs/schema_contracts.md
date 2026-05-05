@@ -213,10 +213,11 @@ Implemented fields:
 - `splendor source reconcile <source-id|logical-id|title|path>` previews duplicate active source
   version repair for one canonical source-ref group. Without `--current`, an exact source ID keeps
   that source active; otherwise the latest active version by `(added_at, source_id)` is selected.
-  `--current <selector>` must resolve to an active source in the same canonical group. `--apply`
-  writes only affected source manifests, setting `superseded_by` on older active versions and
-  appending those source IDs to the current record's `supersedes` list. Ambiguous, unknown,
-  superseded-current, and cross-canonical selections fail without manifest writes.
+  `--current <selector>` must resolve to exactly one active source in the same canonical group.
+  `--apply` writes only affected source manifests, setting `superseded_by` on older active
+  versions and appending those source IDs plus same-canonical one-way links to the current record's
+  `supersedes` list. Ambiguous, unknown, superseded-current, and cross-canonical selections fail
+  without manifest writes.
 - `splendor source freshness` is a non-mutating preview over curated source manifests. It reports
   path-first freshness state for workspace-backed canonical source refs, including unchanged,
   changed, missing, and unsupported statuses, manifest/current checksums where available, source

@@ -477,17 +477,11 @@ def reconcile_sources(
         msg = f"Current source version is already superseded: {current.source_id}"
         raise ValueError(msg)
 
-    superseded_ids = [
-        result.source.source_id
-        for result in sorted(active_group, key=_latest_source_sort_key)
-        if result.source.source_id != current.source_id
-    ]
+    superseded_ids = _reconcile_superseded_ids(group, current)
     updates: list[SourceReconcileUpdate] = []
-    for result in sorted(active_group, key=lambda item: item.source.source_id):
+    for result in sorted(group, key=lambda item: item.source.source_id):
         source = result.source
-        if source.source_id == current.source_id:
-            continue
-        if source.superseded_by == current.source_id:
+        if source.source_id not in superseded_ids or source.superseded_by == current.source_id:
             continue
         updates.append(
             SourceReconcileUpdate(
@@ -513,16 +507,22 @@ def reconcile_sources(
             )
         )
 
-    if apply:
-        for update in updates:
-            updated = SourceRecord.model_validate(
+    validated_updates = [
+        (
+            update.manifest_path,
+            SourceRecord.model_validate(
                 update.source.model_dump(mode="json")
                 | {
                     "supersedes": update.after_supersedes,
                     "superseded_by": update.after_superseded_by,
                 }
-            )
-            write_source_record(update.manifest_path, updated)
+            ),
+        )
+        for update in updates
+    ]
+    if apply:
+        for manifest_path, updated in validated_updates:
+            write_source_record(manifest_path, updated)
 
     return SourceReconcileResult(
         applied=apply,
@@ -712,7 +712,7 @@ def _current_reconcile_match(
     if current_selector is None:
         msg = "--current requires a source selector"
         raise ValueError(msg)
-    current_match = resolve_source_query_exact(root, current_selector)
+    current_match = _resolve_reconcile_current_exact(root, current_selector)
     if canonical_source_ref(current_match.source) != canonical_ref:
         msg = (
             "Current source version must share the selected canonical source ref: "
@@ -720,6 +720,64 @@ def _current_reconcile_match(
         )
         raise ValueError(msg)
     return current_match
+
+
+def _resolve_reconcile_current_exact(root: Path, selector: str) -> SourceLookupResult:
+    matches = list_sources(root)
+    exact_id_matches = [match for match in matches if match.source.source_id == selector]
+    if exact_id_matches:
+        return exact_id_matches[0]
+
+    exact_identity_matches = [
+        match
+        for match in matches
+        if canonical_source_ref(match.source) == selector
+        or (match.source.original_path is not None and match.source.original_path == selector)
+        or effective_logical_id(match.source) == selector
+        or selector in effective_aliases(match.source)
+    ]
+    if exact_identity_matches:
+        return _single_reconcile_current_match(selector, exact_identity_matches)
+
+    exact_title_matches = [
+        match for match in matches if match.source.title.casefold() == selector.casefold()
+    ]
+    if exact_title_matches:
+        return _single_reconcile_current_match(selector, exact_title_matches)
+
+    label = "source ID" if selector.startswith("src-") else "source"
+    msg = f"Unknown {label}: {selector}"
+    raise FileNotFoundError(msg)
+
+
+def _single_reconcile_current_match(
+    selector: str, matches: list[SourceLookupResult]
+) -> SourceLookupResult:
+    if len(matches) == 1:
+        return matches[0]
+    ids = ", ".join(match.source.source_id for match in matches[:5])
+    suffix = "" if len(matches) <= 5 else ", ..."
+    msg = f"Current source selector is ambiguous for {selector!r}: {ids}{suffix}"
+    raise ValueError(msg)
+
+
+def _reconcile_superseded_ids(group: list[SourceLookupResult], current: SourceRecord) -> list[str]:
+    current_supersedes = set(current.supersedes)
+    target_ids = {
+        result.source.source_id
+        for result in group
+        if result.source.source_id != current.source_id
+        and (
+            result.source.superseded_by is None
+            or result.source.superseded_by == current.source_id
+            or result.source.source_id in current_supersedes
+        )
+    }
+    return [
+        result.source.source_id
+        for result in sorted(group, key=_latest_source_sort_key)
+        if result.source.source_id in target_ids
+    ]
 
 
 def _latest_source_sort_key(result: SourceLookupResult) -> tuple[str, str]:

@@ -176,6 +176,14 @@ def test_cli_source_reconcile_repairs_duplicate_active_versions(tmp_path: Path, 
     assert preview["next_commands"] == ["splendor source reconcile brief.md --apply"]
     assert {path.name: path.read_text(encoding="utf-8") for path in manifest_paths} == before_text
 
+    ambiguous_current_code = main(
+        ["--root", str(tmp_path), "source", "reconcile", "brief.md", "--current", "brief.md"]
+    )
+
+    assert ambiguous_current_code == 1
+    assert "Current source selector is ambiguous" in capsys.readouterr().out
+    assert {path.name: path.read_text(encoding="utf-8") for path in manifest_paths} == before_text
+
     apply_code = main(["--root", str(tmp_path), "source", "reconcile", "brief.md", "--apply"])
 
     assert apply_code == 0
@@ -228,6 +236,54 @@ def test_cli_source_reconcile_explicit_source_id_selects_current(tmp_path: Path,
 
     assert rejected_code == 1
     assert "Current source version is already superseded" in capsys.readouterr().out
+
+
+def test_cli_source_reconcile_repairs_partial_same_canonical_graph(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source_path.write_text("# Brief\n\nRepo scan duplicate.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    source_path.write_text("# Brief\n\nRefreshed repo scan duplicate.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+
+    records = {
+        path.stem: load_source_record(path)
+        for path in sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    }
+    current_id = max(
+        records.values(), key=lambda record: (record.added_at, record.source_id)
+    ).source_id
+    middle_id = next(
+        source_id for source_id in records if source_id not in {original_id, current_id}
+    )
+    middle_path = tmp_path / "state" / "manifests" / "sources" / f"{middle_id}.json"
+    current_path = tmp_path / "state" / "manifests" / "sources" / f"{current_id}.json"
+    write_source_record(
+        middle_path,
+        records[middle_id].model_copy(update={"superseded_by": current_id}),
+    )
+    write_source_record(
+        current_path,
+        records[current_id].model_copy(update={"supersedes": [middle_id]}),
+    )
+    assert "multiple-active-source-versions" in lint_issue_codes(tmp_path)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "reconcile", "brief.md", "--apply"])
+
+    assert exit_code == 0
+    after_records = {
+        path.stem: load_source_record(path)
+        for path in sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    }
+    assert after_records[original_id].superseded_by == current_id
+    assert after_records[middle_id].superseded_by == current_id
+    assert after_records[current_id].superseded_by is None
+    assert set(after_records[current_id].supersedes) == {original_id, middle_id}
+    assert lint_issue_codes(tmp_path) == []
 
 
 def test_cli_source_reconcile_rejects_ambiguous_or_cross_canonical_current(
