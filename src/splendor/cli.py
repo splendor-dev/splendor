@@ -22,7 +22,12 @@ from splendor.commands.file_answer import (
     file_answer_from_last_query,
 )
 from splendor.commands.health import run_health_checks
-from splendor.commands.ingest import drain_pending_ingest_jobs, enqueue_ingest_job, ingest_source
+from splendor.commands.ingest import (
+    drain_pending_ingest_jobs,
+    enqueue_ingest_job,
+    ingest_source,
+    render_pending_ingest_json,
+)
 from splendor.commands.init import initialize_workspace
 from splendor.commands.lint import run_lint_checks
 from splendor.commands.maintenance import execute_maintenance_command, render_report_json
@@ -352,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         dest="json_output",
-        help="Emit machine-readable JSON output for --changed.",
+        help="Emit machine-readable JSON output for --pending or --changed.",
     )
     ingest_parser.set_defaults(handler=handle_ingest)
 
@@ -1241,6 +1246,10 @@ def handle_ingest(args: argparse.Namespace) -> int:
             result = drain_pending_ingest_jobs(root)
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             return _print_error(exc)
+
+        if args.json_output:
+            print(render_pending_ingest_json(root, result))
+            return 1 if result.failed else 0
 
         if result.total == 0:
             print("No pending ingest jobs")
@@ -2556,8 +2565,8 @@ def main(argv: list[str] | None = None) -> int:
         mode_count = sum(bool(value) for value in [args.source_id, args.pending, args.changed])
         if mode_count != 1:
             parser.error("ingest requires exactly one of <source_id>, --pending, or --changed")
-        if args.json_output and not args.changed:
-            parser.error("ingest --json is currently supported only with --changed")
+        if args.json_output and not (args.changed or args.pending):
+            parser.error("ingest --json is currently supported only with --pending or --changed")
     return args.handler(args)
 
 

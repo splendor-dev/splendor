@@ -863,7 +863,8 @@ Current implementation:
   adjacent sidecar text files named with `sources.ocr_sidecar_suffix` and writes normalized output
   under `derived/ocr/` plus sidecar checksum metadata under `derived/metadata/`.
 - `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
-  ingested, or points back to `wiki status` for batch follow-up.
+  ingested, or points back to `wiki status` for batch follow-up. `--json` emits queue totals,
+  processed/succeeded/failed/skipped counts, per-item outcomes, and deterministic next actions.
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
   machine-generated, invalid-page, actionable synthesis-review, and missing
   synthesis-follow-up counts, with optional JSON output.
