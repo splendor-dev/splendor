@@ -45,3 +45,41 @@ def test_generated_change_pr_workflow_contract() -> None:
         "state/manifests/sources/**",
         "raw/sources/**",
     ]
+
+
+def test_release_artifacts_workflow_contract() -> None:
+    workflow = _load_workflow(".github/workflows/release-artifacts.yml")
+
+    assert workflow["name"] == "Release artifacts"
+    triggers = _workflow_triggers(workflow)
+    assert set(triggers) == {"push", "workflow_dispatch"}
+    assert triggers["push"]["tags"] == ["v*"]
+    assert triggers["workflow_dispatch"]["inputs"]["tag"]["required"] is True
+    assert workflow["permissions"] == {"contents": "write"}
+
+    job = workflow["jobs"]["build-and-upload"]
+    assert job["env"]["RELEASE_TAG"] == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+    )
+
+    steps = job["steps"]
+    runs = [step.get("run") for step in steps]
+    uses = [step.get("uses") for step in steps]
+
+    assert "actions/checkout@v4" in uses
+    assert "actions/upload-artifact@v4" in uses
+    assert any("rm -rf dist" in run and "uv build" in run for run in runs if run)
+    assert not any("exec(" in run for run in runs if run)
+    assert any(
+        "wheels=(dist/splendor-${RELEASE_TAG#v}-*.whl)" in run
+        and "splendor --root /tmp/splendor-release-smoke init" in run
+        and "splendor --root /tmp/splendor-release-smoke lint" in run
+        for run in runs
+        if run
+    )
+    assert any(
+        "GitHub Release %s does not exist. Create release notes before publishing artifacts." in run
+        for run in runs
+        if run
+    )
+    assert any('gh release upload "$RELEASE_TAG" dist/* --clobber' in run for run in runs if run)

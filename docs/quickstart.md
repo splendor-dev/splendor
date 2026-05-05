@@ -29,6 +29,19 @@ uv pip install dist/splendor-*.whl
 splendor --help
 ```
 
+### Trial release install
+
+For external trial installs, prefer the wheel attached to the matching GitHub Release:
+
+```bash
+TAG="v..."
+VERSION="${TAG#v}"
+uv tool install "https://github.com/splendor-dev/splendor/releases/download/${TAG}/splendor-${VERSION}-py3-none-any.whl"
+splendor --help
+```
+
+Set `TAG` to the exact published release under evaluation.
+
 The examples below use `uv run splendor ... --root ...` from a contributor checkout. If you
 installed Splendor into an environment instead, replace `uv run splendor` with `splendor`. If that
 environment lives inside the target repository, you can also drop `--root`.
@@ -218,9 +231,9 @@ Refresh does not override active ingest leases or dead-letter protections; use `
 `repair ingest` for those recovery cases.
 
 For release verification, use `docs/v1_release_handoff.md` together with
-`docs/v0_2_0_release_notes.md`. The handoff keeps the quickstart focused on normal operator
-workflow while the release notes name the immediate `v0.2.0` evaluation tag target, validation
-commands, issue state, and post-release SynthBanshee/Claude Code evaluation step.
+`docs/v0_2_0_release_notes.md` and `docs/release_artifacts.md`. The handoff keeps the quickstart
+focused on normal operator workflow while the release notes name the immediate `v0.2.0`
+evaluation tag target and the release artifact guide names the wheel-based trial-install path.
 
 For a read-only browser view over the same status and source-detail contracts:
 

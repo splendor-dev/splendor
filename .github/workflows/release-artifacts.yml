@@ -1,0 +1,87 @@
+name: Release artifacts
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and publish, for example v0.3.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Verify tag matches package version
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          tag_version = os.environ["RELEASE_TAG"].removeprefix("v")
+          project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
+          package_version = project["version"]
+          init_text = Path("src/splendor/__init__.py").read_text(encoding="utf-8")
+          version_match = re.search(r'^__version__ = "([^"]+)"$', init_text, flags=re.MULTILINE)
+          if version_match is None:
+              raise SystemExit("Could not find __version__ assignment in src/splendor/__init__.py")
+          runtime_version = version_match.group(1)
+
+          if package_version != tag_version or runtime_version != tag_version:
+              raise SystemExit(
+                  "Tag "
+                  f"{os.environ['RELEASE_TAG']} does not match package versions: "
+                  f"pyproject.toml={package_version}, src/splendor/__init__.py={runtime_version}"
+              )
+          PY
+      - name: Build wheel and source distribution
+        run: |
+          rm -rf dist
+          uv build
+      - name: Smoke install built wheel
+        run: |
+          python -m venv .release-smoke
+          . .release-smoke/bin/activate
+          wheels=(dist/splendor-${RELEASE_TAG#v}-*.whl)
+          if [ "${#wheels[@]}" -ne 1 ] || [ ! -f "${wheels[0]}" ]; then
+            printf 'Expected exactly one wheel for %s, found: %s\n' "$RELEASE_TAG" "${wheels[*]}"
+            exit 1
+          fi
+          uv pip install "${wheels[0]}"
+          splendor --version
+          splendor --help
+          rm -rf /tmp/splendor-release-smoke
+          splendor --root /tmp/splendor-release-smoke init
+          splendor --root /tmp/splendor-release-smoke lint
+      - name: Upload build artifacts to workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: splendor-dist-${{ env.RELEASE_TAG }}
+          path: dist/*
+          if-no-files-found: error
+      - name: Publish artifacts on GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            printf 'GitHub Release %s does not exist. Create release notes before publishing artifacts.\n' "$RELEASE_TAG"
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
