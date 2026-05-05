@@ -939,7 +939,10 @@ def test_run_health_checks_hints_unknown_source_refs_without_unsafe_repair(
             errors=["source disappeared"],
             pipeline_version=__version__,
             source_ids=["src-missing"],
-            provenance_links=[ProvenanceLink(source_id="src-missing", role="input")],
+            provenance_links=[
+                ProvenanceLink(source_id="src-missing", role="input"),
+                ProvenanceLink(source_id="src-missing", role="input"),
+            ],
         ),
     )
 
@@ -956,6 +959,74 @@ def test_run_health_checks_hints_unknown_source_refs_without_unsafe_repair(
     assert all(
         "source update-path" not in (issue.remediation_hint or "") for issue in result.issues
     )
+
+
+def test_run_health_checks_resolves_run_sources_against_manifest_store_when_source_drifted(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source.write_text("# Brief\n\nChanged after registration.\n", encoding="utf-8")
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_run_record(
+        layout.runs_dir / "run-drifted-source.json",
+        RunRecord(
+            run_id="run-drifted-source",
+            job_id=f"ingest-{added.source_id}",
+            job_type="ingest_source",
+            started_at="2026-04-20T09:00:00+00:00",
+            finished_at="2026-04-20T09:05:00+00:00",
+            status="failed",
+            input_refs=[],
+            errors=["source drifted"],
+            pipeline_version=__version__,
+            source_ids=[added.source_id],
+            provenance_links=[
+                ProvenanceLink(source_id=added.source_id, role="input"),
+                ProvenanceLink(source_id=added.source_id, role="input"),
+            ],
+        ),
+    )
+
+    result = _run_health(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["source-health-check-failed"]
+    assert "checksum mismatch for ingestion" in result.issues[0].message
+
+
+def test_run_health_checks_accepts_repeated_run_source_provenance_when_manifest_exists(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_run_record(
+        layout.runs_dir / "run-existing-source.json",
+        RunRecord(
+            run_id="run-existing-source",
+            job_id=f"ingest-{added.source_id}",
+            job_type="ingest_source",
+            started_at="2026-04-20T09:00:00+00:00",
+            finished_at="2026-04-20T09:05:00+00:00",
+            status="failed",
+            input_refs=[],
+            errors=["representative failed run"],
+            pipeline_version=__version__,
+            source_ids=[added.source_id],
+            provenance_links=[
+                ProvenanceLink(source_id=added.source_id, role="input"),
+                ProvenanceLink(source_id=added.source_id, role="input"),
+            ],
+        ),
+    )
+
+    result = _run_health(tmp_path)
+
+    assert result.issues == []
 
 
 def test_run_health_checks_does_not_repeat_generic_hint_for_missing_page_refs(

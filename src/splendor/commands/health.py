@@ -228,8 +228,9 @@ def _load_source_records(
     *,
     root: Path,
     issues: list[MaintenanceIssue],
-) -> tuple[dict[str, tuple[Path, SourceRecord]], set[str], int]:
+) -> tuple[dict[str, tuple[Path, SourceRecord]], set[str], set[str], int]:
     records: dict[str, tuple[Path, SourceRecord]] = {}
+    manifest_source_ids: set[str] = set()
     invalid_ids: set[str] = set()
     checked_count = 0
 
@@ -240,6 +241,7 @@ def _load_source_records(
         source: SourceRecord | None = None
         try:
             source = load_source_record(manifest_path)
+            manifest_source_ids.add(source_id)
             _validate_storage_policy(source)
             if _should_resolve_source_content(source):
                 resolve_source_content(root, source, layout.raw_sources_dir)
@@ -293,8 +295,7 @@ def _load_source_records(
                 )
                 continue
         records[source_id] = (manifest_path, source)
-
-    return records, invalid_ids, checked_count
+    return records, manifest_source_ids, invalid_ids, checked_count
 
 
 def _load_queue_records(
@@ -666,6 +667,7 @@ def _validate_run_record(
     run_path: Path,
     run_record: RunRecord,
     source_records: dict[str, tuple[Path, SourceRecord]],
+    manifest_source_ids: set[str],
     wiki_pages: dict[str, tuple[Path, KnowledgePageFrontmatter]],
     run_records: dict[str, tuple[Path, RunRecord]],
     task_records: dict[str, Path],
@@ -761,9 +763,11 @@ def _validate_run_record(
                 check_name="run-state",
             )
 
+    reported_missing_source_ids: set[str] = set()
     for source_id in run_record.source_ids:
-        if source_id in source_records:
+        if source_id in manifest_source_ids or source_id in reported_missing_source_ids:
             continue
+        reported_missing_source_ids.add(source_id)
         _append_issue(
             issues,
             code="missing-run-source-id",
@@ -817,17 +821,20 @@ def _validate_run_record(
                 check_name="run-provenance",
             )
 
+    reported_missing_source_refs: set[str] = set()
     for link in run_record.provenance_links:
-        if link.source_id is not None and link.source_id not in source_records:
-            _append_issue(
-                issues,
-                code="missing-run-provenance-source-ref",
-                message=f"Run provenance references unknown source: {link.source_id}",
-                path=run_relpath,
-                record_id=canonical_run_id,
-                check_name="run-provenance",
-                remediation_hint=_unknown_provenance_hint(),
-            )
+        if link.source_id is not None and link.source_id not in manifest_source_ids:
+            if link.source_id not in reported_missing_source_refs:
+                reported_missing_source_refs.add(link.source_id)
+                _append_issue(
+                    issues,
+                    code="missing-run-provenance-source-ref",
+                    message=f"Run provenance references unknown source: {link.source_id}",
+                    path=run_relpath,
+                    record_id=canonical_run_id,
+                    check_name="run-provenance",
+                    remediation_hint=_unknown_provenance_hint(),
+                )
         if link.page_id is not None and link.page_id not in wiki_pages:
             if not _is_expected_pruned_source_summary_page_id(
                 link.page_id, run_record, source_records
@@ -1119,14 +1126,17 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
         issues=issues,
         check_name="workspace-layout",
     ):
-        source_records, invalid_source_ids, loaded_sources = _load_source_records(
-            layout,
-            root=root,
-            issues=issues,
+        source_records, manifest_source_ids, invalid_source_ids, loaded_sources = (
+            _load_source_records(
+                layout,
+                root=root,
+                issues=issues,
+            )
         )
         checked_count += loaded_sources
     else:
         source_records = {}
+        manifest_source_ids = set()
         invalid_source_ids = set()
         checked_count += 1
 
@@ -1195,6 +1205,7 @@ def run_health_checks(root: Path, layout: ResolvedLayout) -> MaintenanceCheckRes
             run_path=run_path,
             run_record=run_record,
             source_records=source_records,
+            manifest_source_ids=manifest_source_ids,
             wiki_pages=wiki_pages,
             run_records=run_records,
             task_records=task_records,

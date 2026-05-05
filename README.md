@@ -216,7 +216,8 @@ exists. JSON, human stdout, and Markdown reports surface missing active workspac
 `source update-path` / `source freshness` guidance, checksum drift with `source refresh`,
 `ingest --pending`, or `ingest --changed`, and queue repair diagnostics with `queue retry` or
 `repair ingest`. Unknown source provenance refs remain diagnostic-only rather than suggesting
-unsafe broad rewrites.
+unsafe broad rewrites. Run source IDs are validated against the manifest store separately from
+source content freshness, so checksum drift does not become an unknown-source provenance failure.
 
 `splendor pr-summary --since main` is a read-only PR handoff command over local git state. It uses
 the merge base between `HEAD` and the base ref for PR-style diff semantics, then summarizes curated
@@ -263,12 +264,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P1.2`
-- Current planned slice: `M16-P1 source hygiene and registry recovery`
-- Current PR sub-slice: `M16-P1.3`
+- Previous completed PR sub-slice: `M16-P1.3`
+- Current planned slice: `M16-P2 validation correctness`
+- Current PR sub-slice: `M16-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M16-P2 validation correctness`
-- Next planned PR sub-slice: `M16-P2.1`
+- Next planned PR sub-slice: `M16-P2.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -490,5 +491,5 @@ rewritten.
 - [x] Repo scan ignores and `.splendorignore` prevent cache/local-agent source pollution.
 - [x] `splendor source forget` provides safe single and bulk source-registry recovery.
 - [x] Duplicate canonical source versions can be reconciled without manual manifest edits.
-- [ ] Health resolves existing manifest source IDs without false unknown-source diagnostics.
+- [x] Health resolves existing manifest source IDs without false unknown-source diagnostics.
 - [ ] Lint validates live source refs after path repair and supersession.
