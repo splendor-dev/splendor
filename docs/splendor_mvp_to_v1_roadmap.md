@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M17-P1.1`
+- Previous completed PR sub-slice: `M17-P2.1`
 - Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P2.1`
+- Current PR sub-slice: `M17-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P3.1`
+- Next planned PR sub-slice: `M17-P4.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1185,6 +1185,14 @@ decisions can now expose lifecycle state for current, reviewed, PR-linked, histo
 and archived authority. Agent handoff surfaces use that lifecycle to rank accepted/current
 decisions above stale plans or older research while retaining superseded and archived documents as
 explicit historical context.
+
+### Agent handoff ranking
+`M17-P3.1` implements issue #115 by adding deterministic authority-aware relevance scoring to
+`brief --agent-context` and `suggest-next`. The ranking remains local-first and schema-version-1
+compatible: no vector store, database, or background semantic service is introduced. Goal terms in
+titles, paths, record IDs, authority scope, and configured `applies_to` metadata are weighted above
+loose body overlap, while lifecycle and freshness keep current, reviewed, and PR-linked authority
+above stale, superseded, archived, or token-similar historical material.
 
 ## Milestone 18 — v2 advanced product track
 

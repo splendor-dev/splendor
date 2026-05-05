@@ -257,6 +257,13 @@ now expose lifecycle state (`current`, `reviewed`, `pr-linked`, `historical`, `s
 that lifecycle so current, reviewed, and PR-linked decisions outrank older research, stale plans,
 superseded docs, and archived context while keeping those historical records visible when relevant.
 
+`M17-P3.1` improves issue #115 handoff ranking without adding vector search or background
+infrastructure. Briefing and suggestion surfaces use a shared deterministic relevance score across
+authority docs, decisions, active planning records, query matches, synthesis follow-up, and review
+signals. Title/path/scope matches carry more weight than loose body overlap, and category caps keep
+review noise from burying current specs, rollout plans, accepted decisions, and key contradicting
+research.
+
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
 display; copied, external, parsed PDF, and OCR-derived sources keep fuller extracts by default
@@ -288,12 +295,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M17-P1.1`
+- Previous completed PR sub-slice: `M17-P2.1`
 - Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P2.1`
+- Current PR sub-slice: `M17-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P3.1`
+- Next planned PR sub-slice: `M17-P4.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -440,6 +447,10 @@ external evaluator exercises.
 `M17-P2.1` implements the planning authority lifecycle for issue #116. Authority handoff surfaces
 now carry lifecycle and issue/PR linkage metadata, and accepted planning decisions participate in
 goal-relevant authority ranking while superseded decisions remain historical context.
+
+`M17-P3.1` implements deterministic authority-aware ranking for issue #115. Agent handoff now
+favors task-relevant current specs, rollout plans, accepted decisions, active planning records, and
+focused contradiction/review signals over stale or merely token-similar material.
 
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes

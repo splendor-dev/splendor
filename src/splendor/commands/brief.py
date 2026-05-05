@@ -94,6 +94,7 @@ _AUTHORITY_ROLE_SCORE = {
     "generated-summary": 5,
 }
 _AUTHORITY_FRESHNESS_SCORE = {"current": 25, "watch": 10, "stale": -10, "historical": -20}
+_AUTHORITY_FRESHNESS_ORDER = {"current": 0, "watch": 1, "stale": 2, "historical": 3}
 _AUTHORITY_LIFECYCLE_ORDER = {
     "current": 0,
     "reviewed": 1,
@@ -130,6 +131,7 @@ _PLANNING_STATUSES = {
 class BriefMatch:
     rank: int
     score: int
+    relevance_score: int
     document_class: str
     kind: str
     record_id: str
@@ -147,6 +149,7 @@ class BriefPlanningItem:
     title: str
     status: str
     path: str
+    relevance_score: int = 0
 
 
 @dataclass(frozen=True)
@@ -211,6 +214,7 @@ class SuggestedAction:
     source_id: str | None = None
     source_ref: str | None = None
     record_id: str | None = None
+    relevance_score: int = 0
 
 
 @dataclass(frozen=True)
@@ -318,6 +322,8 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
     queue = inspect_queue(root)
     freshness = scan_source_freshness(root)
     normalized_goal = goal.strip() if goal is not None else ""
+    goal_tokens = _tokens(normalized_goal)
+    goal_phrase = _normalize_goal_phrase(normalized_goal)
     query_summary: str | None = None
     query_warning: BriefWarning | None = None
     matches: list[BriefMatch] = []
@@ -330,15 +336,23 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
             query_warning = BriefWarning(area="query", path=None, message=query_summary)
         if query_result is not None:
             query_summary = query_result.summary
-            matches = [_brief_match(match) for match in query_result.matches[:_BRIEF_MATCH_LIMIT]]
+            matches = _rank_brief_matches(
+                [_brief_match(match) for match in query_result.matches],
+                goal_tokens,
+                goal_phrase,
+            )[:_BRIEF_MATCH_LIMIT]
 
-    planning_items, warnings = _active_planning_items(root, layout)
+    planning_items, warnings = _active_planning_items(
+        root, layout, normalized_goal or None, goal_phrase
+    )
     if query_warning is not None:
         warnings.insert(0, query_warning)
     sources = load_sources(layout)
     sources_by_id = {source.source_id: source for source in sources}
     wiki_pages, invalid_wiki_pages = load_wiki_pages(root, layout)
-    authority_briefs, authority_warnings = _authority_briefs(root, layout, config, wiki_pages, goal)
+    authority_briefs, authority_warnings = _authority_briefs(
+        root, layout, config, wiki_pages, normalized_goal or None
+    )
     warnings.extend(authority_warnings)
     recent_sources = _recent_sources(sources)
     recent_runs = status.recent_runs
@@ -370,6 +384,7 @@ def _brief_match(match: QueryMatch) -> BriefMatch:
     return BriefMatch(
         rank=match.rank,
         score=match.score,
+        relevance_score=0,
         document_class=match.document_class,
         kind=match.kind,
         record_id=match.record_id,
@@ -381,15 +396,61 @@ def _brief_match(match: QueryMatch) -> BriefMatch:
     )
 
 
+def _rank_brief_matches(
+    matches: list[BriefMatch], goal_tokens: set[str], goal_phrase: str
+) -> list[BriefMatch]:
+    ranked: list[tuple[int, BriefMatch]] = []
+    for sequence, match in enumerate(matches):
+        lifecycle_bonus = 0
+        if match.kind == "source-summary":
+            lifecycle_bonus -= 8
+        if match.review_state in {"human-reviewed"}:
+            lifecycle_bonus += 12
+        elif match.review_state in {"contested", "stale"}:
+            lifecycle_bonus += 6
+        elif match.review_state in {"machine-generated", "draft"}:
+            lifecycle_bonus -= 4
+        relevance_score = (
+            _goal_relevance_score(
+                goal_tokens,
+                goal_phrase=goal_phrase,
+                high_text=" ".join([match.title, match.path, match.record_id]),
+                medium_text=" ".join(
+                    [
+                        match.document_class,
+                        match.kind,
+                        match.review_state or "",
+                        " ".join(match.source_refs),
+                    ]
+                ),
+                low_text=match.snippet,
+            )
+            + lifecycle_bonus
+            + match.score
+        )
+        ranked.append((sequence, replace(match, relevance_score=relevance_score)))
+    ranked.sort(
+        key=lambda item: (
+            -item[1].relevance_score,
+            item[1].rank,
+            item[1].title.lower(),
+            item[1].path,
+            item[0],
+        )
+    )
+    return [replace(match, rank=rank) for rank, (_sequence, match) in enumerate(ranked, start=1)]
+
+
 def _brief_error(exc: Exception) -> str:
     return " ".join(str(exc).splitlines()).strip() or exc.__class__.__name__
 
 
 def _active_planning_items(
-    root: Path, layout
+    root: Path, layout, goal: str | None, goal_phrase: str
 ) -> tuple[list[BriefPlanningItem], list[BriefWarning]]:
     items: list[BriefPlanningItem] = []
     warnings: list[BriefWarning] = []
+    goal_tokens = _tokens(goal or "")
     for kind, statuses in _PLANNING_STATUSES.items():
         model = model_for_planning_kind(kind)
         id_field = record_id_field(kind)
@@ -409,16 +470,40 @@ def _active_planning_items(
             status = record.status
             if status not in statuses:
                 continue
+            payload = record.model_dump(mode="json")
+            record_id = str(getattr(record, id_field))
+            refs: list[str] = []
+            for key, value in payload.items():
+                if key.endswith("_refs") or key in {"supersedes", "superseded_by", "depends_on"}:
+                    refs.extend(_flatten_handoff_values(value))
+            relevance_score = _goal_relevance_score(
+                goal_tokens,
+                goal_phrase=goal_phrase,
+                high_text=" ".join([record.title, record_id, path.relative_to(root).as_posix()]),
+                medium_text=" ".join([kind, status, *refs]),
+                low_text=parsed.body,
+            )
             items.append(
                 BriefPlanningItem(
                     kind=kind,
-                    record_id=str(getattr(record, id_field)),
+                    record_id=record_id,
                     title=record.title,
                     status=status,
                     path=path.relative_to(root).as_posix(),
+                    relevance_score=relevance_score,
                 )
             )
-    items.sort(key=lambda item: (item.kind, item.status, item.record_id))
+    if goal_tokens:
+        items.sort(
+            key=lambda item: (
+                -item.relevance_score,
+                item.kind,
+                item.status,
+                item.record_id,
+            )
+        )
+    else:
+        items.sort(key=lambda item: (item.kind, item.status, item.record_id))
     return items[:_BRIEF_PLANNING_LIMIT], warnings
 
 
@@ -426,6 +511,7 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
     items: list[AuthorityBrief] = []
     warnings: list[BriefWarning] = []
     goal_tokens = _tokens(goal or "")
+    goal_phrase = _normalize_goal_phrase(goal or "")
 
     for doc in config.briefing.authority_documents:
         path = Path(doc.path)
@@ -454,7 +540,12 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             freshness=doc.freshness,
             lifecycle=lifecycle,
             goal_tokens=goal_tokens,
-            text=" ".join([title, reason, " ".join(doc.applies_to), path.as_posix(), body]),
+            goal_phrase=goal_phrase,
+            high_text=" ".join([title, path.as_posix(), " ".join(doc.applies_to)]),
+            medium_text=" ".join(
+                [*doc.issue_refs, *doc.pr_refs, *doc.supersedes, doc.superseded_by or ""]
+            ),
+            low_text=" ".join([reason, body]),
         )
         items.append(
             AuthorityBrief(
@@ -492,12 +583,27 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             freshness=freshness,
             lifecycle=lifecycle,
             goal_tokens=goal_tokens,
-            text=" ".join(
+            goal_phrase=goal_phrase,
+            high_text=" ".join(
                 [
                     page.frontmatter.title,
                     page.frontmatter.page_id,
                     page.path,
                     " ".join(page.frontmatter.authority_scope),
+                ]
+            ),
+            medium_text=" ".join(
+                [
+                    " ".join(page.frontmatter.tags),
+                    " ".join(page.frontmatter.source_refs),
+                    " ".join(page.frontmatter.issue_refs),
+                    " ".join(page.frontmatter.pr_refs),
+                    " ".join(page.frontmatter.supersedes),
+                    page.frontmatter.superseded_by or "",
+                ]
+            ),
+            low_text=" ".join(
+                [
                     page.body,
                 ]
             ),
@@ -519,14 +625,15 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             )
         )
 
-    items.extend(_decision_authority_briefs(root, layout, goal_tokens))
+    items.extend(_decision_authority_briefs(root, layout, goal_tokens, goal_phrase))
     ranked = sorted(
         enumerate(items),
         key=lambda item: (
             _AUTHORITY_LIFECYCLE_TIER.get(item[1].lifecycle, 99),
-            _AUTHORITY_LIFECYCLE_ORDER.get(item[1].lifecycle, 99),
-            _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
+            _AUTHORITY_FRESHNESS_ORDER.get(item[1].freshness, 99),
             -item[1].score,
+            _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
+            _AUTHORITY_LIFECYCLE_ORDER.get(item[1].lifecycle, 99),
             item[0],
             item[1].path,
         ),
@@ -538,16 +645,29 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
 
 
 def _authority_score(
-    *, role: str, freshness: str, lifecycle: str, goal_tokens: set[str], text: str
+    *,
+    role: str,
+    freshness: str,
+    lifecycle: str,
+    goal_tokens: set[str],
+    goal_phrase: str = "",
+    high_text: str = "",
+    medium_text: str = "",
+    low_text: str = "",
+    text: str = "",
 ) -> int:
     score = (
         _AUTHORITY_ROLE_SCORE.get(role, 0)
         + _AUTHORITY_FRESHNESS_SCORE.get(freshness, 0)
         + _AUTHORITY_LIFECYCLE_SCORE.get(lifecycle, 0)
     )
-    if goal_tokens:
-        overlap = goal_tokens & _tokens(text)
-        score += min(len(overlap), 6) * 12
+    score += _goal_relevance_score(
+        goal_tokens,
+        goal_phrase=goal_phrase,
+        high_text=high_text,
+        medium_text=medium_text,
+        low_text=" ".join([low_text, text]),
+    )
     return score
 
 
@@ -575,7 +695,9 @@ def _wiki_authority_lifecycle(frontmatter: KnowledgePageFrontmatter, *, freshnes
     return "current"
 
 
-def _decision_authority_briefs(root: Path, layout, goal_tokens: set[str]) -> list[AuthorityBrief]:
+def _decision_authority_briefs(
+    root: Path, layout, goal_tokens: set[str], goal_phrase: str
+) -> list[AuthorityBrief]:
     if not goal_tokens:
         return []
     items: list[AuthorityBrief] = []
@@ -626,7 +748,22 @@ def _decision_authority_briefs(root: Path, layout, goal_tokens: set[str]) -> lis
                     freshness=freshness,
                     lifecycle=lifecycle,
                     goal_tokens=goal_tokens,
-                    text=text,
+                    goal_phrase=goal_phrase,
+                    high_text=" ".join([record.title, record.decision_id, path.name]),
+                    medium_text=" ".join(
+                        [
+                            record.status,
+                            record.decided_at or "",
+                            " ".join(record.source_refs),
+                            " ".join(record.related_tasks),
+                            " ".join(record.related_questions),
+                            " ".join(record.issue_refs),
+                            " ".join(record.pr_refs),
+                            " ".join(record.supersedes),
+                            record.superseded_by or "",
+                        ]
+                    ),
+                    low_text=text,
                 ),
                 reason=reason,
                 issue_refs=record.issue_refs,
@@ -655,7 +792,53 @@ def _title_from_markdown(body: str) -> str | None:
 
 
 def _tokens(text: str) -> set[str]:
-    return set(_TOKEN_PATTERN.findall(text.lower()))
+    tokens: set[str] = set()
+    for token in _TOKEN_PATTERN.findall(text.lower()):
+        tokens.add(token)
+        tokens.update(part for part in re.split(r"[-_]+", token) if len(part) > 1)
+    return tokens
+
+
+def _flatten_handoff_values(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
+def _normalize_goal_phrase(text: str) -> str:
+    lowered = text.lower().replace("-", " ").replace("_", " ")
+    return " ".join(_TOKEN_PATTERN.findall(lowered))
+
+
+def _goal_relevance_score(
+    goal_tokens: set[str],
+    *,
+    goal_phrase: str = "",
+    high_text: str = "",
+    medium_text: str = "",
+    low_text: str = "",
+) -> int:
+    if not goal_tokens:
+        return 0
+    score = 0
+    for text, weight in ((high_text, 18), (medium_text, 10), (low_text, 4)):
+        if not text:
+            continue
+        text_tokens = _tokens(text)
+        overlap = goal_tokens & text_tokens
+        if not overlap:
+            continue
+        score += min(len(overlap), 8) * weight
+        if len(overlap) >= 2:
+            score += len(overlap) * 5
+        if overlap == goal_tokens:
+            score += weight
+        normalized_text = _normalize_goal_phrase(text)
+        if len(goal_tokens) >= 2 and goal_phrase and goal_phrase in normalized_text:
+            score += weight * 3
+    return score
 
 
 def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:
@@ -750,8 +933,29 @@ def _next_actions(
 
 def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
     actions: list[SuggestedAction] = []
+    goal_tokens = _tokens(snapshot.goal or "")
+    goal_phrase = _normalize_goal_phrase(snapshot.goal or "")
 
     def add(priority: str, category: str, title: str, reason: str, command: str | None, **kwargs):
+        relevance_score = kwargs.pop(
+            "relevance_score",
+            _goal_relevance_score(
+                goal_tokens,
+                goal_phrase=goal_phrase,
+                high_text=" ".join(
+                    [
+                        title,
+                        str(kwargs.get("path") or ""),
+                        str(kwargs.get("record_id") or ""),
+                        str(kwargs.get("source_ref") or ""),
+                    ]
+                ),
+                medium_text=" ".join(
+                    [str(kwargs.get("source_id") or ""), command or "", category, priority]
+                ),
+                low_text=reason,
+            ),
+        )
         actions.append(
             SuggestedAction(
                 rank=0,
@@ -760,6 +964,7 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
                 title=title,
                 reason=reason,
                 command=command,
+                relevance_score=relevance_score,
                 **kwargs,
             )
         )
@@ -831,7 +1036,12 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
                 source_ref=source_ref,
             )
 
-    for page in _review_page_actions(snapshot.wiki_pages, snapshot.invalid_wiki_pages):
+    for page in _review_page_actions(
+        snapshot.wiki_pages,
+        snapshot.invalid_wiki_pages,
+        goal_tokens=goal_tokens,
+        goal_phrase=goal_phrase,
+    ):
         add(**page)
 
     for source_id in _sources_missing_synthesis(snapshot.wiki_pages, snapshot.sources_by_id):
@@ -846,6 +1056,12 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             path=source_ref,
             source_id=source_id,
             source_ref=source_ref,
+            relevance_score=_goal_relevance_score(
+                goal_tokens,
+                goal_phrase=goal_phrase,
+                high_text=" ".join([source.title, source_ref, source_id]),
+                medium_text=" ".join([source.review_state, source.status]),
+            ),
         )
 
     for report in snapshot.latest_reports:
@@ -869,6 +1085,7 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             None,
             path=match.path,
             record_id=match.record_id,
+            relevance_score=match.relevance_score,
         )
 
     for authority in snapshot.authority_briefs[:3]:
@@ -890,6 +1107,7 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             f"{authority.role}/{authority.freshness}/{authority.lifecycle}: {authority.reason}",
             None,
             path=authority.path,
+            relevance_score=authority.score,
         )
 
     for item in snapshot.planning_items:
@@ -902,6 +1120,7 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             command,
             path=item.path,
             record_id=item.record_id,
+            relevance_score=item.relevance_score,
         )
 
     for warning in snapshot.warnings:
@@ -933,7 +1152,16 @@ def _first_command(commands: list[str]) -> str | None:
 def _finalize_suggestions(actions: list[SuggestedAction]) -> list[SuggestedAction]:
     by_category: dict[str, int] = {}
     capped: list[tuple[int, SuggestedAction]] = []
-    for sequence, action in enumerate(actions):
+    ordered = sorted(
+        enumerate(actions),
+        key=lambda item: (
+            _SUGGESTION_CATEGORY_ORDER.get(item[1].category, 99),
+            _SUGGESTION_PRIORITY_ORDER.get(item[1].priority, 99),
+            -item[1].relevance_score,
+            item[0],
+        ),
+    )
+    for sequence, action in ordered:
         current_count = by_category.get(action.category, 0)
         category_limit = _SUGGESTION_CATEGORY_LIMITS.get(action.category, 1)
         if current_count >= category_limit:
@@ -945,6 +1173,7 @@ def _finalize_suggestions(actions: list[SuggestedAction]) -> list[SuggestedActio
         key=lambda item: (
             _SUGGESTION_CATEGORY_ORDER.get(item[1].category, 99),
             _SUGGESTION_PRIORITY_ORDER.get(item[1].priority, 99),
+            -item[1].relevance_score,
             item[0],
         )
     )
@@ -955,7 +1184,11 @@ def _finalize_suggestions(actions: list[SuggestedAction]) -> list[SuggestedActio
 
 
 def _review_page_actions(
-    pages: list[WikiPageSnapshot], invalid_pages: list[InvalidWikiPageSnapshot]
+    pages: list[WikiPageSnapshot],
+    invalid_pages: list[InvalidWikiPageSnapshot],
+    *,
+    goal_tokens: set[str],
+    goal_phrase: str,
 ) -> list[dict[str, object]]:
     actions: list[dict[str, object]] = []
     for invalid in invalid_pages:
@@ -967,6 +1200,12 @@ def _review_page_actions(
                 "reason": invalid.error,
                 "command": "splendor lint",
                 "path": invalid.path,
+                "relevance_score": _goal_relevance_score(
+                    goal_tokens,
+                    goal_phrase=goal_phrase,
+                    high_text=invalid.path,
+                    low_text=invalid.error,
+                ),
             }
         )
     for page in pages:
@@ -988,6 +1227,22 @@ def _review_page_actions(
                 "command": None,
                 "path": page.path,
                 "record_id": page.frontmatter.page_id,
+                "relevance_score": _goal_relevance_score(
+                    goal_tokens,
+                    goal_phrase=goal_phrase,
+                    high_text=" ".join(
+                        [page.frontmatter.title, page.frontmatter.page_id, page.path]
+                    ),
+                    medium_text=" ".join(
+                        [
+                            page.frontmatter.kind,
+                            state,
+                            " ".join(page.frontmatter.tags),
+                            " ".join(page.frontmatter.source_refs),
+                        ]
+                    ),
+                    low_text=page.body,
+                ),
             }
         )
     return actions

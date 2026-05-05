@@ -1884,6 +1884,260 @@ def test_suggest_next_includes_lifecycle_aware_decision_authority(tmp_path: Path
     assert authority_actions[0]["title"].startswith("Review decision ")
 
 
+def test_agent_context_ranks_mock_client_authority_above_stale_token_matches(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "current-spec.md").write_text(
+        "# Balance Reconciliation Spec\n\nCurrent balance reconciliation rollout authority.\n",
+        encoding="utf-8",
+    )
+    (docs / "rollout-plan.md").write_text(
+        "# Reconciliation Rollout Plan\n\nPR-linked rollout plan for balance reconciliation.\n",
+        encoding="utf-8",
+    )
+    (docs / "generic-authority.md").write_text(
+        "# Current Project Authority\n\nGeneral current authority for public readiness.\n",
+        encoding="utf-8",
+    )
+    (docs / "stale-jsonl-note.md").write_text(
+        "# JSONL Reconciliation Note\n\n"
+        "balance reconciliation rollout balance reconciliation rollout jsonl jsonl jsonl\n",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/stale-jsonl-note.md",
+            role="current-authority",
+            freshness="stale",
+            purpose="Older JSONL research note retained for comparison.",
+        ),
+        AuthorityDocumentConfig(
+            path="docs/generic-authority.md",
+            role="current-authority",
+            freshness="current",
+            purpose="Generic current authority that should not outrank task-specific context.",
+        ),
+        AuthorityDocumentConfig(
+            path="docs/rollout-plan.md",
+            role="roadmap",
+            freshness="current",
+            authority_lifecycle="pr-linked",
+            purpose="Current rollout plan.",
+            applies_to=["balance reconciliation rollout"],
+            pr_refs=["#133"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/current-spec.md",
+            role="current-authority",
+            freshness="current",
+            purpose="Current reviewed spec.",
+            applies_to=["balance reconciliation rollout"],
+        ),
+    ]
+    write_config(tmp_path, config)
+    write_wiki_page(
+        tmp_path / "wiki" / "sources" / "held-entry-research.md",
+        kind="source-summary",
+        title="Held-entry reconciliation research",
+        page_id="source-held-entry-research",
+        review_state="contested",
+        body="Held-entry research contradicts parts of the balance reconciliation rollout.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "held-entry-research.md",
+        kind="topic",
+        title="Held-entry research authority",
+        page_id="topic-held-entry-research",
+        review_state="human-reviewed",
+        authority_role="reference",
+        authority_freshness="current",
+        authority_lifecycle="reviewed",
+        authority_scope=["balance reconciliation rollout", "held-entry research"],
+        body="Reviewed held-entry research for reconciliation contradictions.",
+    )
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "decision",
+            "create",
+            "Use",
+            "CSV-first",
+            "balance",
+            "reconciliation",
+            "--id",
+            "decision-csv-first-reconciliation",
+            "--status",
+            "accepted",
+            "--authority-lifecycle",
+            "reviewed",
+            "--issue-ref",
+            "#115",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "balance",
+            "reconciliation",
+            "rollout",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority_paths = [item["path"] for item in payload["authority_briefs"]]
+    assert authority_paths[:2] == [
+        "docs/current-spec.md",
+        "docs/rollout-plan.md",
+    ]
+    stale_index = authority_paths.index("docs/stale-jsonl-note.md")
+    generic_index = authority_paths.index("docs/generic-authority.md")
+    decision_index = authority_paths.index(
+        "planning/decisions/decision-csv-first-reconciliation.md"
+    )
+    research_index = authority_paths.index("wiki/topics/held-entry-research.md")
+    assert decision_index < stale_index
+    assert research_index < stale_index
+    assert decision_index < generic_index
+    assert research_index < generic_index
+    assert any(
+        match["path"] == "wiki/sources/held-entry-research.md" for match in payload["matches"]
+    )
+    assert payload["suggested_actions"][0]["category"] in {"goal-match", "authority"}
+
+
+def test_agent_context_preserves_goal_phrase_order_for_authority_ranking(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "ordered.md").write_text(
+        "# Held Entry Research\n\nUse held entry research for reconciliation.",
+        encoding="utf-8",
+    )
+    (docs / "permuted.md").write_text(
+        "# Entry Held Research\n\nUse entry held research for reconciliation.",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(path="docs/permuted.md", role="reference", freshness="current"),
+        AuthorityDocumentConfig(path="docs/ordered.md", role="reference", freshness="current"),
+    ]
+    write_config(tmp_path, config)
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "held", "entry", "research", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [item["path"] for item in payload["authority_briefs"][:2]] == [
+        "docs/ordered.md",
+        "docs/permuted.md",
+    ]
+
+
+def test_agent_context_orders_active_planning_by_goal_relevance(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Clean up unrelated import scripts",
+            "--id",
+            "task-import-cleanup",
+            "--status",
+            "in_progress",
+        ]
+    )
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Improve agent handoff ranking",
+            "--id",
+            "task-agent-handoff-ranking",
+            "--status",
+            "in_progress",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "agent", "handoff", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["active_planning"][0]["record_id"] == "task-agent-handoff-ranking"
+    planning_actions = [
+        action for action in payload["suggested_actions"] if action["category"] == "planning"
+    ]
+    assert planning_actions[0]["record_id"] == "task-agent-handoff-ranking"
+
+
+def test_suggest_next_caps_review_noise_after_goal_relevance(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    for index in range(8):
+        write_wiki_page(
+            tmp_path / "wiki" / "topics" / f"generated-noise-{index}.md",
+            kind="topic",
+            title=f"Generated noise {index}",
+            page_id=f"topic-generated-noise-{index}",
+            review_state="machine-generated",
+            body="Generated review noise without handoff context.",
+        )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "agent-handoff-contested.md",
+        kind="topic",
+        title="Agent handoff contested ranking",
+        page_id="topic-agent-handoff-contested-ranking",
+        review_state="contested",
+        body="Agent handoff ranking needs review because stale notes conflict.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "agent-handoff-authority.md",
+        kind="topic",
+        title="Agent handoff authority",
+        page_id="topic-agent-handoff-authority",
+        review_state="human-reviewed",
+        authority_role="current-authority",
+        authority_freshness="current",
+        authority_lifecycle="reviewed",
+        authority_scope=["agent handoff ranking"],
+        body="Current reviewed handoff ranking authority.",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "suggest-next", "agent", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    categories = [action["category"] for action in payload["actions"]]
+    assert categories.index("authority") < categories.index("wiki-review")
+    wiki_review = [action for action in payload["actions"] if action["category"] == "wiki-review"]
+    assert wiki_review[0]["path"] == "wiki/topics/agent-handoff-contested.md"
+    assert len(wiki_review) == 2
+
+
 def test_suggest_next_json_ranks_changed_sources_before_review_work(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "handoff.md"
