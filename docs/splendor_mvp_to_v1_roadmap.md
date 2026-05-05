@@ -848,13 +848,15 @@ registration.
   pages and explain which generated state is reviewer-significant.
 - [x] The quickstart demonstrates the queue-backed `add-source -> ingest --pending -> lookup`
   loop instead of requiring users to copy long IDs for the first ingest.
-- [x] Issue #70 is closed after the M13-P2/M13-P3.1 response for agent usefulness; release notes
-  identify that #72 now owns remaining source lifecycle and agent-workflow follow-up.
-- [x] Issue #72 remains the parent feedback loop for source-refresh lifecycle and agent workflow;
-  stable logical source identities, source supersession, safe workspace refresh, superseded
-  summary pruning, topic-ref migration, and `splendor pr-summary --since main` have landed.
-- [x] Issue #79 tracks the deferred mutating compile/update path from #41 so #41 can stay closed for
-  the shipped v1 briefing and non-mutating compile-contract scope.
+- [x] Issue #70 is closed after the M13-P2/M13-P3.1 response for agent usefulness; the later M14
+  and M15 follow-ups worked through the remaining source-lifecycle, agent-brief, timing, scaling,
+  identity, and compile/update issue queue.
+- [x] The former #72 source-refresh lifecycle feedback loop is closed or dispositioned: stable
+  logical source identities, source supersession, safe workspace refresh, superseded summary
+  pruning, topic-ref migration, and `splendor pr-summary --since main` have landed.
+- [x] The former #79 mutating compile/update follow-up from #41 is dispositioned by the reviewed
+  one-page proposal/apply workflow, compile-target suggestions, schema-bound validation, and
+  generated/maintained page separation.
 - [x] Final release handoff records validation commands, docs state, issue state, GitHub metadata,
   known non-blockers, and the post-v1 queue.
 - [x] No GitHub issues remain open after the M15 disposition pass.

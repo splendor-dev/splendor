@@ -78,6 +78,8 @@ Use `source freshness`, `brief --agent-context`, and `suggest-next` before decid
 workspace needs ingest, synthesis review, queue repair, or planning follow-up.
 
 The current workflow now provides stable logical source identities, source supersession, explicit
-workspace refresh, and explicit superseded-summary pruning/topic-ref migration. Do not expect
-PR-summary generation yet; it remains tracked from issue #72 as later lifecycle work. For v1 release work, use
-`docs/v1_release_handoff.md` to separate release-blocking validation from the post-v1 dogfood queue.
+workspace refresh, explicit superseded-summary pruning/topic-ref migration, and
+`splendor pr-summary --since main` for local PR handoff. Issue #72 is no longer the active
+source-lifecycle queue. For `v0.2.0` evaluation-release work, use `docs/v1_release_handoff.md`
+together with `docs/v0_2_0_release_notes.md` to separate release-blocking validation from
+post-release dogfood or SynthBanshee/Claude Code evaluation feedback.

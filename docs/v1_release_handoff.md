@@ -18,16 +18,22 @@ Run these commands from the repository root before tagging or publishing the `v0
 release:
 
 ```bash
-uv run pytest
+env -u OPENAI_API_KEY uv run pytest
 uv run ruff format --check .
 uv run ruff check .
 uv run splendor lint
+uv run splendor health
+uv build
 ```
 
-For a CI-equivalent test job with coverage:
+The pytest command intentionally unsets `OPENAI_API_KEY` so release validation uses the
+deterministic offline path instead of attempting live contradiction-review calls when local
+credentials are configured.
+
+For a CI-equivalent test job with coverage, also use the deterministic offline path:
 
 ```bash
-uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml
+env -u OPENAI_API_KEY uv run pytest --cov=splendor --cov-report=term-missing --cov-report=xml
 ```
 
 Before publishing release notes, verify that:
@@ -124,15 +130,12 @@ Use this final tagging sequence after those checks pass:
 ```bash
 git switch main
 git pull --ff-only origin main
-git tag -a v0.2.0 -m "Splendor v0.2.0"
-git push origin v0.2.0
 uv build
-```
-
-Before publishing artifacts outside GitHub, verify the built wheel/sdist from `dist/` in a clean
-environment with:
-
-```bash
 uv pip install dist/splendor-*.whl
 splendor --version
+git tag -a v0.2.0 -m "Splendor v0.2.0"
+git push origin v0.2.0
 ```
+
+The build and wheel smoke test must pass before the tag is pushed. If either fails, fix the release
+prep on a PR branch instead of publishing and then repairing a bad tag.

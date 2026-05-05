@@ -28,13 +28,17 @@ Before tagging `v0.2.0` after this preparation PR merges, run the full local val
 the repository root and confirm green `main` CI:
 
 ```bash
-/Users/shaypalachy/.local/bin/uv run pytest
+env -u OPENAI_API_KEY /Users/shaypalachy/.local/bin/uv run pytest
 /Users/shaypalachy/.local/bin/uv run ruff format --check .
 /Users/shaypalachy/.local/bin/uv run ruff check .
 /Users/shaypalachy/.local/bin/uv run splendor lint
 /Users/shaypalachy/.local/bin/uv run splendor health
 /Users/shaypalachy/.local/bin/uv build
 ```
+
+The pytest command intentionally unsets `OPENAI_API_KEY`. Release validation should exercise the
+deterministic offline test path; configured OpenAI credentials can make contradiction-review tests
+attempt live network calls and turn release verification into an environment-dependent check.
 
 The package metadata for this preparation PR is `0.2.0` in both `pyproject.toml` and
 `src/splendor/__init__.py`. Do not create or push the `v0.2.0` tag from this PR; tag only after the
