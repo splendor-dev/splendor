@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M16-P1.2`
-- Current planned slice: `M16-P1 source hygiene and registry recovery`
-- Current PR sub-slice: `M16-P1.3`
+- Previous completed PR sub-slice: `M16-P1.3`
+- Current planned slice: `M16-P2 validation correctness`
+- Current PR sub-slice: `M16-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M16-P2 validation correctness`
-- Next planned PR sub-slice: `M16-P2.1`
+- Next planned PR sub-slice: `M16-P2.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -997,7 +997,9 @@ to `splendor source update-path ... <new-path>` and `splendor source freshness`;
 points to `splendor source refresh ...`, `splendor ingest --pending`, or `splendor ingest
 --changed`; failed/dead-letter queue shape and expired lease diagnostics point to queue retry or
 ingest repair commands. Unknown source provenance refs remain diagnostic-only and explicitly avoid
-inventing unsafe broad repair commands.
+inventing unsafe broad repair commands. Health resolves run source IDs against parsed source
+manifest records independently from storage/content checks, so source freshness failures remain
+source diagnostics rather than false unknown-source provenance diagnostics.
 
 `M14-P1.9` addresses issue #94 as a focused identity review/disposition, not a redesign. The audit
 finds the #94 expected behavior materially covered for curated workspace-backed sources by the

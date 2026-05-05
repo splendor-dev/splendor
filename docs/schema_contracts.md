@@ -551,7 +551,9 @@ update-path ... <new-path>` and `splendor source freshness`; checksum drift poin
 `splendor source refresh ...`, `splendor ingest --pending`, or `splendor ingest --changed`;
 failed/dead-letter queue diagnostics and expired leases point to queue retry or ingest repair
 commands. Unknown source provenance references stay diagnostic-only and explicitly avoid a broad
-rewrite command.
+rewrite command. Run `source_ids` and provenance source links are resolved against parsed source
+manifest records separately from source content/storage health, so checksum drift or missing live
+workspace files do not make existing manifest IDs appear unknown.
 
 ## Repo scan
 
