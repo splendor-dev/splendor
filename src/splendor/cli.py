@@ -26,7 +26,6 @@ from splendor.commands.ingest import (
     drain_pending_ingest_jobs,
     enqueue_ingest_job,
     ingest_source,
-    pending_ingest_next_actions,
     render_pending_ingest_json,
 )
 from splendor.commands.init import initialize_workspace
@@ -358,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         dest="json_output",
-        help="Emit machine-readable JSON output for --changed.",
+        help="Emit machine-readable JSON output for --pending or --changed.",
     )
     ingest_parser.set_defaults(handler=handle_ingest)
 
@@ -1265,9 +1264,13 @@ def handle_ingest(args: argparse.Namespace) -> int:
             f"failed={result.failed} "
             f"skipped={result.skipped}"
         )
-        for action in pending_ingest_next_actions(result):
-            if action != "splendor queue inspect":
-                print(f"Next: {action}")
+        succeeded_source_ids = [
+            item.source_id for item in result.items if item.outcome == "succeeded"
+        ]
+        if len(succeeded_source_ids) == 1:
+            print(f"Next: splendor wiki suggest {succeeded_source_ids[0]}")
+        elif len(succeeded_source_ids) > 1:
+            print("Next: splendor wiki status")
         return 1 if result.failed else 0
 
     try:

@@ -148,6 +148,16 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert forget.json_output is True
 
 
+def test_cli_ingest_help_mentions_pending_and_changed_json(capsys) -> None:
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["ingest", "--help"])
+
+    help_text = capsys.readouterr().out
+    assert "Emit machine-readable JSON output for --pending or --changed." in help_text
+
+
 def test_cli_source_reconcile_repairs_duplicate_active_versions(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source_path = tmp_path / "brief.md"
@@ -3378,15 +3388,12 @@ def test_cli_ingest_pending_json_reports_single_success_next_action(tmp_path: Pa
     assert payload["total"] == 1
     assert payload["summary"] == {"processed": 1, "succeeded": 1, "failed": 0, "skipped": 0}
     assert payload["next_actions"] == [f"splendor wiki suggest {source_id}"]
-    assert payload["items"] == [
-        {
-            "source_id": source_id,
-            "queue_path": f"state/queue/ingest-{source_id}.json",
-            "outcome": "succeeded",
-            "message": payload["items"][0]["message"],
-        }
-    ]
-    assert payload["items"][0]["message"].startswith("run run-")
+    assert len(payload["items"]) == 1
+    item = payload["items"][0]
+    assert item["source_id"] == source_id
+    assert item["queue_path"] == f"state/queue/ingest-{source_id}.json"
+    assert item["outcome"] == "succeeded"
+    assert re.fullmatch(rf"run run-{source_id}-\d{{8}}T\d{{6}}\d{{6}}Z", item["message"])
 
 
 def test_cli_ingest_pending_json_reports_batch_success_next_action(tmp_path: Path, capsys) -> None:
@@ -3432,6 +3439,7 @@ def test_cli_ingest_pending_continues_after_failure(tmp_path: Path, capsys) -> N
     assert f"{ok_source_id}: succeeded" in captured.out
     assert f"{bad_source_id}: failed" in captured.out
     assert "Drain summary: processed=2 succeeded=1 failed=1 skipped=0" in captured.out
+    assert f"Next: splendor wiki suggest {ok_source_id}" in captured.out
 
 
 def test_cli_ingest_pending_json_reports_partial_failure(tmp_path: Path, capsys) -> None:
