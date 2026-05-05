@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 
 import yaml
@@ -118,7 +119,6 @@ def test_home_and_browse_listing_do_not_parse_full_documents(tmp_path: Path, mon
         depends_on=[],
         source_refs=[],
     )
-    planning_path = tmp_path / "planning" / "tasks" / "task-track-web-scaling.md"
 
     def fail_detail(*args, **kwargs):
         raise AssertionError("listing should not use full document detail parsing")
@@ -132,42 +132,6 @@ def test_home_and_browse_listing_do_not_parse_full_documents(tmp_path: Path, mon
     monkeypatch.setattr(web, "_document_detail", fail_detail)
     monkeypatch.setattr(web, "parse_wiki_markdown", fail_wiki_parse)
     monkeypatch.setattr(web, "parse_planning_document", fail_planning_parse)
-    real_open = Path.open
-    guarded_paths = {wiki_path.resolve(), planning_path.resolve()}
-
-    class FrontmatterOnlyGuard:
-        def __init__(self, handle):
-            self._handle = handle
-            self._frontmatter_closed = False
-
-        def __enter__(self):
-            self._handle.__enter__()
-            return self
-
-        def __exit__(self, *args):
-            return self._handle.__exit__(*args)
-
-        def readline(self, *args, **kwargs):
-            return self._handle.readline(*args, **kwargs)
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self._frontmatter_closed:
-                raise AssertionError("listing should not read document bodies")
-            line = next(self._handle)
-            if line.replace("\r\n", "\n").replace("\r", "\n") == "---\n":
-                self._frontmatter_closed = True
-            return line
-
-    def guarded_open(path, *args, **kwargs):
-        handle = real_open(path, *args, **kwargs)
-        if Path(path).resolve() in guarded_paths:
-            return FrontmatterOnlyGuard(handle)
-        return handle
-
-    monkeypatch.setattr(Path, "open", guarded_open)
     client = TestClient(create_app(tmp_path))
 
     home = client.get("/")
@@ -179,6 +143,45 @@ def test_home_and_browse_listing_do_not_parse_full_documents(tmp_path: Path, mon
     assert "Track web scaling" in browse.text
     assert "wiki/concepts/large-web-shell.md" in browse.text
     assert "planning/tasks/task-track-web-scaling.md" in browse.text
+
+
+def test_listing_metadata_stops_after_frontmatter_title(tmp_path: Path) -> None:
+    path = tmp_path / "listing.md"
+    path.write_text(
+        "---\n"
+        "title: Bounded listing\n"
+        "kind: concept\n"
+        "status: active\n"
+        "---\n"
+        "# Body heading that should not be needed\n" + ("body\n" * 100),
+        encoding="utf-8",
+    )
+
+    metadata = web._read_listing_metadata(path)
+
+    assert metadata == {
+        "title": "Bounded listing",
+        "kind": "concept",
+        "status": "active",
+    }
+
+
+def test_listing_frontmatter_scan_is_bounded_for_malformed_documents() -> None:
+    handle = io.StringIO("title: Never closed\n" * (web._LISTING_FRONTMATTER_LINE_LIMIT + 25))
+
+    metadata = web._read_bounded_frontmatter_lines(handle)
+
+    assert metadata is None
+    assert handle.readline() != ""
+
+
+def test_listing_heading_scan_is_bounded_for_frontmatter_light_documents() -> None:
+    handle = io.StringIO("body without heading\n" * (web._LISTING_HEADING_LINE_LIMIT + 25))
+
+    heading = web._read_bounded_heading(handle)
+
+    assert heading is None
+    assert handle.readline() != ""
 
 
 def test_browse_page_separates_index_and_log_as_special_files(tmp_path: Path) -> None:

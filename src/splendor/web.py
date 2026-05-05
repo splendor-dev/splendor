@@ -62,6 +62,10 @@ _ALLOWED_MARKDOWN_ATTRIBUTES = {
     "code": ["class"],
     "span": ["class"],
 }
+_LISTING_FRONTMATTER_LINE_LIMIT = 200
+_LISTING_FRONTMATTER_CHAR_LIMIT = 64 * 1024
+_LISTING_HEADING_LINE_LIMIT = 40
+_LISTING_HEADING_CHAR_LIMIT = 16 * 1024
 
 
 @dataclass(frozen=True)
@@ -736,36 +740,58 @@ def _document_summary(root: Path, layout: ResolvedLayout, path: Path) -> _Docume
 
 def _read_listing_metadata(path: Path) -> dict[str, str | None]:
     """Read only frontmatter and the first heading needed for browse rows."""
-    frontmatter_lines: list[str] = []
     heading: str | None = None
     frontmatter: dict[str, object] = {}
-    frontmatter_closed = False
 
     with path.open("r", encoding="utf-8") as handle:
         first_line = handle.readline()
         if first_line.replace("\r\n", "\n").replace("\r", "\n") == "---\n":
-            for line in handle:
-                normalized = line.replace("\r\n", "\n").replace("\r", "\n")
-                if normalized == "---\n":
-                    frontmatter_closed = True
-                    break
-                frontmatter_lines.append(normalized)
-            if frontmatter_closed:
+            frontmatter_lines = _read_bounded_frontmatter_lines(handle)
+            if frontmatter_lines is not None:
                 frontmatter = _load_listing_frontmatter(frontmatter_lines)
         else:
             heading = _heading_from_line(first_line)
 
         if heading is None and not _frontmatter_string(frontmatter, "title"):
-            for line in handle:
-                heading = _heading_from_line(line)
-                if heading is not None:
-                    break
+            heading = _read_bounded_heading(handle)
 
     return {
         "title": _frontmatter_string(frontmatter, "title") or heading,
         "kind": _frontmatter_string(frontmatter, "kind"),
         "status": _frontmatter_string(frontmatter, "status"),
     }
+
+
+def _read_bounded_frontmatter_lines(handle) -> list[str] | None:
+    lines: list[str] = []
+    char_count = 0
+    for _ in range(_LISTING_FRONTMATTER_LINE_LIMIT):
+        line = handle.readline()
+        if not line:
+            return None
+        normalized = line.replace("\r\n", "\n").replace("\r", "\n")
+        if normalized == "---\n":
+            return lines
+        char_count += len(normalized)
+        if char_count > _LISTING_FRONTMATTER_CHAR_LIMIT:
+            return None
+        lines.append(normalized)
+    return None
+
+
+def _read_bounded_heading(handle) -> str | None:
+    char_count = 0
+    for _ in range(_LISTING_HEADING_LINE_LIMIT):
+        line = handle.readline()
+        if not line:
+            return None
+        char_count += len(line)
+        if char_count > _LISTING_HEADING_CHAR_LIMIT:
+            return None
+        heading = _heading_from_line(line)
+        if heading is not None:
+            return heading
+    return None
 
 
 def _load_listing_frontmatter(frontmatter_lines: list[str]) -> dict[str, object]:
