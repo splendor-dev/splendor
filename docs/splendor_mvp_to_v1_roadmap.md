@@ -1171,9 +1171,11 @@ handoff.
 [`splendor-dev/mock-client-acceptance`](https://github.com/splendor-dev/mock-client-acceptance) as
 the public mock client acceptance repository. It models a realistic small CLI/data project with
 human-authored specs, implementation plans, decision records, contradictory research notes, a
-non-trivial commit history, a healthy Splendor workspace on `main`, a source-refresh scenario
-branch, and isolated recovery fixtures for polluted registries and renamed-source repair. The
-operator-facing workflow is documented in
+non-trivial commit and merged PR history, a healthy Splendor workspace on `main`, a pinned
+source-refresh scenario tag, and isolated recovery fixtures for polluted registries and
+renamed-source repair. The reviewed external state is pinned by the
+`m17-p1.1-acceptance-main` and `m17-p1.1-source-refresh-scenario` tags, and the operator-facing
+workflow is documented in
 [public mock client acceptance](public_mock_client_acceptance.md).
 
 ## Milestone 18 — v2 advanced product track

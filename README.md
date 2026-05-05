@@ -426,6 +426,9 @@ wheel-based trial install path for external v0.3 evaluators.
 [`splendor-dev/mock-client-acceptance`](https://github.com/splendor-dev/mock-client-acceptance)
 repository and documents its baseline, source-refresh, polluted-registry, and renamed-source
 acceptance workflows in [docs/public_mock_client_acceptance.md](docs/public_mock_client_acceptance.md).
+The reviewed external state is pinned by the `m17-p1.1-acceptance-main` and
+`m17-p1.1-source-refresh-scenario` tags, and the mock repository includes merged PR history for
+external evaluator exercises.
 
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes
