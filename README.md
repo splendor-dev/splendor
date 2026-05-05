@@ -264,12 +264,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P1.3`
+- Previous completed PR sub-slice: `M16-P2.1`
 - Current planned slice: `M16-P2 validation correctness`
-- Current PR sub-slice: `M16-P2.1`
+- Current PR sub-slice: `M16-P2.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M16-P2 validation correctness`
-- Next planned PR sub-slice: `M16-P2.2`
+- Next planned slice: `M16-P3 workflow polish and trial-install polish`
+- Next planned PR sub-slice: `M16-P3.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -492,4 +492,4 @@ rewritten.
 - [x] `splendor source forget` provides safe single and bulk source-registry recovery.
 - [x] Duplicate canonical source versions can be reconciled without manual manifest edits.
 - [x] Health resolves existing manifest source IDs without false unknown-source diagnostics.
-- [ ] Lint validates live source refs after path repair and supersession.
+- [x] Lint validates live source refs after path repair and supersession.

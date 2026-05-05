@@ -9,6 +9,7 @@ from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.lint import run_lint_checks
 from splendor.commands.planning import create_task
+from splendor.commands.source import update_source_path
 from splendor.config import AuthorityDocumentConfig, load_config, write_config
 from splendor.layout import resolve_layout
 from splendor.schemas import (
@@ -280,6 +281,63 @@ def test_run_lint_checks_accepts_ocr_derived_artifact_links(tmp_path: Path) -> N
     result = _run_lint(tmp_path)
 
     assert result.issues == []
+
+
+def test_run_lint_checks_uses_live_source_ref_after_path_update(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    moved = tmp_path / "moved"
+    docs.mkdir()
+    moved.mkdir()
+    old_source = docs / "brief.md"
+    new_source = moved / "brief.md"
+    old_source.write_text("# Brief\n\nSame bytes.\n", encoding="utf-8")
+    added = add_source(tmp_path, old_source)
+    manifest = load_source_record(added.manifest_path).model_copy(
+        update={"provenance_links": [ProvenanceLink(path_ref="docs/brief.md", role="input")]}
+    )
+    write_source_record(added.manifest_path, manifest)
+    old_source.rename(new_source)
+
+    update_source_path(tmp_path, "docs/brief.md", Path("moved/brief.md"))
+    result = _run_lint(tmp_path)
+
+    source_path_issues = {
+        issue.code
+        for issue in result.issues
+        if issue.code in {"missing-provenance-path", "missing-source-live-path"}
+    }
+    assert source_path_issues == set()
+
+
+def test_run_lint_checks_reports_missing_active_source_ref(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    source.unlink()
+
+    result = _run_lint(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["missing-source-live-path"]
+    assert result.issues[0].message == "Workspace source live path does not exist: brief.md"
+    assert result.issues[0].path == added.manifest_path.relative_to(tmp_path).as_posix()
+
+
+def test_run_lint_checks_requires_source_ref_for_workspace_sources(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello world\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    manifest = load_source_record(added.manifest_path).model_copy(
+        update={"source_ref": None, "path": "brief.md"}
+    )
+    write_source_record(added.manifest_path, manifest)
+
+    result = _run_lint(tmp_path)
+
+    assert [issue.code for issue in result.issues] == ["missing-source-live-path"]
+    assert result.issues[0].message == "Workspace source manifest is missing a live source_ref."
 
 
 def test_run_lint_checks_validates_source_supersession_refs(tmp_path: Path) -> None:
@@ -563,6 +621,7 @@ def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path
         update={
             "provenance_links": [
                 ProvenanceLink(page_id="missing-page", role="generated-page"),
+                ProvenanceLink(path_ref="wiki/sources/missing.md", role="generated-page"),
                 ProvenanceLink(path_ref="../outside.md", role="input"),
             ]
         }
@@ -591,6 +650,7 @@ def test_run_lint_checks_reports_broken_provenance_refs_and_paths(tmp_path: Path
         or issue.code.startswith("invalid-provenance")
         or issue.code.startswith("source-summary")
     } == {
+        "missing-provenance-path",
         "missing-provenance-page-ref",
         "invalid-provenance-path-ref",
         "source-summary-source-ref-mismatch",

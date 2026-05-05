@@ -420,8 +420,9 @@ def _run_reference_integrity_checks(
     for manifest in inventory.source_manifests:
         if manifest.record is None:
             continue
-        checked_count += 1 + len(manifest.record.aliases)
+        checked_count += 2 + len(manifest.record.aliases)
         issues.extend(_source_identity_issues(root, manifest, source_refs_by_identity))
+        issues.extend(_source_live_path_issues(root, manifest))
         checked_count += len(manifest.record.supersedes) + (
             1 if manifest.record.superseded_by is not None else 0
         )
@@ -440,6 +441,9 @@ def _run_reference_integrity_checks(
                 valid_source_ids=valid_source_ids,
                 valid_page_ids=valid_page_ids,
                 check_name="source-provenance",
+                missing_path_is_allowed=lambda link, source=manifest.record: (
+                    _is_historical_source_input_path(source, link)
+                ),
             )
         )
 
@@ -520,6 +524,60 @@ def _source_identity_issues(
             )
         )
     return issues
+
+
+def _source_live_path_issues(root: Path, manifest: _SourceInventory) -> list[MaintenanceIssue]:
+    if manifest.record is None:
+        return []
+    source = manifest.record
+    if source.superseded_by is not None or source.source_ref_kind != "workspace_path":
+        return []
+
+    manifest_relpath = workspace_relative_path(root, manifest.manifest_path)
+    if not source.source_ref:
+        return [
+            MaintenanceIssue(
+                code="missing-source-live-path",
+                message="Workspace source manifest is missing a live source_ref.",
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-live-path",
+            )
+        ]
+
+    try:
+        resolved = resolve_workspace_path(root, source.source_ref, context="Workspace source")
+    except ValueError as exc:
+        return [
+            MaintenanceIssue(
+                code="invalid-source-live-path",
+                message=str(exc),
+                path=manifest_relpath,
+                record_id=source.source_id,
+                check_name="source-live-path",
+            )
+        ]
+    if resolved.is_file():
+        return []
+    return [
+        MaintenanceIssue(
+            code="missing-source-live-path",
+            message=f"Workspace source live path does not exist: {source.source_ref}",
+            path=manifest_relpath,
+            record_id=source.source_id,
+            check_name="source-live-path",
+        )
+    ]
+
+
+def _is_historical_source_input_path(source: SourceRecord, link) -> bool:
+    if link.role != "input" or link.path_ref is None:
+        return False
+    if source.source_ref_kind != "workspace_path":
+        return False
+    if source.superseded_by is not None:
+        return True
+    return source.source_ref is not None and link.path_ref != source.source_ref
 
 
 def _source_lifecycle_issues(
@@ -1295,6 +1353,7 @@ def _provenance_link_issues(
     valid_source_ids: set[str],
     valid_page_ids: set[str],
     check_name: str,
+    missing_path_is_allowed=None,
 ) -> list[MaintenanceIssue]:
     issues: list[MaintenanceIssue] = []
     for link in links:
@@ -1334,6 +1393,8 @@ def _provenance_link_issues(
             )
             continue
         if not resolved.exists():
+            if missing_path_is_allowed is not None and missing_path_is_allowed(link):
+                continue
             issues.append(
                 MaintenanceIssue(
                     code="missing-provenance-path",
