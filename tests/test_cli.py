@@ -13,6 +13,7 @@ import splendor.commands.workspace as workspace_module
 from splendor import __version__
 from splendor.cli import build_parser, main
 from splendor.commands.ingest import enqueue_ingest_job
+from splendor.commands.lint import run_lint_checks
 from splendor.commands.source import ingest_changed_sources, refresh_source
 from splendor.config import load_config, write_config
 from splendor.layout import resolve_layout
@@ -36,6 +37,11 @@ def latest_report_paths(root: Path, command: str) -> tuple[Path, Path]:
     assert json_reports, f"expected JSON reports in {report_dir}"
     assert markdown_reports, f"expected Markdown reports in {report_dir}"
     return json_reports[-1], markdown_reports[-1]
+
+
+def lint_issue_codes(root: Path) -> list[str]:
+    layout = resolve_layout(root, load_config(root))
+    return [issue.code for issue in run_lint_checks(root, layout).issues]
 
 
 def test_cli_init_command(tmp_path: Path, capsys) -> None:
@@ -106,6 +112,9 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     update_path = parser.parse_args(
         ["source", "update-path", "docs/old.md", "docs/new.md", "--force", "--json"]
     )
+    reconcile = parser.parse_args(
+        ["source", "reconcile", "docs/brief.md", "--current", "src-a", "--apply", "--json"]
+    )
     freshness = parser.parse_args(
         ["source", "freshness", "--report", "reports/freshness.json", "--json"]
     )
@@ -125,6 +134,11 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert update_path.new_path == Path("docs/new.md")
     assert update_path.force is True
     assert update_path.json_output is True
+    assert reconcile.source_command == "reconcile"
+    assert reconcile.selector == "docs/brief.md"
+    assert reconcile.current == "src-a"
+    assert reconcile.apply is True
+    assert reconcile.json_output is True
     assert freshness.source_command == "freshness"
     assert freshness.report == Path("reports/freshness.json")
     assert freshness.json_output is True
@@ -132,6 +146,198 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert forget.matching == ".mypy_cache/**"
     assert forget.apply is True
     assert forget.json_output is True
+
+
+def test_cli_source_reconcile_repairs_duplicate_active_versions(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    source_path.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    manifest_paths = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    before_text = {path.name: path.read_text(encoding="utf-8") for path in manifest_paths}
+    records = [load_source_record(path) for path in manifest_paths]
+    expected_current = max(records, key=lambda record: (record.added_at, record.source_id))
+    superseded_ids = sorted(
+        record.source_id for record in records if record.source_id != expected_current.source_id
+    )
+    assert "multiple-active-source-versions" in lint_issue_codes(tmp_path)
+    capsys.readouterr()
+
+    preview_code = main(["--root", str(tmp_path), "source", "reconcile", "brief.md", "--json"])
+
+    assert preview_code == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["applied"] is False
+    assert preview["canonical_ref"] == "brief.md"
+    assert preview["current_source_id"] == expected_current.source_id
+    assert preview["summary"] == {"active_before": 2, "updates": 2}
+    assert preview["next_commands"] == ["splendor source reconcile brief.md --apply"]
+    assert {path.name: path.read_text(encoding="utf-8") for path in manifest_paths} == before_text
+
+    ambiguous_current_code = main(
+        ["--root", str(tmp_path), "source", "reconcile", "brief.md", "--current", "brief.md"]
+    )
+
+    assert ambiguous_current_code == 1
+    assert "Current source selector is ambiguous" in capsys.readouterr().out
+    assert {path.name: path.read_text(encoding="utf-8") for path in manifest_paths} == before_text
+
+    apply_code = main(["--root", str(tmp_path), "source", "reconcile", "brief.md", "--apply"])
+
+    assert apply_code == 0
+    out = capsys.readouterr().out
+    assert "Applied source reconciliation" in out
+    assert f"Current source ID: {expected_current.source_id}" in out
+    assert "Next: splendor lint" in out
+    after_records = {
+        path.stem: load_source_record(path)
+        for path in sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    }
+    assert after_records[expected_current.source_id].supersedes == superseded_ids
+    assert after_records[expected_current.source_id].superseded_by is None
+    for source_id in superseded_ids:
+        assert after_records[source_id].superseded_by == expected_current.source_id
+    assert lint_issue_codes(tmp_path) == []
+
+
+def test_cli_source_reconcile_explicit_source_id_selects_current(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source_path.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "reconcile", original_id, "--apply", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["current_source_id"] == original_id
+    records = {
+        path.stem: load_source_record(path)
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    }
+    assert records[original_id].superseded_by is None
+    assert records[original_id].supersedes
+    assert all(
+        record.superseded_by == original_id
+        for source_id, record in records.items()
+        if source_id != original_id
+    )
+    superseded_id = next(source_id for source_id in records if source_id != original_id)
+
+    rejected_code = main(["--root", str(tmp_path), "source", "reconcile", superseded_id])
+
+    assert rejected_code == 1
+    assert "Current source version is already superseded" in capsys.readouterr().out
+
+
+def test_cli_source_reconcile_repairs_partial_same_canonical_graph(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source_path.write_text("# Brief\n\nRepo scan duplicate.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    source_path.write_text("# Brief\n\nRefreshed repo scan duplicate.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+
+    records = {
+        path.stem: load_source_record(path)
+        for path in sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    }
+    current_id = max(
+        records.values(), key=lambda record: (record.added_at, record.source_id)
+    ).source_id
+    middle_id = next(
+        source_id for source_id in records if source_id not in {original_id, current_id}
+    )
+    middle_path = tmp_path / "state" / "manifests" / "sources" / f"{middle_id}.json"
+    current_path = tmp_path / "state" / "manifests" / "sources" / f"{current_id}.json"
+    write_source_record(
+        middle_path,
+        records[middle_id].model_copy(update={"superseded_by": current_id}),
+    )
+    write_source_record(
+        current_path,
+        records[current_id].model_copy(update={"supersedes": [middle_id]}),
+    )
+    assert "multiple-active-source-versions" in lint_issue_codes(tmp_path)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "reconcile", "brief.md", "--apply"])
+
+    assert exit_code == 0
+    after_records = {
+        path.stem: load_source_record(path)
+        for path in sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    }
+    assert after_records[original_id].superseded_by == current_id
+    assert after_records[middle_id].superseded_by == current_id
+    assert after_records[current_id].superseded_by is None
+    assert set(after_records[current_id].supersedes) == {original_id, middle_id}
+    assert lint_issue_codes(tmp_path) == []
+
+
+def test_cli_source_reconcile_rejects_ambiguous_or_cross_canonical_current(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    first = tmp_path / "a" / "brief.md"
+    second = tmp_path / "b" / "brief.md"
+    first.write_text("# First\n", encoding="utf-8")
+    second.write_text("# Second\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "a/brief.md"])
+    main(["--root", str(tmp_path), "add-source", "b/brief.md"])
+    ids_by_ref = {
+        load_source_record(path).source_ref: path.stem
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    }
+    capsys.readouterr()
+
+    ambiguous_code = main(["--root", str(tmp_path), "source", "reconcile", "brief"])
+
+    assert ambiguous_code == 1
+    assert "ambiguous" in capsys.readouterr().out
+
+    cross_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "source",
+            "reconcile",
+            ids_by_ref["a/brief.md"],
+            "--current",
+            ids_by_ref["b/brief.md"],
+        ]
+    )
+
+    assert cross_code == 1
+    assert "must share the selected canonical source ref" in capsys.readouterr().out
+
+
+def test_cli_source_reconcile_noops_for_single_active_source(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source_path = tmp_path / "brief.md"
+    source_path.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "brief.md"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "reconcile", "brief.md", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {"active_before": 1, "updates": 0}
+    assert payload["next_commands"] == ["splendor lint", "splendor health"]
 
 
 def test_cli_source_forget_preview_is_non_mutating(tmp_path: Path, capsys) -> None:

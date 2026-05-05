@@ -65,14 +65,17 @@ from splendor.commands.source import (
     ingest_changed_sources,
     list_sources,
     lookup_sources,
+    reconcile_sources,
     refresh_source,
     render_source_freshness_json,
     render_source_lookup_json,
     render_source_path_update_json,
+    render_source_reconcile_json,
     render_source_refresh_json,
     render_stale_ingest_json,
     resolve_source_query_exact,
     scan_source_freshness,
+    source_reconcile_next_commands,
     update_source_path,
     write_source_freshness_report,
 )
@@ -263,6 +266,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow updating a source path even when the current path still exists.",
     )
     source_update_path_parser.set_defaults(handler=handle_source_update_path)
+    source_reconcile_parser = source_subparsers.add_parser(
+        "reconcile", help="Preview or repair duplicate active source versions"
+    )
+    source_reconcile_parser.add_argument(
+        "selector",
+        help="Source ID, logical ID, title, path, or source ref for one canonical source group",
+    )
+    source_reconcile_parser.add_argument(
+        "--current",
+        help="Source ID, logical ID, title, path, or source ref to keep active.",
+    )
+    source_reconcile_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the planned source lifecycle reconciliation.",
+    )
+    source_reconcile_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    source_reconcile_parser.set_defaults(handler=handle_source_reconcile)
     source_forget_parser = source_subparsers.add_parser(
         "forget", help="Preview or apply source registry cleanup"
     )
@@ -1090,6 +1116,49 @@ def handle_source_update_path(args: argparse.Namespace) -> int:
     for command in result.next_commands:
         print(f"Next: {command}")
     return 0 if result.status == "repaired" else 1
+
+
+def handle_source_reconcile(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = reconcile_sources(
+            root,
+            args.selector,
+            current_selector=args.current,
+            apply=args.apply,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_source_reconcile_json(root, result))
+        return 0
+
+    action = "Applied source reconciliation" if result.applied else "Source reconciliation preview"
+    print(action)
+    print(f"Canonical source ref: {result.canonical_ref}")
+    print(f"Current source ID: {result.current.source_id}")
+    print(
+        f"Active versions before: {', '.join(source.source_id for source in result.active_before)}"
+    )
+    if not result.updates:
+        print("No reconciliation changes needed.")
+    else:
+        print("Planned updates:" if not result.applied else "Applied updates:")
+        for update in result.updates:
+            print(f"- {update.source.source_id}: {update.manifest_path}")
+            if update.before_superseded_by != update.after_superseded_by:
+                print(
+                    "  superseded_by: "
+                    f"{update.before_superseded_by or '-'} -> {update.after_superseded_by or '-'}"
+                )
+            if update.before_supersedes != update.after_supersedes:
+                before = ", ".join(update.before_supersedes) or "-"
+                after = ", ".join(update.after_supersedes) or "-"
+                print(f"  supersedes: {before} -> {after}")
+    for command in source_reconcile_next_commands(result):
+        print(f"Next: {command}")
+    return 0
 
 
 def handle_source_forget(args: argparse.Namespace) -> int:

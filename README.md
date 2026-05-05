@@ -195,6 +195,14 @@ source-owned generated summaries, queue records, ingest run records, and safe ge
 maintained wiki/planning references and unsafe mixed historical state are reported as residual
 references for review instead of rewritten.
 
+`splendor source reconcile <source-id|logical-id|title|path>` is the preview-first repair path for
+duplicate active canonical source versions. It resolves one canonical source-ref group, chooses the
+latest active source version as current unless an exact source ID or `--current` selector is
+provided, and reports the manifest lifecycle edits needed to complete one-way or missing
+`supersedes` / `superseded_by` links around that current version. Add `--apply` to mark older
+active versions as superseded by the selected current version. Cross-canonical selections and
+ambiguous `--current` selectors are rejected without rewriting manifests.
+
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
 source versions through the same supersession-aware source lifecycle, ingests only those refreshed
@@ -255,12 +263,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P1.1`
+- Previous completed PR sub-slice: `M16-P1.2`
 - Current planned slice: `M16-P1 source hygiene and registry recovery`
-- Current PR sub-slice: `M16-P1.2`
+- Current PR sub-slice: `M16-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M16-P1 source hygiene and registry recovery`
-- Next planned PR sub-slice: `M16-P1.3`
+- Next planned slice: `M16-P2 validation correctness`
+- Next planned PR sub-slice: `M16-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -481,6 +489,6 @@ rewritten.
 
 - [x] Repo scan ignores and `.splendorignore` prevent cache/local-agent source pollution.
 - [x] `splendor source forget` provides safe single and bulk source-registry recovery.
-- [ ] Duplicate canonical source versions can be reconciled without manual manifest edits.
+- [x] Duplicate canonical source versions can be reconciled without manual manifest edits.
 - [ ] Health resolves existing manifest source IDs without false unknown-source diagnostics.
 - [ ] Lint validates live source refs after path repair and supersession.

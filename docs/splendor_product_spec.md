@@ -812,6 +812,13 @@ Current implementation:
   derived artifacts, and source-owned materialized artifacts. Maintained wiki/planning references,
   malformed generated pages, mixed historical records, and unsafe artifact paths are reported for
   operator review rather than rewritten.
+- `splendor source reconcile <source-id|logical-id|title|path>` is the CLI-first repair path for
+  duplicate active versions of the same canonical source ref. The command previews by default,
+  selects the latest active version unless an exact source ID or `--current` selector names the
+  desired active version, and requires `--apply` before writing the bidirectional
+  `supersedes`/`superseded_by` manifest updates. It also repairs same-canonical one-way lifecycle
+  links around the selected current version so interrupted reconciliation can be rerun. It rejects
+  ambiguous selectors and cross-canonical reconciliation attempts instead of guessing.
 - `splendor workspace refresh --changed` safely refreshes only changed curated workspace-backed
   sources by composing `source freshness` with the supersession-aware `source refresh` path. It
   reports missing or unsupported active curated workspace sources as skipped unresolved diagnostics,

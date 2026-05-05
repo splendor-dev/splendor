@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M16-P1.1`
+- Previous completed PR sub-slice: `M16-P1.2`
 - Current planned slice: `M16-P1 source hygiene and registry recovery`
-- Current PR sub-slice: `M16-P1.2`
+- Current PR sub-slice: `M16-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M16-P1 source hygiene and registry recovery`
-- Next planned PR sub-slice: `M16-P1.3`
+- Next planned slice: `M16-P2 validation correctness`
+- Next planned PR sub-slice: `M16-P2.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
