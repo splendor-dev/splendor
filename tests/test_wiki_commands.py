@@ -1898,6 +1898,10 @@ def test_agent_context_ranks_mock_client_authority_above_stale_token_matches(
         "# Reconciliation Rollout Plan\n\nPR-linked rollout plan for balance reconciliation.\n",
         encoding="utf-8",
     )
+    (docs / "generic-authority.md").write_text(
+        "# Current Project Authority\n\nGeneral current authority for public readiness.\n",
+        encoding="utf-8",
+    )
     (docs / "stale-jsonl-note.md").write_text(
         "# JSONL Reconciliation Note\n\n"
         "balance reconciliation rollout balance reconciliation rollout jsonl jsonl jsonl\n",
@@ -1910,7 +1914,12 @@ def test_agent_context_ranks_mock_client_authority_above_stale_token_matches(
             role="current-authority",
             freshness="stale",
             purpose="Older JSONL research note retained for comparison.",
-            applies_to=["balance reconciliation rollout"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/generic-authority.md",
+            role="current-authority",
+            freshness="current",
+            purpose="Generic current authority that should not outrank task-specific context.",
         ),
         AuthorityDocumentConfig(
             path="docs/rollout-plan.md",
@@ -1988,19 +1997,58 @@ def test_agent_context_ranks_mock_client_authority_above_stale_token_matches(
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     authority_paths = [item["path"] for item in payload["authority_briefs"]]
-    assert authority_paths[:4] == [
+    assert authority_paths[:2] == [
         "docs/current-spec.md",
         "docs/rollout-plan.md",
-        "planning/decisions/decision-csv-first-reconciliation.md",
-        "wiki/topics/held-entry-research.md",
     ]
-    assert authority_paths.index("docs/stale-jsonl-note.md") > authority_paths.index(
-        "wiki/topics/held-entry-research.md"
+    stale_index = authority_paths.index("docs/stale-jsonl-note.md")
+    generic_index = authority_paths.index("docs/generic-authority.md")
+    decision_index = authority_paths.index(
+        "planning/decisions/decision-csv-first-reconciliation.md"
     )
+    research_index = authority_paths.index("wiki/topics/held-entry-research.md")
+    assert decision_index < stale_index
+    assert research_index < stale_index
+    assert decision_index < generic_index
+    assert research_index < generic_index
     assert any(
         match["path"] == "wiki/sources/held-entry-research.md" for match in payload["matches"]
     )
     assert payload["suggested_actions"][0]["category"] in {"goal-match", "authority"}
+
+
+def test_agent_context_preserves_goal_phrase_order_for_authority_ranking(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "ordered.md").write_text(
+        "# Held Entry Research\n\nUse held entry research for reconciliation.",
+        encoding="utf-8",
+    )
+    (docs / "permuted.md").write_text(
+        "# Entry Held Research\n\nUse entry held research for reconciliation.",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(path="docs/permuted.md", role="reference", freshness="current"),
+        AuthorityDocumentConfig(path="docs/ordered.md", role="reference", freshness="current"),
+    ]
+    write_config(tmp_path, config)
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "held", "entry", "research", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [item["path"] for item in payload["authority_briefs"][:2]] == [
+        "docs/ordered.md",
+        "docs/permuted.md",
+    ]
 
 
 def test_agent_context_orders_active_planning_by_goal_relevance(tmp_path: Path, capsys) -> None:

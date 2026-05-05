@@ -322,6 +322,8 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
     queue = inspect_queue(root)
     freshness = scan_source_freshness(root)
     normalized_goal = goal.strip() if goal is not None else ""
+    goal_tokens = _tokens(normalized_goal)
+    goal_phrase = _normalize_goal_phrase(normalized_goal)
     query_summary: str | None = None
     query_warning: BriefWarning | None = None
     matches: list[BriefMatch] = []
@@ -336,16 +338,21 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
             query_summary = query_result.summary
             matches = _rank_brief_matches(
                 [_brief_match(match) for match in query_result.matches],
-                _tokens(normalized_goal),
+                goal_tokens,
+                goal_phrase,
             )[:_BRIEF_MATCH_LIMIT]
 
-    planning_items, warnings = _active_planning_items(root, layout, normalized_goal or None)
+    planning_items, warnings = _active_planning_items(
+        root, layout, normalized_goal or None, goal_phrase
+    )
     if query_warning is not None:
         warnings.insert(0, query_warning)
     sources = load_sources(layout)
     sources_by_id = {source.source_id: source for source in sources}
     wiki_pages, invalid_wiki_pages = load_wiki_pages(root, layout)
-    authority_briefs, authority_warnings = _authority_briefs(root, layout, config, wiki_pages, goal)
+    authority_briefs, authority_warnings = _authority_briefs(
+        root, layout, config, wiki_pages, normalized_goal or None
+    )
     warnings.extend(authority_warnings)
     recent_sources = _recent_sources(sources)
     recent_runs = status.recent_runs
@@ -389,7 +396,9 @@ def _brief_match(match: QueryMatch) -> BriefMatch:
     )
 
 
-def _rank_brief_matches(matches: list[BriefMatch], goal_tokens: set[str]) -> list[BriefMatch]:
+def _rank_brief_matches(
+    matches: list[BriefMatch], goal_tokens: set[str], goal_phrase: str
+) -> list[BriefMatch]:
     ranked: list[tuple[int, BriefMatch]] = []
     for sequence, match in enumerate(matches):
         lifecycle_bonus = 0
@@ -404,6 +413,7 @@ def _rank_brief_matches(matches: list[BriefMatch], goal_tokens: set[str]) -> lis
         relevance_score = (
             _goal_relevance_score(
                 goal_tokens,
+                goal_phrase=goal_phrase,
                 high_text=" ".join([match.title, match.path, match.record_id]),
                 medium_text=" ".join(
                     [
@@ -436,7 +446,7 @@ def _brief_error(exc: Exception) -> str:
 
 
 def _active_planning_items(
-    root: Path, layout, goal: str | None
+    root: Path, layout, goal: str | None, goal_phrase: str
 ) -> tuple[list[BriefPlanningItem], list[BriefWarning]]:
     items: list[BriefPlanningItem] = []
     warnings: list[BriefWarning] = []
@@ -468,6 +478,7 @@ def _active_planning_items(
                     refs.extend(_flatten_handoff_values(value))
             relevance_score = _goal_relevance_score(
                 goal_tokens,
+                goal_phrase=goal_phrase,
                 high_text=" ".join([record.title, record_id, path.relative_to(root).as_posix()]),
                 medium_text=" ".join([kind, status, *refs]),
                 low_text=parsed.body,
@@ -500,6 +511,7 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
     items: list[AuthorityBrief] = []
     warnings: list[BriefWarning] = []
     goal_tokens = _tokens(goal or "")
+    goal_phrase = _normalize_goal_phrase(goal or "")
 
     for doc in config.briefing.authority_documents:
         path = Path(doc.path)
@@ -528,6 +540,7 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             freshness=doc.freshness,
             lifecycle=lifecycle,
             goal_tokens=goal_tokens,
+            goal_phrase=goal_phrase,
             high_text=" ".join([title, path.as_posix(), " ".join(doc.applies_to)]),
             medium_text=" ".join(
                 [*doc.issue_refs, *doc.pr_refs, *doc.supersedes, doc.superseded_by or ""]
@@ -570,6 +583,7 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             freshness=freshness,
             lifecycle=lifecycle,
             goal_tokens=goal_tokens,
+            goal_phrase=goal_phrase,
             high_text=" ".join(
                 [
                     page.frontmatter.title,
@@ -611,15 +625,15 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             )
         )
 
-    items.extend(_decision_authority_briefs(root, layout, goal_tokens))
+    items.extend(_decision_authority_briefs(root, layout, goal_tokens, goal_phrase))
     ranked = sorted(
         enumerate(items),
         key=lambda item: (
             _AUTHORITY_LIFECYCLE_TIER.get(item[1].lifecycle, 99),
             _AUTHORITY_FRESHNESS_ORDER.get(item[1].freshness, 99),
+            -item[1].score,
             _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
             _AUTHORITY_LIFECYCLE_ORDER.get(item[1].lifecycle, 99),
-            -item[1].score,
             item[0],
             item[1].path,
         ),
@@ -636,6 +650,7 @@ def _authority_score(
     freshness: str,
     lifecycle: str,
     goal_tokens: set[str],
+    goal_phrase: str = "",
     high_text: str = "",
     medium_text: str = "",
     low_text: str = "",
@@ -648,6 +663,7 @@ def _authority_score(
     )
     score += _goal_relevance_score(
         goal_tokens,
+        goal_phrase=goal_phrase,
         high_text=high_text,
         medium_text=medium_text,
         low_text=" ".join([low_text, text]),
@@ -679,7 +695,9 @@ def _wiki_authority_lifecycle(frontmatter: KnowledgePageFrontmatter, *, freshnes
     return "current"
 
 
-def _decision_authority_briefs(root: Path, layout, goal_tokens: set[str]) -> list[AuthorityBrief]:
+def _decision_authority_briefs(
+    root: Path, layout, goal_tokens: set[str], goal_phrase: str
+) -> list[AuthorityBrief]:
     if not goal_tokens:
         return []
     items: list[AuthorityBrief] = []
@@ -730,6 +748,7 @@ def _decision_authority_briefs(root: Path, layout, goal_tokens: set[str]) -> lis
                     freshness=freshness,
                     lifecycle=lifecycle,
                     goal_tokens=goal_tokens,
+                    goal_phrase=goal_phrase,
                     high_text=" ".join([record.title, record.decision_id, path.name]),
                     medium_text=" ".join(
                         [
@@ -794,12 +813,16 @@ def _normalize_goal_phrase(text: str) -> str:
 
 
 def _goal_relevance_score(
-    goal_tokens: set[str], *, high_text: str = "", medium_text: str = "", low_text: str = ""
+    goal_tokens: set[str],
+    *,
+    goal_phrase: str = "",
+    high_text: str = "",
+    medium_text: str = "",
+    low_text: str = "",
 ) -> int:
     if not goal_tokens:
         return 0
     score = 0
-    goal_phrase = _normalize_goal_phrase(" ".join(sorted(goal_tokens)))
     for text, weight in ((high_text, 18), (medium_text, 10), (low_text, 4)):
         if not text:
             continue
@@ -911,12 +934,14 @@ def _next_actions(
 def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
     actions: list[SuggestedAction] = []
     goal_tokens = _tokens(snapshot.goal or "")
+    goal_phrase = _normalize_goal_phrase(snapshot.goal or "")
 
     def add(priority: str, category: str, title: str, reason: str, command: str | None, **kwargs):
         relevance_score = kwargs.pop(
             "relevance_score",
             _goal_relevance_score(
                 goal_tokens,
+                goal_phrase=goal_phrase,
                 high_text=" ".join(
                     [
                         title,
@@ -1012,7 +1037,10 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             )
 
     for page in _review_page_actions(
-        snapshot.wiki_pages, snapshot.invalid_wiki_pages, goal_tokens=goal_tokens
+        snapshot.wiki_pages,
+        snapshot.invalid_wiki_pages,
+        goal_tokens=goal_tokens,
+        goal_phrase=goal_phrase,
     ):
         add(**page)
 
@@ -1030,6 +1058,7 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             source_ref=source_ref,
             relevance_score=_goal_relevance_score(
                 goal_tokens,
+                goal_phrase=goal_phrase,
                 high_text=" ".join([source.title, source_ref, source_id]),
                 medium_text=" ".join([source.review_state, source.status]),
             ),
@@ -1159,6 +1188,7 @@ def _review_page_actions(
     invalid_pages: list[InvalidWikiPageSnapshot],
     *,
     goal_tokens: set[str],
+    goal_phrase: str,
 ) -> list[dict[str, object]]:
     actions: list[dict[str, object]] = []
     for invalid in invalid_pages:
@@ -1171,7 +1201,10 @@ def _review_page_actions(
                 "command": "splendor lint",
                 "path": invalid.path,
                 "relevance_score": _goal_relevance_score(
-                    goal_tokens, high_text=invalid.path, low_text=invalid.error
+                    goal_tokens,
+                    goal_phrase=goal_phrase,
+                    high_text=invalid.path,
+                    low_text=invalid.error,
                 ),
             }
         )
@@ -1196,6 +1229,7 @@ def _review_page_actions(
                 "record_id": page.frontmatter.page_id,
                 "relevance_score": _goal_relevance_score(
                     goal_tokens,
+                    goal_phrase=goal_phrase,
                     high_text=" ".join(
                         [page.frontmatter.title, page.frontmatter.page_id, page.path]
                     ),
