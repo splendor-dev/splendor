@@ -149,14 +149,22 @@ def create_decision(
     source_refs: list[str],
     related_tasks: list[str],
     related_questions: list[str],
+    authority_lifecycle: str | None = None,
+    superseded_by: str | None = None,
+    issue_refs: list[str] | None = None,
+    pr_refs: list[str] | None = None,
 ) -> CreatePlanningResult:
     decision_id = record_id or default_record_id("decision", title)
     record = DecisionRecord(
         decision_id=decision_id,
         title=title,
         status=status,
+        authority_lifecycle=authority_lifecycle,
         decided_at=decided_at,
         supersedes=supersedes,
+        superseded_by=superseded_by,
+        issue_refs=issue_refs or [],
+        pr_refs=pr_refs or [],
         source_refs=source_refs,
         related_tasks=related_tasks,
         related_questions=related_questions,

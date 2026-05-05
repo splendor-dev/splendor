@@ -87,6 +87,10 @@ def test_create_decision_round_trips_with_schema(tmp_path: Path) -> None:
         status="accepted",
         decided_at="2026-04-17",
         supersedes=["decision-old"],
+        superseded_by=None,
+        authority_lifecycle="pr-linked",
+        issue_refs=["#116"],
+        pr_refs=["#133"],
         source_refs=["src-123"],
         related_tasks=["task-write-cli-docs"],
         related_questions=["question-query"],
@@ -96,6 +100,9 @@ def test_create_decision_round_trips_with_schema(tmp_path: Path) -> None:
     assert record.decision_id == "decision-use-planning-markdown"
     assert record.status == "accepted"
     assert record.decided_at == "2026-04-17"
+    assert record.authority_lifecycle == "pr-linked"
+    assert record.issue_refs == ["#116"]
+    assert record.pr_refs == ["#133"]
     assert record.related_tasks == ["task-write-cli-docs"]
 
 

@@ -17,6 +17,14 @@ AuthorityLifecycle = Literal[
     "superseded",
     "archived",
 ]
+AUTHORITY_LIFECYCLES = (
+    "current",
+    "reviewed",
+    "pr-linked",
+    "historical",
+    "superseded",
+    "archived",
+)
 PageReviewState = Literal["draft", "machine-generated", "human-reviewed", "contested", "stale"]
 SourceReviewState = Literal[
     "unreviewed",

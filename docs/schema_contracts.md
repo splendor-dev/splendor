@@ -474,17 +474,19 @@ schema-version-1-compatible config, not generated state:
 
 `splendor brief --agent-context [goal]` and `splendor suggest-next [goal]` use this metadata as a
 read-only ranking signal. Omitted lifecycle metadata remains schema-version-1-compatible:
-configured docs default to current unless role/freshness marks them historical or stale, and wiki
-authority lifecycle is derived from page status, review state, freshness, review timestamp, and
-supersession fields. Missing configured files are excluded from the ranked authority list, reported
-as authority warnings in the brief, and surfaced by `splendor lint` as
+configured docs default to current unless role/freshness marks them historical or an explicit
+`superseded_by` replacement exists, and wiki authority lifecycle is derived from review state,
+freshness, review timestamp, and supersession fields. Stale freshness remains separate from
+supersession. Missing configured files are excluded from the ranked authority list, reported as
+authority warnings in the brief, and surfaced by `splendor lint` as
 `missing-authority-document`.
 
 Accepted and superseded decision records can also participate in goal-relevant authority handoff.
 Accepted decisions default to reviewed authority, while superseded decisions default to superseded
 historical context. Optional decision `authority_lifecycle`, `issue_refs`, `pr_refs`,
 `superseded_by`, and existing `supersedes` fields are included in authority JSON output when
-present.
+present. `splendor decision create` can write those optional fields with `--authority-lifecycle`,
+`--issue-ref`, `--pr-ref`, and `--superseded-by`.
 
 Task records now also reserve:
 

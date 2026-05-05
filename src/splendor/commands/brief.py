@@ -110,6 +110,14 @@ _AUTHORITY_LIFECYCLE_SCORE = {
     "superseded": -30,
     "archived": -35,
 }
+_AUTHORITY_LIFECYCLE_TIER = {
+    "current": 0,
+    "reviewed": 0,
+    "pr-linked": 0,
+    "historical": 1,
+    "superseded": 2,
+    "archived": 3,
+}
 _PLANNING_STATUSES = {
     "task": {"todo", "in_progress", "blocked"},
     "milestone": {"planned", "active"},
@@ -436,7 +444,10 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
         title = doc.title or _title_from_markdown(body) or path.name
         reason = doc.purpose or f"{doc.role} document for {path.as_posix()}"
         lifecycle = _configured_authority_lifecycle(
-            doc.authority_lifecycle, role=doc.role, freshness=doc.freshness
+            doc.authority_lifecycle,
+            role=doc.role,
+            freshness=doc.freshness,
+            superseded_by=doc.superseded_by,
         )
         score = _authority_score(
             role=doc.role,
@@ -512,9 +523,10 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
     ranked = sorted(
         enumerate(items),
         key=lambda item: (
-            -item[1].score,
+            _AUTHORITY_LIFECYCLE_TIER.get(item[1].lifecycle, 99),
             _AUTHORITY_LIFECYCLE_ORDER.get(item[1].lifecycle, 99),
             _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
+            -item[1].score,
             item[0],
             item[1].path,
         ),
@@ -539,13 +551,15 @@ def _authority_score(
     return score
 
 
-def _configured_authority_lifecycle(lifecycle: str | None, *, role: str, freshness: str) -> str:
+def _configured_authority_lifecycle(
+    lifecycle: str | None, *, role: str, freshness: str, superseded_by: str | None
+) -> str:
     if lifecycle is not None:
         return lifecycle
+    if superseded_by is not None:
+        return "superseded"
     if freshness == "historical" or role == "historical-review":
         return "historical"
-    if freshness == "stale":
-        return "superseded"
     return "current"
 
 
@@ -553,8 +567,6 @@ def _wiki_authority_lifecycle(frontmatter: KnowledgePageFrontmatter, *, freshnes
     if frontmatter.authority_lifecycle is not None:
         return frontmatter.authority_lifecycle
     if frontmatter.superseded_by is not None:
-        return "superseded"
-    if frontmatter.status == "stale" or freshness == "stale":
         return "superseded"
     if freshness == "historical" or frontmatter.authority_role == "historical-review":
         return "historical"
@@ -866,10 +878,15 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             and authority.role in {"current-authority", "roadmap", "decision"}
             else "low"
         )
+        title = (
+            f"Review decision {authority.path}"
+            if authority.role == "decision"
+            else f"Read authority doc {authority.path}"
+        )
         add(
             priority,
             "authority",
-            f"Read authority doc {authority.path}",
+            title,
             f"{authority.role}/{authority.freshness}/{authority.lifecycle}: {authority.reason}",
             None,
             path=authority.path,

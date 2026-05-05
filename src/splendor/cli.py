@@ -118,7 +118,7 @@ from splendor.schemas import (
     QuestionRecord,
     TaskRecord,
 )
-from splendor.schemas.types import STORAGE_MODES
+from splendor.schemas.types import AUTHORITY_LIFECYCLES, STORAGE_MODES
 from splendor.state.query_snapshot import last_query_path_for, write_query_snapshot
 from splendor.state.source_compat import canonical_source_ref, effective_logical_id
 from splendor.utils.provenance import summarize_provenance_links
@@ -740,6 +740,20 @@ def build_parser() -> argparse.ArgumentParser:
     decision_create_parser.add_argument("--decided-at", help="Decision date")
     decision_create_parser.add_argument(
         "--supersedes", action="append", default=[], help="Superseded decision reference"
+    )
+    decision_create_parser.add_argument(
+        "--superseded-by", help="Decision or authority reference that superseded this decision"
+    )
+    decision_create_parser.add_argument(
+        "--authority-lifecycle",
+        choices=AUTHORITY_LIFECYCLES,
+        help="Authority lifecycle state for agent handoff.",
+    )
+    decision_create_parser.add_argument(
+        "--issue-ref", action="append", default=[], help="Linked GitHub issue reference"
+    )
+    decision_create_parser.add_argument(
+        "--pr-ref", action="append", default=[], help="Linked GitHub pull request reference"
     )
     decision_create_parser.add_argument(
         "--source-ref", action="append", default=[], help="Linked source reference"
@@ -2551,6 +2565,10 @@ def handle_decision_create(args: argparse.Namespace) -> int:
             source_refs=args.source_ref,
             related_tasks=args.related_task,
             related_questions=args.related_question,
+            authority_lifecycle=args.authority_lifecycle,
+            superseded_by=args.superseded_by,
+            issue_refs=args.issue_ref,
+            pr_refs=args.pr_ref,
         )
     except ValueError as exc:
         return _print_error(exc)

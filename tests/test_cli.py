@@ -4480,6 +4480,16 @@ def test_cli_decision_create_command(tmp_path: Path, capsys) -> None:
             "Use",
             "planning",
             "markdown",
+            "--status",
+            "accepted",
+            "--authority-lifecycle",
+            "pr-linked",
+            "--issue-ref",
+            "#116",
+            "--pr-ref",
+            "#133",
+            "--superseded-by",
+            "decision-old-planning-markdown",
             "--related-task",
             "task-write-cli-docs",
         ]
@@ -4488,6 +4498,11 @@ def test_cli_decision_create_command(tmp_path: Path, capsys) -> None:
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "Created decision decision-use-planning-markdown" in captured.out
+    path = tmp_path / "planning" / "decisions" / "decision-use-planning-markdown.md"
+    assert "authority_lifecycle: pr-linked" in path.read_text(encoding="utf-8")
+    assert "- '#116'" in path.read_text(encoding="utf-8")
+    assert "- '#133'" in path.read_text(encoding="utf-8")
+    assert "superseded_by: decision-old-planning-markdown" in path.read_text(encoding="utf-8")
 
 
 def test_cli_question_create_command(tmp_path: Path, capsys) -> None:
