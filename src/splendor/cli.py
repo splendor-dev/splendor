@@ -76,6 +76,11 @@ from splendor.commands.source import (
     update_source_path,
     write_source_freshness_report,
 )
+from splendor.commands.source_forget import (
+    SourceForgetResult,
+    forget_sources,
+    render_source_forget_json,
+)
 from splendor.commands.wiki import (
     add_topic_page,
     build_wiki_status,
@@ -258,6 +263,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow updating a source path even when the current path still exists.",
     )
     source_update_path_parser.set_defaults(handler=handle_source_update_path)
+    source_forget_parser = source_subparsers.add_parser(
+        "forget", help="Preview or apply source registry cleanup"
+    )
+    source_forget_parser.add_argument(
+        "selector",
+        nargs="?",
+        help="Exact source ID, logical ID, title, path, or source ref to forget",
+    )
+    source_forget_parser.add_argument(
+        "--matching",
+        help="Workspace-relative glob for safe bulk source registry cleanup.",
+    )
+    source_forget_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the planned cleanup. Without this flag, source forget only previews.",
+    )
+    source_forget_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    source_forget_parser.set_defaults(handler=handle_source_forget)
     source_freshness_parser = source_subparsers.add_parser(
         "freshness", help="Preview changed workspace-backed source content without mutating"
     )
@@ -1063,6 +1092,26 @@ def handle_source_update_path(args: argparse.Namespace) -> int:
     return 0 if result.status == "repaired" else 1
 
 
+def handle_source_forget(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = forget_sources(
+            root,
+            selector=args.selector,
+            matching=args.matching,
+            apply=args.apply,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_source_forget_json(root, result))
+        return 0
+
+    _print_source_forget_result(result)
+    return 0
+
+
 def handle_source_freshness(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
@@ -1370,6 +1419,61 @@ def _print_source_lookup_results(results: list[SourceLookupResult]) -> None:
         )
         print(f"  Manifest: {result.manifest_path}")
     print("Next: splendor source refresh <source-id|title|path>")
+
+
+def _print_source_forget_result(result: SourceForgetResult) -> None:
+    mode = "applied" if result.applied else "preview"
+    print(f"Source forget {mode}")
+    print(
+        "Summary: "
+        f"candidates={len(result.candidates)} "
+        f"actions={len(result.actions)} "
+        f"skipped={len(result.skipped)} "
+        f"residual_references={len(result.residual_references)}"
+    )
+    if not result.candidates:
+        print("No matching sources.")
+        return
+    print("Sources:")
+    for candidate in result.candidates:
+        source = candidate.source
+        print(
+            f"- {canonical_source_ref(source)} title={source.title} "
+            f"logical_id={effective_logical_id(source) or '-'} source_id={source.source_id}"
+        )
+        print(f"  Manifest: {candidate.manifest_path}")
+    if result.actions:
+        print("Actions:")
+        for action in result.actions:
+            print(f"- {action.status}: {action.kind} {action.path} source_id={action.source_id}")
+    if result.skipped:
+        print("Skipped:")
+        for action in result.skipped:
+            print(
+                f"- {action.kind} {action.path} source_id={action.source_id}: "
+                f"{action.reason or 'not safe to remove'}"
+            )
+    if result.residual_references:
+        print("Residual references:")
+        for residual in result.residual_references:
+            ref_suffix = f" ref_id={residual.ref_id}" if residual.ref_id is not None else ""
+            print(
+                f"- {residual.kind} {residual.path} source_id={residual.source_id}: "
+                f"{residual.reason}{ref_suffix}"
+            )
+    if result.applied:
+        if result.residual_references:
+            print("Next: review reported residual references")
+        print("Next: splendor lint")
+        print("Next: splendor health")
+    else:
+        if result.selector is not None:
+            print(f"Next: splendor source forget {shlex.quote(result.selector)} --apply")
+        else:
+            print(
+                "Next: "
+                f"splendor source forget --matching {shlex.quote(result.matching or '')} --apply"
+            )
 
 
 def handle_wiki_status(args: argparse.Namespace) -> int:

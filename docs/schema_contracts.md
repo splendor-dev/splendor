@@ -199,6 +199,17 @@ Implemented fields:
   output report source ID, old path, new path, status, manifest/current checksums, checksum match
   status, manifest path, queue path when present, and next commands. It does not discover or
   register uncurated files, rewrite historical run records, or mutate maintained synthesis pages.
+- `splendor source forget <source-id|logical-id|title|path>` and
+  `splendor source forget --matching <workspace-relative-glob>` provide preview-first registry
+  cleanup for polluted source manifests. The command requires exactly one selection mode, previews
+  by default, and requires `--apply` before deletion. Single-source selectors use the same strict
+  exact source resolution as mutating source commands. `--matching` compares the glob against
+  workspace source refs, original paths, aliases, logical IDs, and compatibility paths in
+  deterministic order. Apply removes selected manifests plus source-owned generated source-summary
+  pages, ingest queue records, source-owned ingest run records, safe derived artifacts, and
+  materialized artifacts under the source-owned raw artifact directory. Maintained wiki/planning
+  references, malformed generated pages, mixed run records, and unsafe artifacts are reported as
+  residual or skipped references rather than rewritten.
 - `splendor source freshness` is a non-mutating preview over curated source manifests. It reports
   path-first freshness state for workspace-backed canonical source refs, including unchanged,
   changed, missing, and unsupported statuses, manifest/current checksums where available, source

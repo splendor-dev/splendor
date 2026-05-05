@@ -387,3 +387,8 @@ lint/health reports to explain curated source changes, maintained wiki edits, so
 changes, and mechanical queue/run/report churn for reviewers. It labels lint/health status as
 latest local report state; it does not replace the required validation commands or GitHub metadata
 checks.
+
+For source-registry recovery PRs, use `splendor source forget` in preview mode before applying any
+cleanup. Applied recovery changes should be reviewed as intentional source-registry maintenance:
+selected manifests and source-owned generated state may be removed, while residual maintained
+wiki/planning references should remain visible in the command output and PR description.

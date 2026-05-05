@@ -115,6 +115,8 @@ Implemented today:
 - `splendor source list`, `splendor source lookup [query]`, `splendor source freshness`,
   `splendor source refresh <source-id|title|path>`, and
   `splendor source update-path <source-id|logical-id|title|path> <new-path>`
+- `splendor source forget <source-id|logical-id|title|path>` and
+  `splendor source forget --matching "glob"` for preview-first registry cleanup
 - `splendor workspace refresh --changed` with optional `--ingest`, `--rebuild-index`,
   `--prune-superseded`, and `--update-topic-refs`
 - `splendor ingest <source-id>`, `splendor ingest --pending`, and `splendor ingest --changed`
@@ -184,6 +186,15 @@ reported as partial repairs with a non-zero exit and an explicit `source refresh
 command does not discover/register uncurated files, rewrite historical run records, or mutate
 maintained synthesis pages.
 
+`splendor source forget` is the explicit polluted-registry recovery path. It previews by default
+and requires `--apply` before deleting anything. Single-source cleanup accepts exact source IDs,
+logical IDs, path aliases/source refs, or unambiguous titles. Bulk cleanup uses
+`--matching <workspace-relative-glob>`, such as `--matching ".mypy_cache/**"`, against curated
+workspace refs and aliases in deterministic order. Apply removes selected manifests plus
+source-owned generated summaries, queue records, ingest run records, and safe generated artifacts;
+maintained wiki/planning references and unsafe mixed historical state are reported as residual
+references for review instead of rewritten.
+
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
 source versions through the same supersession-aware source lifecycle, ingests only those refreshed
@@ -244,12 +255,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P0.1`
+- Previous completed PR sub-slice: `M16-P1.1`
 - Current planned slice: `M16-P1 source hygiene and registry recovery`
-- Current PR sub-slice: `M16-P1.1`
+- Current PR sub-slice: `M16-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M16-P1 source hygiene and registry recovery`
-- Next planned PR sub-slice: `M16-P1.2`
+- Next planned PR sub-slice: `M16-P1.3`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -469,7 +480,7 @@ rewritten.
 ### v0.3 recovery readiness checklist
 
 - [x] Repo scan ignores and `.splendorignore` prevent cache/local-agent source pollution.
-- [ ] `splendor source forget` provides safe single and bulk source-registry recovery.
+- [x] `splendor source forget` provides safe single and bulk source-registry recovery.
 - [ ] Duplicate canonical source versions can be reconciled without manual manifest edits.
 - [ ] Health resolves existing manifest source IDs without false unknown-source diagnostics.
 - [ ] Lint validates live source refs after path repair and supersession.

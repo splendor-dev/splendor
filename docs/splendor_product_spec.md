@@ -802,6 +802,16 @@ Current implementation:
   refresh; changed-byte moves are reported as partial repairs and point to `source refresh`. It
   does not perform broad discovery, register uncurated files, rewrite historical run records, or
   mutate maintained synthesis pages.
+- `splendor source forget <source-id|logical-id|title|path>` and
+  `splendor source forget --matching <workspace-relative-glob>` are the CLI-first recovery path for
+  polluted source registries. They preview by default and require `--apply` for destructive
+  cleanup. Single-source selection uses strict exact source resolution; bulk selection matches the
+  glob against curated workspace refs, original paths, logical IDs, aliases, and compatibility
+  paths. Apply removes selected manifests and source-owned generated state where deterministic:
+  generated source-summary pages, ingest queue records, source-owned ingest run records, safe
+  derived artifacts, and source-owned materialized artifacts. Maintained wiki/planning references,
+  malformed generated pages, mixed historical records, and unsafe artifact paths are reported for
+  operator review rather than rewritten.
 - `splendor workspace refresh --changed` safely refreshes only changed curated workspace-backed
   sources by composing `source freshness` with the supersession-aware `source refresh` path. It
   reports missing or unsupported active curated workspace sources as skipped unresolved diagnostics,
