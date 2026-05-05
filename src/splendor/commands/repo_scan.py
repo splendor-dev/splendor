@@ -27,6 +27,7 @@ _CODE_EXTENSIONS = (
 )
 _IGNORED_DIR_NAMES = {
     ".cache",
+    ".claude",
     ".git",
     ".mypy_cache",
     ".pytest_cache",
@@ -40,6 +41,7 @@ _IGNORED_DIR_NAMES = {
     "generated",
     "node_modules",
 }
+_SCAN_CONTROL_FILENAMES = {".splendorignore"}
 _SOURCE_CLASSES: tuple[SourceClass, ...] = ("code", "documentation", "configuration", "other")
 LARGE_APPLY_CANDIDATE_LIMIT = 200
 
@@ -75,6 +77,12 @@ class RepoScanIgnoredPath:
 class GitIgnoreContext:
     repo_root: Path | None
     workspace_root: Path
+
+
+@dataclass(frozen=True)
+class SplendorIgnoreRules:
+    file_patterns: tuple[str, ...]
+    directory_patterns: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -383,6 +391,7 @@ def _discover_supported_paths(
     ignored_paths_by_path: dict[str, RepoScanIgnoredPath] = {}
     unsupported = 0
     gitignore = _git_ignore_context(root)
+    splendorignore = _load_splendorignore(root)
 
     for dirpath, dirnames, filenames in os.walk(root, topdown=True):
         current_dir = Path(dirpath)
@@ -390,8 +399,16 @@ def _discover_supported_paths(
         gitignore_dir_candidates: dict[str, str] = {}
         for dirname in sorted(dirnames):
             path = current_dir / dirname
+            relative_dir_path = f"{path.relative_to(root).as_posix()}/"
             reason = _ignored_dir_reason(path, root, layout)
+            if reason is None:
+                reason = _splendorignore_dir_reason(path, root, splendorignore)
             if reason is not None:
+                if _should_report_pruned_directory(path, reason, root, layout):
+                    ignored_paths_by_path[relative_dir_path] = RepoScanIgnoredPath(
+                        path=relative_dir_path,
+                        reason=reason,
+                    )
                 continue
             repo_relative = _repo_relative_path(path, gitignore, is_dir=True)
             if repo_relative is not None:
@@ -399,6 +416,15 @@ def _discover_supported_paths(
             filtered_dirnames.append(dirname)
         gitignored_dirs = _git_ignored_repo_paths(gitignore_dir_candidates, gitignore)
         if gitignored_dirs:
+            for repo_path in gitignored_dirs:
+                dirname = gitignore_dir_candidates[repo_path]
+                path = current_dir / dirname
+                relative_dir_path = f"{path.relative_to(root).as_posix()}/"
+                if _should_report_pruned_directory(path, "gitignore", root, layout):
+                    ignored_paths_by_path[relative_dir_path] = RepoScanIgnoredPath(
+                        path=relative_dir_path,
+                        reason="gitignore",
+                    )
             filtered_dirnames = [
                 dirname
                 for dirname in filtered_dirnames
@@ -410,6 +436,13 @@ def _discover_supported_paths(
             path = current_dir / filename
             relative_path = path.relative_to(root).as_posix()
             reason = _ignored_path_reason(path, root, layout)
+            if reason is not None:
+                ignored_paths_by_path[relative_path] = RepoScanIgnoredPath(
+                    path=relative_path,
+                    reason=reason,
+                )
+                continue
+            reason = _splendorignore_file_reason(path, root, splendorignore)
             if reason is not None:
                 ignored_paths_by_path[relative_path] = RepoScanIgnoredPath(
                     path=relative_path,
@@ -463,6 +496,8 @@ def _ignored_path_reason(path: Path, root: Path, layout: ResolvedLayout) -> str 
     relative = path.relative_to(root)
     if not relative.parts:
         return None
+    if len(relative.parts) == 1 and relative.name in _SCAN_CONTROL_FILENAMES:
+        return "scan_control"
     if _is_managed_layout_path(relative, root, layout) or _has_ignored_dir_name(
         relative.parts, is_dir=False
     ):
@@ -509,6 +544,28 @@ def _has_ignored_dir_name(parts: tuple[str, ...], *, is_dir: bool) -> bool:
     return any(part in _IGNORED_DIR_NAMES for part in directory_parts)
 
 
+def _should_report_pruned_directory(
+    path: Path,
+    reason: str,
+    root: Path,
+    layout: ResolvedLayout,
+) -> bool:
+    relative = path.relative_to(root)
+    if reason == "managed_or_transient" and _is_managed_layout_path(relative, root, layout):
+        return False
+    return _directory_has_entries(path)
+
+
+def _directory_has_entries(path: Path) -> bool:
+    try:
+        next(path.iterdir())
+    except StopIteration:
+        return False
+    except OSError:
+        return True
+    return True
+
+
 def _git_ignore_context(root: Path) -> GitIgnoreContext:
     try:
         top_level = subprocess.run(
@@ -525,6 +582,62 @@ def _git_ignore_context(root: Path) -> GitIgnoreContext:
         repo_root=Path(top_level.stdout.strip()).resolve(),
         workspace_root=root.resolve(),
     )
+
+
+def _load_splendorignore(root: Path) -> SplendorIgnoreRules:
+    ignore_path = root / ".splendorignore"
+    if not ignore_path.is_file():
+        return SplendorIgnoreRules(file_patterns=(), directory_patterns=())
+    file_patterns: list[str] = []
+    directory_patterns: list[str] = []
+    for raw_line in ignore_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.endswith("/"):
+            normalized = _normalize_pattern(line)
+            if normalized:
+                directory_patterns.append(normalized)
+            continue
+        normalized = _normalize_pattern(line)
+        if normalized:
+            file_patterns.append(normalized)
+    return SplendorIgnoreRules(
+        file_patterns=tuple(file_patterns),
+        directory_patterns=tuple(directory_patterns),
+    )
+
+
+def _splendorignore_dir_reason(path: Path, root: Path, rules: SplendorIgnoreRules) -> str | None:
+    if not rules.directory_patterns:
+        return None
+    relative_path = path.relative_to(root).as_posix()
+    if _matches_any_pattern(relative_path, list(rules.directory_patterns)):
+        return "splendorignore"
+    return None
+
+
+def _splendorignore_file_reason(path: Path, root: Path, rules: SplendorIgnoreRules) -> str | None:
+    relative_path = path.relative_to(root).as_posix()
+    if _matches_any_pattern(relative_path, list(rules.file_patterns)):
+        return "splendorignore"
+    if rules.directory_patterns and _matches_directory_pattern_parent(
+        relative_path,
+        rules.directory_patterns,
+    ):
+        return "splendorignore"
+    return None
+
+
+def _matches_directory_pattern_parent(
+    relative_path: str, directory_patterns: tuple[str, ...]
+) -> bool:
+    parts = tuple(part for part in relative_path.split("/") if part)
+    for index in range(1, len(parts)):
+        parent = "/".join(parts[:index])
+        if _matches_any_pattern(parent, list(directory_patterns)):
+            return True
+    return False
 
 
 def _git_ignored_paths(root: Path, paths: list[Path], gitignore: GitIgnoreContext) -> set[str]:
