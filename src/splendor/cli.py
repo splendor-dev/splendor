@@ -40,6 +40,7 @@ from splendor.commands.planning import (
     list_milestones,
     list_tasks,
     update_question_answer,
+    update_task_review_state,
 )
 from splendor.commands.pr_summary import (
     PathGroup,
@@ -686,7 +687,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Filter by task priority.",
     )
     task_list_parser.add_argument("--milestone-ref", help="Filter by milestone reference")
+    task_list_parser.add_argument(
+        "--generated-review",
+        action="store_true",
+        help="List only generated contradiction-review tasks.",
+    )
+    task_list_parser.add_argument(
+        "--include-generated-review",
+        action="store_true",
+        help="Include generated contradiction-review tasks in the default task list.",
+    )
+    task_list_parser.add_argument(
+        "--review-task-state",
+        choices=("active", "resolved", "muted"),
+        help="Filter generated review tasks by operator review state.",
+    )
     task_list_parser.set_defaults(handler=handle_task_list)
+    task_resolve_parser = task_subparsers.add_parser(
+        "resolve", help="Mark a generated contradiction-review task resolved"
+    )
+    task_resolve_parser.add_argument("task_id", help="Generated contradiction-review task ID")
+    task_resolve_parser.set_defaults(handler=handle_task_resolve)
+    task_mute_parser = task_subparsers.add_parser(
+        "mute", help="Mute a generated contradiction-review task"
+    )
+    task_mute_parser.add_argument("task_id", help="Generated contradiction-review task ID")
+    task_mute_parser.set_defaults(handler=handle_task_mute)
 
     milestone_parser = subparsers.add_parser(
         "milestone", help="Create or inspect milestone records"
@@ -2512,12 +2538,48 @@ def handle_task_list(args: argparse.Namespace) -> int:
             status=args.status,
             priority=args.priority,
             milestone_ref=args.milestone_ref,
+            generated_review=args.generated_review,
+            include_generated_review=args.include_generated_review,
+            review_task_state=args.review_task_state,
         )
     except ValueError as exc:
         return _print_error(exc)
 
     for row in rows:
-        print(f"{row.task_id}  {row.status}  {row.priority}  {row.title}")
+        if row.record_origin == "generated":
+            generated_kind = row.generated_kind or "-"
+            print(
+                f"{row.task_id}  {row.status}  {row.priority}  "
+                f"{row.record_origin}/{generated_kind}/{row.review_task_state}  {row.title}"
+            )
+        else:
+            print(f"{row.task_id}  {row.status}  {row.priority}  {row.title}")
+    return 0
+
+
+def handle_task_resolve(args: argparse.Namespace) -> int:
+    return _handle_task_review_state(args, "resolved")
+
+
+def handle_task_mute(args: argparse.Namespace) -> int:
+    return _handle_task_review_state(args, "muted")
+
+
+def _handle_task_review_state(args: argparse.Namespace, review_task_state: str) -> int:
+    try:
+        result = update_task_review_state(
+            args.root.resolve(),
+            task_id=args.task_id,
+            review_task_state=review_task_state,
+        )
+    except ValueError as exc:
+        return _print_error(exc)
+
+    print(
+        f"Updated task {result.record_id}: "
+        f"status={result.status} review_task_state={result.review_task_state}"
+    )
+    print(f"Path: {result.path}")
     return 0
 
 

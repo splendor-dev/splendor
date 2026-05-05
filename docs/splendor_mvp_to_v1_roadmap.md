@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M17-P2.1`
+- Previous completed PR sub-slice: `M17-P3.1`
 - Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P3.1`
+- Current PR sub-slice: `M17-P4.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P4.1`
+- Next planned slice: `M18 v2 advanced product track`
+- Next planned PR sub-slice: `M18-P1.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1193,6 +1193,12 @@ compatible: no vector store, database, or background semantic service is introdu
 titles, paths, record IDs, authority scope, and configured `applies_to` metadata are weighted above
 loose body overlap, while lifecycle and freshness keep current, reviewed, and PR-linked authority
 above stale, superseded, archived, or token-similar historical material.
+
+`M17-P4.1` implements issue #117 by classifying ingest-created contradiction-review tasks as
+generated planning records, excluding them from default active planning handoff, and adding
+intentional task workflows to list, resolve, or mute them. Contradiction evidence remains attached
+to contested source-summary pages and visible through query/review-task metadata when operators ask
+for it.
 
 ## Milestone 18 — v2 advanced product track
 

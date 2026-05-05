@@ -264,6 +264,12 @@ signals. Title/path/scope matches carry more weight than loose body overlap, and
 review noise from burying current specs, rollout plans, accepted decisions, and key contradicting
 research.
 
+`M17-P4.1` reduces issue #117 contradiction-review task noise without weakening contradiction
+evidence. Ingest-created contradiction-review tasks are classified as generated planning records,
+hidden from default active planning handoff, and managed intentionally through task-list, resolve,
+and mute workflows. Contested source-summary annotations and query metadata remain available when
+operators ask for contradiction evidence.
+
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
 display; copied, external, parsed PDF, and OCR-derived sources keep fuller extracts by default
@@ -295,12 +301,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M17-P2.1`
+- Previous completed PR sub-slice: `M17-P3.1`
 - Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P3.1`
+- Current PR sub-slice: `M17-P4.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P4.1`
+- Next planned slice: `M18 v2 advanced product track`
+- Next planned PR sub-slice: `M18-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -451,6 +457,11 @@ goal-relevant authority ranking while superseded decisions remain historical con
 `M17-P3.1` implements deterministic authority-aware ranking for issue #115. Agent handoff now
 favors task-relevant current specs, rollout plans, accepted decisions, active planning records, and
 focused contradiction/review signals over stale or merely token-similar material.
+
+`M17-P4.1` implements contradiction-review task noise reduction for issue #117. Generated review
+tasks no longer crowd default active planning handoff, while explicit task commands can list,
+resolve, or mute them and contradiction evidence remains discoverable on contested pages and query
+results.
 
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes

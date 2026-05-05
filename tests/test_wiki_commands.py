@@ -8,8 +8,9 @@ from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.wiki import add_topic_page, rebuild_wiki_index
 from splendor.config import AuthorityDocumentConfig, load_config, write_config
-from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport
+from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport, TaskRecord
 from splendor.state.source_registry import load_source_record
+from splendor.utils.planning import render_planning_markdown
 from splendor.utils.wiki import parse_wiki_markdown
 
 
@@ -2094,6 +2095,55 @@ def test_agent_context_orders_active_planning_by_goal_relevance(tmp_path: Path, 
     assert planning_actions[0]["record_id"] == "task-agent-handoff-ranking"
 
 
+def test_agent_context_hides_generated_review_tasks_from_active_planning(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Continue human handoff plan",
+            "--id",
+            "task-human-handoff-plan",
+            "--status",
+            "in_progress",
+        ]
+    )
+    review_task = TaskRecord(
+        task_id="task-review-src-a-src-b-1234567890",
+        title="Review contradiction: noisy generated task",
+        status="todo",
+        priority="high",
+        record_origin="generated",
+        generated_kind="contradiction-review",
+        review_task_state="active",
+        created_at="2026-05-06T00:00:00Z",
+        updated_at="2026-05-06T00:00:00Z",
+    )
+    task_path = tmp_path / "planning" / "tasks" / f"{review_task.task_id}.md"
+    task_path.write_text(
+        render_planning_markdown(review_task, title=review_task.title),
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "human", "handoff", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [item["record_id"] for item in payload["active_planning"]] == ["task-human-handoff-plan"]
+    assert all(
+        action["record_id"] != review_task.task_id
+        for action in payload["suggested_actions"]
+        if action["record_id"] is not None
+    )
+
+
 def test_suggest_next_caps_review_noise_after_goal_relevance(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     for index in range(8):
@@ -2232,6 +2282,48 @@ def test_suggest_next_caps_review_noise_and_preserves_goal_work(tmp_path: Path, 
     assert "goal-match" in categories
     assert "planning" in categories
     assert categories.index("goal-match") < categories.index("wiki-review")
+
+
+def test_suggest_next_exposes_generated_review_tasks_for_contradiction_goal(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    review_task = TaskRecord(
+        task_id="task-review-src-a-src-b-1234567890",
+        title="Review contradiction: A vs B",
+        status="todo",
+        priority="high",
+        record_origin="generated",
+        generated_kind="contradiction-review",
+        review_task_state="active",
+        created_at="2026-05-06T00:00:00Z",
+        updated_at="2026-05-06T00:00:00Z",
+    )
+    task_path = tmp_path / "planning" / "tasks" / f"{review_task.task_id}.md"
+    task_path.write_text(
+        render_planning_markdown(review_task, title=review_task.title),
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    default_exit = main(["--root", str(tmp_path), "suggest-next", "handoff", "--json"])
+    default_payload = json.loads(capsys.readouterr().out)
+    focused_exit = main(["--root", str(tmp_path), "suggest-next", "contradiction", "--json"])
+    focused_payload = json.loads(capsys.readouterr().out)
+
+    assert default_exit == 0
+    assert focused_exit == 0
+    assert all(
+        action["category"] != "contradiction-review" for action in default_payload["actions"]
+    )
+    contradiction_actions = [
+        action
+        for action in focused_payload["actions"]
+        if action["category"] == "contradiction-review"
+    ]
+    assert contradiction_actions[0]["command"] == (
+        "splendor task list --generated-review --review-task-state active"
+    )
 
 
 def test_brief_skips_invalid_query_matches_without_failing(tmp_path: Path, capsys) -> None:

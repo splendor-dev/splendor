@@ -24,10 +24,12 @@ from splendor.schemas import (
     ProvenanceLink,
     QueueItemRecord,
     RunRecord,
+    TaskRecord,
 )
 from splendor.state.query_snapshot import last_query_path_for, load_query_snapshot
 from splendor.state.runtime import load_queue_item, write_queue_item, write_run_record
 from splendor.state.source_registry import load_source_record, write_source_record
+from splendor.utils.planning import render_planning_markdown
 
 
 def latest_report_paths(root: Path, command: str) -> tuple[Path, Path]:
@@ -4440,6 +4442,103 @@ def test_cli_task_list_command_supports_filters(tmp_path: Path, capsys) -> None:
     captured = capsys.readouterr()
     lines = [line for line in captured.out.splitlines() if line.startswith("task-")]
     assert lines == ["task-write-cli-docs  todo  high  Write CLI docs"]
+
+
+def test_cli_task_list_hides_generated_review_tasks_by_default(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Write", "CLI", "docs"])
+    review_task = TaskRecord(
+        task_id="task-review-src-a-src-b-1234567890",
+        title="Review contradiction: A vs B",
+        status="todo",
+        priority="high",
+        record_origin="generated",
+        generated_kind="contradiction-review",
+        review_task_state="active",
+        created_at="2026-05-06T00:00:00Z",
+        updated_at="2026-05-06T00:00:00Z",
+        source_refs=["src-a", "src-b"],
+        page_refs=["wiki/sources/src-a.md", "wiki/sources/src-b.md"],
+        run_refs=["state/runs/run-1.json"],
+    )
+    task_path = tmp_path / "planning" / "tasks" / f"{review_task.task_id}.md"
+    task_path.write_text(
+        render_planning_markdown(review_task, title=review_task.title),
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "task", "list"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "task-write-cli-docs" in out
+    assert review_task.task_id not in out
+
+    exit_code = main(["--root", str(tmp_path), "task", "list", "--include-generated-review"])
+
+    assert exit_code == 0
+    assert review_task.task_id in capsys.readouterr().out
+
+    exit_code = main(["--root", str(tmp_path), "task", "list", "--generated-review"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert review_task.task_id in out
+    assert "generated/contradiction-review/active" in out
+
+
+def test_cli_task_resolve_and_mute_generated_review_tasks(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    for task_id in [
+        "task-review-src-a-src-b-1234567890",
+        "task-review-src-c-src-d-1234567890",
+    ]:
+        review_task = TaskRecord(
+            task_id=task_id,
+            title=f"Review contradiction: {task_id}",
+            status="todo",
+            priority="high",
+            record_origin="generated",
+            generated_kind="contradiction-review",
+            review_task_state="active",
+            created_at="2026-05-06T00:00:00Z",
+            updated_at="2026-05-06T00:00:00Z",
+        )
+        task_path = tmp_path / "planning" / "tasks" / f"{task_id}.md"
+        task_path.write_text(
+            render_planning_markdown(review_task, title=review_task.title),
+            encoding="utf-8",
+        )
+    capsys.readouterr()
+
+    resolved = main(
+        ["--root", str(tmp_path), "task", "resolve", "task-review-src-a-src-b-1234567890"]
+    )
+    muted = main(["--root", str(tmp_path), "task", "mute", "task-review-src-c-src-d-1234567890"])
+
+    assert resolved == 0
+    assert muted == 0
+    out = capsys.readouterr().out
+    assert "status=done review_task_state=resolved" in out
+    assert "status=todo review_task_state=muted" in out
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "list",
+            "--generated-review",
+            "--review-task-state",
+            "resolved",
+        ]
+    )
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "task-review-src-a-src-b-1234567890" in out
+    assert "task-review-src-c-src-d-1234567890" not in out
 
 
 def test_cli_milestone_create_and_list_commands(tmp_path: Path, capsys) -> None:

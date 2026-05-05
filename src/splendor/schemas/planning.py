@@ -16,6 +16,9 @@ class TaskRecord(StrictRecord):
     title: str
     status: Literal["todo", "in_progress", "blocked", "done"] = "todo"
     priority: Literal["low", "medium", "high"] = "medium"
+    record_origin: Literal["human", "generated"] = "human"
+    generated_kind: Literal["contradiction-review"] | None = None
+    review_task_state: Literal["active", "resolved", "muted"] = "active"
     milestone_refs: list[str] = Field(default_factory=list)
     decision_refs: list[str] = Field(default_factory=list)
     question_refs: list[str] = Field(default_factory=list)

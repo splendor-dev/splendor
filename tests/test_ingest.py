@@ -17,12 +17,14 @@ from splendor.commands.ingest import (
     run_ingest_job,
 )
 from splendor.commands.init import initialize_workspace
+from splendor.commands.planning import update_task_review_state
 from splendor.config import load_config, write_config
-from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord
+from splendor.schemas import KnowledgePageFrontmatter, QueueItemRecord, RunRecord, TaskRecord
 from splendor.schemas.types import SummaryMode
 from splendor.state.runtime import load_queue_item, load_run_record, write_queue_item
 from splendor.state.source_pointer import load_source_pointer, write_source_pointer
 from splendor.state.source_registry import load_source_record, write_source_record
+from splendor.utils.planning import parse_planning_document
 
 
 def parse_frontmatter(page_path: Path) -> tuple[KnowledgePageFrontmatter, str]:
@@ -1910,6 +1912,10 @@ def test_ingest_source_marks_contradictions_and_creates_review_task(
     task_id = second_page.contradictions[0].review_task_id
     task_path = tmp_path / "planning" / "tasks" / f"{task_id}.md"
     assert task_path.exists()
+    task_record = parse_planning_document(task_path, TaskRecord).record
+    assert task_record.record_origin == "generated"
+    assert task_record.generated_kind == "contradiction-review"
+    assert task_record.review_task_state == "active"
     task_body = task_path.read_text(encoding="utf-8")
     assert "## Contradiction" in task_body
     assert "## Evidence" in task_body
@@ -1997,3 +2003,55 @@ def test_ingest_source_dedupes_existing_contradictions_and_review_tasks(
     assert len(second_page.contradictions) == 1
     assert len(task_paths) == 1
     assert load_run_record(second_result.run_path).task_ids == [task_id]
+
+
+@pytest.mark.parametrize(
+    ("review_task_state", "expected_status"),
+    [("resolved", "done"), ("muted", "todo")],
+)
+def test_ingest_source_preserves_generated_review_task_disposition_on_upsert(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    review_task_state: str,
+    expected_status: str,
+) -> None:
+    initialize_workspace(tmp_path)
+
+    class FakeAnalyzer:
+        def detect(self, *, current, candidate):
+            return [
+                contradictions_module.DetectedContradiction(
+                    summary="The pages disagree about the configured storage mode.",
+                    current_excerpt="Storage mode is none.",
+                    candidate_excerpt="Storage mode is copy.",
+                )
+            ]
+
+    monkeypatch.setattr(
+        contradictions_module,
+        "build_contradiction_analyzer",
+        lambda config: FakeAnalyzer(),
+    )
+
+    first_source = tmp_path / "first.md"
+    first_source.write_text("# First\n\nhello world\n", encoding="utf-8")
+    first_added = add_source(tmp_path, first_source, storage_mode="copy")
+    ingest_source(tmp_path, first_added.source_id)
+
+    second_source = tmp_path / "second.md"
+    second_source.write_text("# Second\n\nhello world\n", encoding="utf-8")
+    second_added = add_source(tmp_path, second_source, storage_mode="copy")
+    first_result = ingest_source(tmp_path, second_added.source_id)
+    assert first_result.page_path is not None
+    task_id = parse_frontmatter(first_result.page_path)[0].contradictions[0].review_task_id
+
+    update_task_review_state(tmp_path, task_id=task_id, review_task_state=review_task_state)
+    first_result.page_path.unlink()
+    ingest_source(tmp_path, second_added.source_id)
+
+    task_path = tmp_path / "planning" / "tasks" / f"{task_id}.md"
+    task_record = parse_planning_document(task_path, TaskRecord).record
+    assert task_record.record_origin == "generated"
+    assert task_record.generated_kind == "contradiction-review"
+    assert task_record.review_task_state == review_task_state
+    assert task_record.status == expected_status

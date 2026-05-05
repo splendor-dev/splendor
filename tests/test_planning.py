@@ -184,7 +184,51 @@ def test_list_tasks_is_sorted_and_filtered(tmp_path: Path) -> None:
             task_id="task-b",
             status="todo",
             priority="high",
+            record_origin="human",
+            generated_kind=None,
+            review_task_state="active",
             title="Write CLI docs",
+        )
+    ]
+
+
+def test_list_tasks_treats_legacy_review_task_ids_as_generated(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    task_path = tmp_path / "planning" / "tasks" / "task-review-src-a-src-b-1234567890.md"
+    task_path.write_text(
+        "---\n"
+        "schema_version: '1'\n"
+        "kind: task\n"
+        "task_id: task-review-src-a-src-b-1234567890\n"
+        "title: 'Review contradiction: Source A vs Source B'\n"
+        "status: todo\n"
+        "priority: high\n"
+        "created_at: '2026-05-06T00:00:00Z'\n"
+        "updated_at: '2026-05-06T00:00:00Z'\n"
+        "---\n\n"
+        "# Review contradiction: Source A vs Source B\n",
+        encoding="utf-8",
+    )
+
+    default_rows = list_tasks(tmp_path, status=None, priority=None, milestone_ref=None)
+    generated_rows = list_tasks(
+        tmp_path,
+        status=None,
+        priority=None,
+        milestone_ref=None,
+        generated_review=True,
+    )
+
+    assert default_rows == []
+    assert generated_rows == [
+        TaskListRow(
+            task_id="task-review-src-a-src-b-1234567890",
+            status="todo",
+            priority="high",
+            record_origin="generated",
+            generated_kind="contradiction-review",
+            review_task_state="active",
+            title="Review contradiction: Source A vs Source B",
         )
     ]
 

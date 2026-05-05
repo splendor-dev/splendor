@@ -492,11 +492,18 @@ present. `splendor decision create` can write those optional fields with `--auth
 
 Task records now also reserve:
 
+- `record_origin`
+- `generated_kind`
+- `review_task_state`
 - `page_refs`
 - `run_refs`
 
-Those fields let contradiction-review tasks carry explicit links back to the affected wiki pages
-and the ingest run that surfaced the conflict.
+`record_origin` defaults to `human`. Ingest-created contradiction-review tasks use
+`record_origin: generated`, `generated_kind: contradiction-review`, and
+`review_task_state: active`. Operators can move those generated review tasks to `resolved` or
+`muted`; resolved tasks also use `status: done`. Those fields let default planning handoff
+prioritize human-authored planning records while preserving explicit links back to the affected
+wiki pages and the ingest run that surfaced the conflict.
 
 ## Query snapshots
 

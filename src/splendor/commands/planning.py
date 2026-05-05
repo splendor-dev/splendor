@@ -44,6 +44,9 @@ class TaskListRow:
     task_id: str
     status: str
     priority: str
+    record_origin: str
+    generated_kind: str | None
+    review_task_state: str
     title: str
 
 
@@ -61,6 +64,15 @@ class UpdateQuestionAnswerResult:
     path: Path
     title: str
     content: str
+
+
+@dataclass(frozen=True)
+class UpdateTaskReviewStateResult:
+    record_id: str
+    path: Path
+    status: str
+    review_task_state: str
+    title: str
 
 
 def model_for_planning_kind(kind: str):
@@ -203,24 +215,87 @@ def list_tasks(
     status: str | None,
     priority: str | None,
     milestone_ref: str | None,
+    generated_review: bool = False,
+    include_generated_review: bool = False,
+    review_task_state: str | None = None,
 ) -> list[TaskListRow]:
     rows: list[TaskListRow] = []
     for record in _load_records(root, "task"):
+        is_generated_review = is_generated_contradiction_review_task(record)
+        if generated_review and not is_generated_review:
+            continue
+        if not generated_review and not include_generated_review and is_generated_review:
+            continue
         if status is not None and record.status != status:
             continue
         if priority is not None and record.priority != priority:
             continue
         if milestone_ref is not None and milestone_ref not in record.milestone_refs:
             continue
+        if review_task_state is not None and record.review_task_state != review_task_state:
+            continue
         rows.append(
             TaskListRow(
                 task_id=record.task_id,
                 status=record.status,
                 priority=record.priority,
+                record_origin="generated" if is_generated_review else record.record_origin,
+                generated_kind=(
+                    "contradiction-review" if is_generated_review else record.generated_kind
+                ),
+                review_task_state=record.review_task_state,
                 title=record.title,
             )
         )
     return rows
+
+
+def is_generated_contradiction_review_task(record: TaskRecord) -> bool:
+    if record.record_origin == "generated" and record.generated_kind == "contradiction-review":
+        return True
+    return record.task_id.startswith("task-review-") and record.title.startswith(
+        "Review contradiction:"
+    )
+
+
+def update_task_review_state(
+    root: Path,
+    *,
+    task_id: str,
+    review_task_state: str,
+) -> UpdateTaskReviewStateResult:
+    if review_task_state not in {"active", "resolved", "muted"}:
+        raise ValueError(f"Unsupported review task state: {review_task_state}")
+
+    layout = resolve_layout(root, load_config(root))
+    path = planning_path(layout, "task", task_id)
+    if not path.exists():
+        raise ValueError(f"Unknown task ID: {task_id}")
+
+    parsed = parse_planning_document(path, TaskRecord)
+    record = parsed.record
+    if not is_generated_contradiction_review_task(record):
+        raise ValueError(f"Task is not a generated contradiction-review task: {task_id}")
+
+    status = "done" if review_task_state == "resolved" else record.status
+    updated = record.model_copy(
+        update={
+            "status": status,
+            "record_origin": "generated",
+            "generated_kind": "contradiction-review",
+            "review_task_state": review_task_state,
+            "updated_at": utc_now_iso(),
+        }
+    )
+    content = render_planning_document(updated, body=parsed.body)
+    write_planning_markdown(path, content)
+    return UpdateTaskReviewStateResult(
+        record_id=task_id,
+        path=path,
+        status=updated.status,
+        review_task_state=updated.review_task_state,
+        title=updated.title,
+    )
 
 
 def list_milestones(root: Path, *, status: str | None) -> list[MilestoneListRow]:

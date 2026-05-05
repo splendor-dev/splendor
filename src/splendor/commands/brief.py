@@ -26,7 +26,7 @@ from splendor.utils.planning import (
     record_id_field,
 )
 
-from .planning import model_for_planning_kind
+from .planning import is_generated_contradiction_review_task, model_for_planning_kind
 from .query import QueryMatch, QueryValidationError, run_query
 from .queue import QueueInspectResult, inspect_queue
 from .source import SourceFreshnessResult, scan_source_freshness
@@ -53,6 +53,7 @@ _SUGGESTION_CATEGORY_LIMITS = {
     "goal-match": 3,
     "authority": 3,
     "planning": 2,
+    "contradiction-review": 1,
     "synthesis": 2,
     "wiki-review": 2,
     "maintenance": 2,
@@ -66,11 +67,12 @@ _SUGGESTION_CATEGORY_ORDER = {
     "goal-match": 3,
     "authority": 4,
     "planning": 5,
-    "synthesis": 6,
-    "wiki-review": 7,
-    "maintenance": 8,
-    "query": 9,
-    "orientation": 10,
+    "contradiction-review": 6,
+    "synthesis": 7,
+    "wiki-review": 8,
+    "maintenance": 9,
+    "query": 10,
+    "orientation": 11,
 }
 _SUGGESTION_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 _AUTHORITY_LIMIT = 6
@@ -124,6 +126,17 @@ _PLANNING_STATUSES = {
     "milestone": {"planned", "active"},
     "decision": {"proposed"},
     "question": {"open", "deferred"},
+}
+_CONTRADICTION_GOAL_TOKENS = {
+    "contradiction",
+    "contradictions",
+    "contradicting",
+    "contested",
+    "evidence",
+    "review",
+    "reviews",
+    "task",
+    "tasks",
 }
 
 
@@ -251,6 +264,7 @@ class BriefStateSnapshot:
     sources_by_id: dict[str, SourceRecord]
     wiki_pages: list[WikiPageSnapshot]
     invalid_wiki_pages: list[InvalidWikiPageSnapshot]
+    generated_review_task_count: int
 
 
 @dataclass(frozen=True)
@@ -377,6 +391,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
         sources_by_id=sources_by_id,
         wiki_pages=wiki_pages,
         invalid_wiki_pages=invalid_wiki_pages,
+        generated_review_task_count=_generated_review_task_count(layout),
     )
 
 
@@ -467,6 +482,8 @@ def _active_planning_items(
                 )
                 continue
             record = parsed.record
+            if kind == "task" and is_generated_contradiction_review_task(record):
+                continue
             status = record.status
             if status not in statuses:
                 continue
@@ -1123,6 +1140,19 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             relevance_score=item.relevance_score,
         )
 
+    if snapshot.generated_review_task_count and goal_tokens & _CONTRADICTION_GOAL_TOKENS:
+        add(
+            "low",
+            "contradiction-review",
+            "Inspect generated contradiction-review tasks",
+            (
+                f"{snapshot.generated_review_task_count} generated contradiction-review task(s) "
+                "are available for intentional listing, resolution, or muting."
+            ),
+            "splendor task list --generated-review --review-task-state active",
+            relevance_score=1,
+        )
+
     for warning in snapshot.warnings:
         add(
             "low",
@@ -1269,6 +1299,21 @@ def _sources_missing_synthesis(
             continue
         source_ids.append(source_id)
     return sorted(source_ids, key=lambda source_id: canonical_source_ref(sources_by_id[source_id]))
+
+
+def _generated_review_task_count(layout) -> int:
+    count = 0
+    for path in iter_planning_paths(planning_directory(layout, "task")):
+        try:
+            parsed = parse_planning_document(path, model_for_planning_kind("task"))
+        except (OSError, ValueError):
+            continue
+        if (
+            is_generated_contradiction_review_task(parsed.record)
+            and parsed.record.review_task_state == "active"
+        ):
+            count += 1
+    return count
 
 
 def render_suggest_next_json(result: SuggestNextResult) -> str:

@@ -1114,6 +1114,10 @@ Current implementation:
   uses deterministic relevance scoring over weighted title/path/record/scope fields, supporting
   refs, snippets, and review/authority lifecycle signals so current task authority beats stale or
   merely token-similar material without introducing vector search.
+- Generated contradiction-review tasks are classified separately from human-authored planning
+  tasks. Default `task list`, `brief --agent-context`, and `suggest-next` keep them out of active
+  planning handoff; operators can list, resolve, or mute them explicitly with task subcommands, and
+  contradiction-focused goals expose an intentional inspection action.
 - Authority docs come from `briefing.authority_documents` in `splendor.yaml` and optional
   maintained wiki page frontmatter (`authority_role`, `authority_freshness`, and
   `authority_lifecycle`, `authority_scope`, issue/PR refs, and supersession links). Generated
