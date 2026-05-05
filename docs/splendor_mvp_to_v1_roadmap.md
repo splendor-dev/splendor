@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M16-P3.3`
+- Previous completed PR sub-slice: `M17-P1.1`
 - Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P1.1`
+- Current PR sub-slice: `M17-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P2.1`
+- Next planned PR sub-slice: `M17-P3.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1177,6 +1177,14 @@ renamed-source repair. The reviewed external state is pinned by the
 `m17-p1.1-acceptance-main` and `m17-p1.1-source-refresh-scenario` tags, and the operator-facing
 workflow is documented in
 [public mock client acceptance](public_mock_client_acceptance.md).
+
+### Planning authority lifecycle
+`M17-P2.1` implements issue #116 by expanding authority metadata without changing schema version
+`1`. Configured authority documents, maintained wiki authority pages, and goal-relevant planning
+decisions can now expose lifecycle state for current, reviewed, PR-linked, historical, superseded,
+and archived authority. Agent handoff surfaces use that lifecycle to rank accepted/current
+decisions above stale plans or older research while retaining superseded and archived documents as
+explicit historical context.
 
 ## Milestone 18 — v2 advanced product track
 

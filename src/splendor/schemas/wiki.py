@@ -9,7 +9,7 @@ from pydantic import Field
 from splendor.schemas.common import StrictRecord
 from splendor.schemas.contradictions import ContradictionAnnotation
 from splendor.schemas.provenance import ProvenanceLink
-from splendor.schemas.types import PageReviewState
+from splendor.schemas.types import AuthorityLifecycle, PageReviewState
 
 
 class KnowledgePageFrontmatter(StrictRecord):
@@ -30,7 +30,12 @@ class KnowledgePageFrontmatter(StrictRecord):
         | None
     ) = None
     authority_freshness: Literal["current", "watch", "stale", "historical"] | None = None
+    authority_lifecycle: AuthorityLifecycle | None = None
     authority_scope: list[str] = Field(default_factory=list)
+    issue_refs: list[str] = Field(default_factory=list)
+    pr_refs: list[str] = Field(default_factory=list)
+    supersedes: list[str] = Field(default_factory=list)
+    superseded_by: str | None = None
     source_refs: list[str] = Field(default_factory=list)
     generated_by_run_ids: list[str] = Field(default_factory=list)
     last_generated_at: str | None = None

@@ -2158,7 +2158,11 @@ def handle_brief(args: argparse.Namespace) -> int:
     if result.authority_briefs:
         print("Authority docs:")
         for item in result.authority_briefs:
-            print(f"- {item.path} [{item.role}/{item.freshness}] score={item.score}: {item.title}")
+            refs = _authority_link_summary(item)
+            print(
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}] "
+                f"score={item.score}: {item.title}{refs}"
+            )
     if result.planning_items:
         print("Active planning:")
         for item in result.planning_items:
@@ -2220,7 +2224,11 @@ def _print_agent_context(result: ProjectBrief) -> None:
     if result.authority_briefs:
         print("Authority docs:")
         for item in result.authority_briefs[:5]:
-            print(f"- {item.path} [{item.role}/{item.freshness}] score={item.score} {item.title}")
+            refs = _authority_link_summary(item)
+            print(
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}] "
+                f"score={item.score} {item.title}{refs}"
+            )
     if result.planning_items:
         print("Active planning:")
         for item in result.planning_items:
@@ -2285,6 +2293,19 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
 
 def _suggested_action_target(action) -> str:
     return action.source_ref or action.path or action.record_id or "-"
+
+
+def _authority_link_summary(item) -> str:
+    refs: list[str] = []
+    if item.issue_refs:
+        refs.append("issues=" + ",".join(item.issue_refs))
+    if item.pr_refs:
+        refs.append("prs=" + ",".join(item.pr_refs))
+    if item.superseded_by is not None:
+        refs.append(f"superseded_by={item.superseded_by}")
+    if item.supersedes:
+        refs.append("supersedes=" + ",".join(item.supersedes))
+    return "" if not refs else " " + " ".join(refs)
 
 
 def handle_serve(args: argparse.Namespace) -> int:

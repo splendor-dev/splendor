@@ -9,6 +9,14 @@ SummaryMode = Literal["none", "excerpt", "full"]
 SourceRefKind = Literal["workspace_path", "external_path", "url", "imported", "stored_artifact"]
 SourceClass = Literal["code", "documentation", "configuration", "other"]
 SourceDiscoveryMode = Literal["manual", "repo_scan"]
+AuthorityLifecycle = Literal[
+    "current",
+    "reviewed",
+    "pr-linked",
+    "historical",
+    "superseded",
+    "archived",
+]
 PageReviewState = Literal["draft", "machine-generated", "human-reviewed", "contested", "stale"]
 SourceReviewState = Literal[
     "unreviewed",

@@ -1113,8 +1113,14 @@ Current implementation:
   records, recent maintenance reports, and query matches for the optional goal.
 - Authority docs come from `briefing.authority_documents` in `splendor.yaml` and optional
   maintained wiki page frontmatter (`authority_role`, `authority_freshness`, and
-  `authority_scope`). Generated source-summary pages are excluded from maintained authority
-  ranking.
+  `authority_lifecycle`, `authority_scope`, issue/PR refs, and supersession links). Generated
+  source-summary pages are excluded from maintained authority ranking.
+- Authority lifecycle values are `current`, `reviewed`, `pr-linked`, `historical`, `superseded`,
+  and `archived`. Briefing and suggest-next rank current, reviewed, and PR-linked authority above
+  stale, historical, superseded, or archived context while still showing relevant historical
+  records. Accepted decision records are included as goal-relevant reviewed authority; superseded
+  decisions are retained below current decisions as historical context. This extends schema version
+  `1` through optional fields only.
 - Briefing is read-only and does not replace `splendor query`; query finds records, while briefing
   packages the surrounding project state needed to resume work.
 
@@ -1416,8 +1422,8 @@ These are not blockers to the spec, but should remain visible:
 7. whether a companion-repo linking model needs a first-class schema element
 8. post-v1 refinements to generated source-summary policy for readable in-repo markdown and code
    files, after the v1 default of concise claim-bearing excerpts has been exercised in real repos
-9. richer authority lifecycle policy for living planning docs after the initial M14-P4.1 metadata
-   and task-oriented brief ranking has been exercised in real repos
+9. richer authority lifecycle policy beyond the M17-P2.1 states, after public mock-client and real
+   evaluator handoffs show which lifecycle distinctions agents actually use
 
 ## 31. Summary Product Statement
 

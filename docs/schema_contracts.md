@@ -395,7 +395,12 @@ Minimal frontmatter contract for wiki pages:
 - `review_state`
 - `authority_role`
 - `authority_freshness`
+- `authority_lifecycle`
 - `authority_scope`
+- `issue_refs`
+- `pr_refs`
+- `supersedes`
+- `superseded_by`
 - `source_refs`
 - `generated_by_run_ids`
 - `last_generated_at`
@@ -416,8 +421,9 @@ Current runtime behavior:
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter and
   does not mutate generated source-summary pages
 - maintained wiki pages may opt into agent authority ranking with `authority_role`,
-  `authority_freshness`, and `authority_scope`; generated `source-summary` pages are ignored by
-  maintained authority ranking even if those fields are present
+  `authority_freshness`, `authority_lifecycle`, `authority_scope`, issue/PR refs, and
+  supersession links; generated `source-summary` pages are ignored by maintained authority ranking
+  even if those fields are present
 - source-summary pages written by `splendor ingest` now use `review_state: machine-generated`
 - those pages persist `last_generated_at`
 - those pages persist structured provenance links back to the source manifest, ingest run, and
@@ -456,14 +462,29 @@ schema-version-1-compatible config, not generated state:
 - `role`: one of `current-authority`, `roadmap`, `historical-review`, `proposal`, `reference`, or
   `generated-summary`
 - `freshness`: one of `current`, `watch`, `stale`, or `historical`
+- `authority_lifecycle`: optional lifecycle state; one of `current`, `reviewed`, `pr-linked`,
+  `historical`, `superseded`, or `archived`
 - `title`: optional display title
 - `purpose`: optional handoff reason
 - `applies_to`: optional task/topic terms used during goal ranking
+- `issue_refs`: optional issue identifiers such as `#116`
+- `pr_refs`: optional PR identifiers such as `#132`
+- `supersedes`: optional authority docs or decision IDs replaced by this entry
+- `superseded_by`: optional authority doc or decision ID that replaced this entry
 
 `splendor brief --agent-context [goal]` and `splendor suggest-next [goal]` use this metadata as a
-read-only ranking signal. Missing configured files are excluded from the ranked authority list,
-reported as authority warnings in the brief, and surfaced by `splendor lint` as
+read-only ranking signal. Omitted lifecycle metadata remains schema-version-1-compatible:
+configured docs default to current unless role/freshness marks them historical or stale, and wiki
+authority lifecycle is derived from page status, review state, freshness, review timestamp, and
+supersession fields. Missing configured files are excluded from the ranked authority list, reported
+as authority warnings in the brief, and surfaced by `splendor lint` as
 `missing-authority-document`.
+
+Accepted and superseded decision records can also participate in goal-relevant authority handoff.
+Accepted decisions default to reviewed authority, while superseded decisions default to superseded
+historical context. Optional decision `authority_lifecycle`, `issue_refs`, `pr_refs`,
+`superseded_by`, and existing `supersedes` fields are included in authority JSON output when
+present.
 
 Task records now also reserve:
 

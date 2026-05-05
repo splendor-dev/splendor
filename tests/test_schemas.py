@@ -1,9 +1,11 @@
 import pytest
 from pydantic import ValidationError
 
+from splendor.config import AuthorityDocumentConfig
 from splendor.schemas import (
     ContradictionAnnotation,
     ContradictionEvidence,
+    DecisionRecord,
     KnowledgePageFrontmatter,
     ProvenanceLink,
     QueueItemRecord,
@@ -245,6 +247,56 @@ def test_source_record_validation_rejects_invalid_source_class() -> None:
             pipeline_version="0.1.0a0",
             source_class="bogus",
         )
+
+
+def test_wiki_authority_lifecycle_fields_are_schema_version_one_compatible() -> None:
+    record = KnowledgePageFrontmatter(
+        kind="topic",
+        title="Lifecycle authority",
+        page_id="topic-lifecycle-authority",
+        authority_role="current-authority",
+        authority_freshness="current",
+        authority_lifecycle="pr-linked",
+        authority_scope=["agent handoff"],
+        issue_refs=["#116"],
+        pr_refs=["#132"],
+        supersedes=["docs/old-plan.md"],
+        superseded_by=None,
+    )
+
+    assert record.schema_version == "1"
+    assert record.authority_lifecycle == "pr-linked"
+    assert record.issue_refs == ["#116"]
+    assert record.pr_refs == ["#132"]
+
+
+def test_decision_record_accepts_authority_lifecycle_metadata() -> None:
+    record = DecisionRecord(
+        decision_id="decision-agent-handoff",
+        title="Use lifecycle authority ranking",
+        status="accepted",
+        authority_lifecycle="reviewed",
+        decided_at="2026-05-06",
+        supersedes=["decision-old-handoff"],
+        superseded_by=None,
+        issue_refs=["#116"],
+        pr_refs=["#132"],
+    )
+
+    assert record.schema_version == "1"
+    assert record.authority_lifecycle == "reviewed"
+    assert record.issue_refs == ["#116"]
+
+
+def test_authority_document_config_defaults_and_rejects_invalid_lifecycle() -> None:
+    record = AuthorityDocumentConfig(path="docs/plan.md")
+
+    assert record.authority_lifecycle is None
+    assert record.issue_refs == []
+    assert record.pr_refs == []
+
+    with pytest.raises(ValidationError):
+        AuthorityDocumentConfig(path="docs/plan.md", authority_lifecycle="stale")
 
 
 def test_source_record_validation_rejects_unknown_fields() -> None:

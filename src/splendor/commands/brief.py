@@ -11,6 +11,7 @@ from pathlib import Path
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import (
+    DecisionRecord,
     KnowledgePageFrontmatter,
     MaintenanceReport,
     QuerySnapshot,
@@ -77,20 +78,38 @@ _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
 _AUTHORITY_ROLE_ORDER = {
     "current-authority": 0,
     "roadmap": 1,
-    "reference": 2,
-    "proposal": 3,
-    "historical-review": 4,
-    "generated-summary": 5,
+    "decision": 2,
+    "reference": 3,
+    "proposal": 4,
+    "historical-review": 5,
+    "generated-summary": 6,
 }
 _AUTHORITY_ROLE_SCORE = {
     "current-authority": 60,
     "roadmap": 45,
+    "decision": 42,
     "reference": 35,
     "proposal": 25,
     "historical-review": 20,
     "generated-summary": 5,
 }
 _AUTHORITY_FRESHNESS_SCORE = {"current": 25, "watch": 10, "stale": -10, "historical": -20}
+_AUTHORITY_LIFECYCLE_ORDER = {
+    "current": 0,
+    "reviewed": 1,
+    "pr-linked": 2,
+    "historical": 3,
+    "superseded": 4,
+    "archived": 5,
+}
+_AUTHORITY_LIFECYCLE_SCORE = {
+    "current": 35,
+    "reviewed": 30,
+    "pr-linked": 28,
+    "historical": -5,
+    "superseded": -30,
+    "archived": -35,
+}
 _PLANNING_STATUSES = {
     "task": {"todo", "in_progress", "blocked"},
     "milestone": {"planned", "active"},
@@ -129,8 +148,13 @@ class AuthorityBrief:
     title: str
     role: str
     freshness: str
+    lifecycle: str
     score: int
     reason: str
+    issue_refs: list[str]
+    pr_refs: list[str]
+    supersedes: list[str]
+    superseded_by: str | None
 
 
 @dataclass(frozen=True)
@@ -306,7 +330,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
     sources = load_sources(layout)
     sources_by_id = {source.source_id: source for source in sources}
     wiki_pages, invalid_wiki_pages = load_wiki_pages(root, layout)
-    authority_briefs, authority_warnings = _authority_briefs(root, config, wiki_pages, goal)
+    authority_briefs, authority_warnings = _authority_briefs(root, layout, config, wiki_pages, goal)
     warnings.extend(authority_warnings)
     recent_sources = _recent_sources(sources)
     recent_runs = status.recent_runs
@@ -390,7 +414,7 @@ def _active_planning_items(
     return items[:_BRIEF_PLANNING_LIMIT], warnings
 
 
-def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: str | None):
+def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot], goal: str | None):
     items: list[AuthorityBrief] = []
     warnings: list[BriefWarning] = []
     goal_tokens = _tokens(goal or "")
@@ -411,9 +435,13 @@ def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: s
             continue
         title = doc.title or _title_from_markdown(body) or path.name
         reason = doc.purpose or f"{doc.role} document for {path.as_posix()}"
+        lifecycle = _configured_authority_lifecycle(
+            doc.authority_lifecycle, role=doc.role, freshness=doc.freshness
+        )
         score = _authority_score(
             role=doc.role,
             freshness=doc.freshness,
+            lifecycle=lifecycle,
             goal_tokens=goal_tokens,
             text=" ".join([title, reason, " ".join(doc.applies_to), path.as_posix(), body]),
         )
@@ -424,8 +452,13 @@ def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: s
                 title=title,
                 role=doc.role,
                 freshness=doc.freshness,
+                lifecycle=lifecycle,
                 score=score,
                 reason=reason,
+                issue_refs=doc.issue_refs,
+                pr_refs=doc.pr_refs,
+                supersedes=doc.supersedes,
+                superseded_by=doc.superseded_by,
             )
         )
 
@@ -437,6 +470,7 @@ def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: s
         freshness = page.frontmatter.authority_freshness or _derived_authority_freshness(
             page.frontmatter
         )
+        lifecycle = _wiki_authority_lifecycle(page.frontmatter, freshness=freshness)
         reason = (
             "Maintained wiki page marked for agent briefing"
             if not page.frontmatter.authority_scope
@@ -445,6 +479,7 @@ def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: s
         score = _authority_score(
             role=page.frontmatter.authority_role,
             freshness=freshness,
+            lifecycle=lifecycle,
             goal_tokens=goal_tokens,
             text=" ".join(
                 [
@@ -463,15 +498,22 @@ def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: s
                 title=page.frontmatter.title,
                 role=page.frontmatter.authority_role,
                 freshness=freshness,
+                lifecycle=lifecycle,
                 score=score,
                 reason=reason,
+                issue_refs=page.frontmatter.issue_refs,
+                pr_refs=page.frontmatter.pr_refs,
+                supersedes=page.frontmatter.supersedes,
+                superseded_by=page.frontmatter.superseded_by,
             )
         )
 
+    items.extend(_decision_authority_briefs(root, layout, goal_tokens))
     ranked = sorted(
         enumerate(items),
         key=lambda item: (
             -item[1].score,
+            _AUTHORITY_LIFECYCLE_ORDER.get(item[1].lifecycle, 99),
             _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
             item[0],
             item[1].path,
@@ -483,12 +525,105 @@ def _authority_briefs(root: Path, config, pages: list[WikiPageSnapshot], goal: s
     ], warnings
 
 
-def _authority_score(*, role: str, freshness: str, goal_tokens: set[str], text: str) -> int:
-    score = _AUTHORITY_ROLE_SCORE.get(role, 0) + _AUTHORITY_FRESHNESS_SCORE.get(freshness, 0)
+def _authority_score(
+    *, role: str, freshness: str, lifecycle: str, goal_tokens: set[str], text: str
+) -> int:
+    score = (
+        _AUTHORITY_ROLE_SCORE.get(role, 0)
+        + _AUTHORITY_FRESHNESS_SCORE.get(freshness, 0)
+        + _AUTHORITY_LIFECYCLE_SCORE.get(lifecycle, 0)
+    )
     if goal_tokens:
         overlap = goal_tokens & _tokens(text)
         score += min(len(overlap), 6) * 12
     return score
+
+
+def _configured_authority_lifecycle(lifecycle: str | None, *, role: str, freshness: str) -> str:
+    if lifecycle is not None:
+        return lifecycle
+    if freshness == "historical" or role == "historical-review":
+        return "historical"
+    if freshness == "stale":
+        return "superseded"
+    return "current"
+
+
+def _wiki_authority_lifecycle(frontmatter: KnowledgePageFrontmatter, *, freshness: str) -> str:
+    if frontmatter.authority_lifecycle is not None:
+        return frontmatter.authority_lifecycle
+    if frontmatter.superseded_by is not None:
+        return "superseded"
+    if frontmatter.status == "stale" or freshness == "stale":
+        return "superseded"
+    if freshness == "historical" or frontmatter.authority_role == "historical-review":
+        return "historical"
+    if frontmatter.review_state == "human-reviewed" or frontmatter.last_reviewed_at is not None:
+        return "reviewed"
+    return "current"
+
+
+def _decision_authority_briefs(root: Path, layout, goal_tokens: set[str]) -> list[AuthorityBrief]:
+    if not goal_tokens:
+        return []
+    items: list[AuthorityBrief] = []
+    for path in iter_planning_paths(planning_directory(layout, "decision")):
+        try:
+            parsed = parse_planning_document(path, DecisionRecord)
+        except (OSError, ValueError):
+            continue
+        record = parsed.record
+        if record.status not in {"accepted", "superseded"}:
+            continue
+        text = " ".join(
+            [
+                record.title,
+                record.decision_id,
+                record.decided_at or "",
+                " ".join(record.source_refs),
+                " ".join(record.related_tasks),
+                " ".join(record.related_questions),
+                " ".join(record.issue_refs),
+                " ".join(record.pr_refs),
+                parsed.body,
+            ]
+        )
+        if not (goal_tokens & _tokens(text)):
+            continue
+        lifecycle = record.authority_lifecycle or (
+            "superseded" if record.status == "superseded" else "reviewed"
+        )
+        freshness = (
+            "historical" if lifecycle in {"historical", "superseded", "archived"} else "current"
+        )
+        reason = (
+            "Accepted planning decision"
+            if record.status == "accepted"
+            else "Superseded planning decision retained for historical context"
+        )
+        items.append(
+            AuthorityBrief(
+                rank=0,
+                path=path.relative_to(root).as_posix(),
+                title=record.title,
+                role="decision",
+                freshness=freshness,
+                lifecycle=lifecycle,
+                score=_authority_score(
+                    role="decision",
+                    freshness=freshness,
+                    lifecycle=lifecycle,
+                    goal_tokens=goal_tokens,
+                    text=text,
+                ),
+                reason=reason,
+                issue_refs=record.issue_refs,
+                pr_refs=record.pr_refs,
+                supersedes=record.supersedes,
+                superseded_by=record.superseded_by,
+            )
+        )
+    return items
 
 
 def _derived_authority_freshness(frontmatter: KnowledgePageFrontmatter) -> str:
@@ -725,12 +860,17 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
         )
 
     for authority in snapshot.authority_briefs[:3]:
-        priority = "medium" if authority.role in {"current-authority", "roadmap"} else "low"
+        priority = (
+            "medium"
+            if authority.lifecycle in {"current", "reviewed", "pr-linked"}
+            and authority.role in {"current-authority", "roadmap", "decision"}
+            else "low"
+        )
         add(
             priority,
             "authority",
             f"Read authority doc {authority.path}",
-            f"{authority.role}/{authority.freshness}: {authority.reason}",
+            f"{authority.role}/{authority.freshness}/{authority.lifecycle}: {authority.reason}",
             None,
             path=authority.path,
         )

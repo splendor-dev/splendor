@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import Field
 
 from splendor.schemas.common import StrictRecord
+from splendor.schemas.types import AuthorityLifecycle
 
 
 class TaskRecord(StrictRecord):
@@ -45,8 +46,12 @@ class DecisionRecord(StrictRecord):
     decision_id: str
     title: str
     status: Literal["proposed", "accepted", "superseded"] = "proposed"
+    authority_lifecycle: AuthorityLifecycle | None = None
     decided_at: str | None = None
     supersedes: list[str] = Field(default_factory=list)
+    superseded_by: str | None = None
+    issue_refs: list[str] = Field(default_factory=list)
+    pr_refs: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
     related_tasks: list[str] = Field(default_factory=list)
     related_questions: list[str] = Field(default_factory=list)

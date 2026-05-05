@@ -14,6 +14,7 @@ from splendor.schemas.runtime import QueueItemRecord, RunRecord
 from splendor.schemas.source import SourceRecord
 from splendor.schemas.source_pointer import SourcePointerArtifact
 from splendor.schemas.types import (
+    AuthorityLifecycle,
     PageReviewState,
     ProvenanceRole,
     SourceClass,
@@ -26,6 +27,7 @@ from splendor.schemas.types import (
 from splendor.schemas.wiki import KnowledgePageFrontmatter
 
 __all__ = [
+    "AuthorityLifecycle",
     "ContradictionAnnotation",
     "ContradictionEvidence",
     "DecisionRecord",
