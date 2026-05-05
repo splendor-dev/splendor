@@ -41,6 +41,7 @@ _IGNORED_DIR_NAMES = {
     "generated",
     "node_modules",
 }
+_SCAN_CONTROL_FILENAMES = {".splendorignore"}
 _SOURCE_CLASSES: tuple[SourceClass, ...] = ("code", "documentation", "configuration", "other")
 LARGE_APPLY_CANDIDATE_LIMIT = 200
 
@@ -403,10 +404,11 @@ def _discover_supported_paths(
             if reason is None:
                 reason = _splendorignore_dir_reason(path, root, splendorignore)
             if reason is not None:
-                ignored_paths_by_path[relative_dir_path] = RepoScanIgnoredPath(
-                    path=relative_dir_path,
-                    reason=reason,
-                )
+                if _should_report_pruned_directory(path, reason, root, layout):
+                    ignored_paths_by_path[relative_dir_path] = RepoScanIgnoredPath(
+                        path=relative_dir_path,
+                        reason=reason,
+                    )
                 continue
             repo_relative = _repo_relative_path(path, gitignore, is_dir=True)
             if repo_relative is not None:
@@ -418,10 +420,11 @@ def _discover_supported_paths(
                 dirname = gitignore_dir_candidates[repo_path]
                 path = current_dir / dirname
                 relative_dir_path = f"{path.relative_to(root).as_posix()}/"
-                ignored_paths_by_path[relative_dir_path] = RepoScanIgnoredPath(
-                    path=relative_dir_path,
-                    reason="gitignore",
-                )
+                if _should_report_pruned_directory(path, "gitignore", root, layout):
+                    ignored_paths_by_path[relative_dir_path] = RepoScanIgnoredPath(
+                        path=relative_dir_path,
+                        reason="gitignore",
+                    )
             filtered_dirnames = [
                 dirname
                 for dirname in filtered_dirnames
@@ -493,6 +496,8 @@ def _ignored_path_reason(path: Path, root: Path, layout: ResolvedLayout) -> str 
     relative = path.relative_to(root)
     if not relative.parts:
         return None
+    if len(relative.parts) == 1 and relative.name in _SCAN_CONTROL_FILENAMES:
+        return "scan_control"
     if _is_managed_layout_path(relative, root, layout) or _has_ignored_dir_name(
         relative.parts, is_dir=False
     ):
@@ -537,6 +542,28 @@ def _parts_start_with(parts: tuple[str, ...], prefix: tuple[str, ...]) -> bool:
 def _has_ignored_dir_name(parts: tuple[str, ...], *, is_dir: bool) -> bool:
     directory_parts = parts if is_dir else parts[:-1]
     return any(part in _IGNORED_DIR_NAMES for part in directory_parts)
+
+
+def _should_report_pruned_directory(
+    path: Path,
+    reason: str,
+    root: Path,
+    layout: ResolvedLayout,
+) -> bool:
+    relative = path.relative_to(root)
+    if reason == "managed_or_transient" and _is_managed_layout_path(relative, root, layout):
+        return False
+    return _directory_has_entries(path)
+
+
+def _directory_has_entries(path: Path) -> bool:
+    try:
+        next(path.iterdir())
+    except StopIteration:
+        return False
+    except OSError:
+        return True
+    return True
 
 
 def _git_ignore_context(root: Path) -> GitIgnoreContext:

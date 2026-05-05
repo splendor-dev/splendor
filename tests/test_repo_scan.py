@@ -467,6 +467,18 @@ def test_render_repo_scan_json_matches_expected_shape(tmp_path: Path) -> None:
     assert payload["candidate_sources"][0]["status"] == "candidate"
 
 
+def test_repo_scan_reports_quiet_preview_for_initialized_workspace(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    _remove_workspace_config(tmp_path)
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+
+    result = scan_repo(tmp_path, all_classes=True)
+
+    assert result.unsupported == 0
+    assert result.ignored == 0
+    assert result.ignored_paths == []
+
+
 def test_repo_scan_defaults_to_configured_default_classes(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     _remove_workspace_config(tmp_path)
@@ -702,8 +714,10 @@ def test_repo_scan_respects_splendorignore_file_patterns(tmp_path: Path) -> None
         "docs/private/keep.txt",
     ]
     ignored = {item.path: item.reason for item in result.ignored_paths}
+    assert ignored[".splendorignore"] == "scan_control"
     assert ignored["secret.md"] == "splendorignore"
     assert ignored["docs/private/note.md"] == "splendorignore"
+    assert result.unsupported == 0
 
 
 def test_repo_scan_respects_splendorignore_directory_patterns(tmp_path: Path) -> None:

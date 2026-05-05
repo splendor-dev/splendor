@@ -345,6 +345,49 @@ def test_cli_repo_scan_preview_shows_source_id_for_new_version_candidate(
     assert f"source_id={source_id}" in captured.out
 
 
+def test_cli_repo_scan_json_repeated_class_filters_honor_ignored_dirs(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    (tmp_path / "splendor.yaml").unlink()
+    (tmp_path / "README.md").write_text("# Readme\n", encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    (claude_dir / "settings.local.json").write_text("{}\n", encoding="utf-8")
+    cache_dir = tmp_path / ".mypy_cache"
+    cache_dir.mkdir()
+    (cache_dir / "module.py").write_text("print('ignored')\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "repo",
+            "scan",
+            "--class",
+            "documentation",
+            "--class",
+            "code",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [item["path"] for item in payload["candidate_sources"]] == [
+        "README.md",
+        "src/main.py",
+    ]
+    assert payload["class_filters"] == ["documentation", "code"]
+    ignored = {item["path"]: item["reason"] for item in payload["ignored_paths"]}
+    assert ignored[".claude/"] == "managed_or_transient"
+    assert ignored[".mypy_cache/"] == "managed_or_transient"
+
+
 def test_cli_add_source_command_reports_workspace_backed_registration(
     tmp_path: Path, capsys
 ) -> None:
