@@ -340,8 +340,8 @@ desired reviewed compile/update follow-up is materially represented by the exist
 proposal/apply workflow, generated/maintained page separation, deterministic output, schema-bound
 frontmatter validation, and focused regression coverage. The detailed disposition matrix lives in
 [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md#completed-disposition-m15-p13-issue-79-disposition).
-Issue #79 should close with the `M15-P1.3` disposition PR unless maintainers identify a new narrow
-follow-up outside the current reviewed one-page compile/apply contract.
+Issue #79 closed with the `M15-P1.3` disposition PR. Any future compile/update follow-up should be
+a new narrow issue outside the current reviewed one-page compile/apply contract.
 
 The `v0.2.0-release-tag-prep` PR was not an issue-backed milestone slice. It prepared the
 evaluation release by updating package version metadata, adding versioned release notes, and

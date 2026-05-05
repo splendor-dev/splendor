@@ -1079,8 +1079,8 @@ and `M15-P1.2`.
 
 Remaining deliberate non-goals are automatic multi-page mutation, LLM synthesis, mutating web UI
 actions, search/index redesign, source lifecycle work, and broad roadmap expansion. Unless
-maintainers identify a newly scoped gap, #79 should close with this disposition rather than
-expanding the parent issue beyond the reviewed one-page compile/apply contract.
+maintainers identify a newly scoped gap, any future compile/update follow-up should be a new narrow
+issue beyond the reviewed one-page compile/apply contract.
 
 ### M10-P3.1 ingest run-duration precision
 
