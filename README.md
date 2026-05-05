@@ -117,8 +117,8 @@ Implemented today:
   `splendor source update-path <source-id|logical-id|title|path> <new-path>`
 - `splendor source forget <source-id|logical-id|title|path>` and
   `splendor source forget --matching "glob"` for preview-first registry cleanup
-- `splendor workspace refresh --changed` with optional `--ingest`, `--rebuild-index`,
-  `--prune-superseded`, and `--update-topic-refs`
+- `splendor workspace refresh --changed` with optional `--ingest`, plus standalone or combined
+  `--rebuild-index`, `--prune-superseded`, and `--update-topic-refs`
 - `splendor ingest <source-id>`, `splendor ingest --pending`, and `splendor ingest --changed`
 - `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
 - `splendor repair ingest <source-id>`
@@ -161,19 +161,16 @@ the same preview for machine handoff, and `--report PATH` writes only an explici
 Relative report paths use the current working directory.
 `splendor workspace refresh --changed` composes that freshness view with the existing
 supersession-aware refresh path for changed curated workspace-backed sources. Add `--ingest` to
-ingest only queue jobs created or reused for the refreshed sources, and add `--rebuild-index` to
-regenerate `wiki/index.md` after that targeted ingest succeeds. JSON output reports both initial
-and final freshness counts, skipped unresolved curated sources, and failed changed-source refreshes.
-Missing, unsupported, or refresh-failed active curated sources are reported as unresolved
-diagnostics while valid changed sources still refresh; the command exits non-zero when those
-unresolved sources remain. Add `--prune-superseded` to delete superseded generated
-`wiki/sources/<source-id>.md` summaries once a current successor summary exists, while keeping
-historical source manifests and run records. Add
-`--update-topic-refs` to rewrite maintained wiki page `source_refs` and generated source-reference
-list bullets from superseded source IDs to the active source version ID. Prune JSON reports skipped
-unsafe candidates with reasons rather than deleting ambiguous state. The command does not discover
-or register uncurated files or mutate maintained synthesis content beyond that explicit source-ref
-migration.
+ingest only queue jobs created or reused for the refreshed sources; unrelated pending ingest jobs
+remain queued. `--rebuild-index`, `--prune-superseded`, and `--update-topic-refs` can run
+standalone or in the same maintenance invocation. A one-pass changed-source cleanup can use
+`workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index`;
+pruning still reports skipped candidates when successor source-summary pages do not exist yet, so
+interrupted workflows can rerun `workspace refresh --prune-superseded` after successors are
+ingested. JSON output reports both initial and final freshness counts, skipped unresolved curated
+sources, failed changed-source refreshes, targeted ingest results, index rebuilds, pruning, and
+topic-ref migrations. The command does not discover or register uncurated files or mutate
+maintained synthesis content beyond explicit source-ref migration.
 `splendor source update-path <source-id|logical-id|title|path> <new-path>` is the explicit repair
 path for moved active curated workspace sources. By default it requires the old workspace path to
 be missing; `--force` is available for deliberate reparenting while the old file still exists. It
@@ -264,12 +261,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P2.1`
-- Current planned slice: `M16-P2 validation correctness`
-- Current PR sub-slice: `M16-P2.2`
+- Previous completed PR sub-slice: `M16-P2.2`
+- Current planned slice: `M16-P3 workflow polish and trial-install polish`
+- Current PR sub-slice: `M16-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M16-P3 workflow polish and trial-install polish`
-- Next planned PR sub-slice: `M16-P3.1`
+- Next planned PR sub-slice: `M16-P3.2`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -398,6 +395,10 @@ exists, and `--update-topic-refs` migrates maintained wiki source references to 
 content-addressed source version while schema version `1` continues to validate `source_refs`
 against source manifests. Historical manifests and run records remain valid.
 
+`M16-P3.1` loosens workspace maintenance flag coupling: index rebuilds, superseded-summary
+pruning, and topic-ref migration can run without pretending source bytes changed, while
+`--changed --ingest` remains a targeted drain of only refreshed-source ingest jobs.
+
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes
 them into current canonical source versions, and ingests only those refreshed queue jobs even when
@@ -493,3 +494,4 @@ rewritten.
 - [x] Duplicate canonical source versions can be reconciled without manual manifest edits.
 - [x] Health resolves existing manifest source IDs without false unknown-source diagnostics.
 - [x] Lint validates live source refs after path repair and supersession.
+- [x] Workspace maintenance actions can run without unnecessary changed-source coupling.

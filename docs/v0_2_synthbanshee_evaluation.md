@@ -91,8 +91,10 @@ v0.3 items land:
 4. Lint reads the live source model correctly after source refresh and path repair.
 5. Health resolves source IDs against the manifest store without false unknown-source errors.
 
-Lower-priority v0.3 polish includes standalone workspace maintenance actions, JSON output for
-pending ingest drains, and easier release artifacts for trial installs.
+M16-P3 polish covers standalone workspace maintenance actions, JSON output for pending ingest
+drains, and easier release artifacts for trial installs. M16-P3.1 specifically removes the need to
+pair idempotent index rebuilds, superseded-summary pruning, and topic-ref migration with
+changed-source refresh.
 
 ## Public Mock Client Acceptance Workflows
 

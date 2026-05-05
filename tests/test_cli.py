@@ -2031,26 +2031,40 @@ def test_cli_source_freshness_relative_report_uses_current_working_directory(
     assert not (root / "reports" / "source-freshness.json").exists()
 
 
-def test_cli_workspace_refresh_requires_explicit_changed_flag(tmp_path: Path, capsys) -> None:
+def test_cli_workspace_refresh_requires_maintenance_action(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     capsys.readouterr()
 
     exit_code = main(["--root", str(tmp_path), "workspace", "refresh"])
 
     assert exit_code == 1
-    assert "Error: workspace refresh requires --changed in this release" in capsys.readouterr().out
+    assert "Error: workspace refresh requires at least one maintenance action" in (
+        capsys.readouterr().out
+    )
 
 
-def test_cli_workspace_refresh_rebuild_index_requires_ingest(tmp_path: Path, capsys) -> None:
+def test_cli_workspace_refresh_ingest_requires_changed(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     capsys.readouterr()
 
-    exit_code = main(
-        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--rebuild-index"]
-    )
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--ingest"])
 
     assert exit_code == 1
-    assert "Error: workspace refresh --rebuild-index requires --ingest" in capsys.readouterr().out
+    assert "Error: workspace refresh --ingest requires --changed" in capsys.readouterr().out
+
+
+def test_cli_workspace_refresh_rebuilds_index_standalone(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--rebuild-index", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["refreshed"] == []
+    assert payload["ingest"] is None
+    assert payload["index"]["path"] == "wiki/index.md"
+    assert payload["index"]["page_count"] == 0
 
 
 def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path, capsys) -> None:
@@ -2096,6 +2110,85 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
 
     assert main(["--root", str(tmp_path), "lint"]) == 0
     assert main(["--root", str(tmp_path), "health"]) == 0
+
+
+def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    write_config(tmp_path, config)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--rebuild-index",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--prune-superseded",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    refreshed_id = payload["pruning"]["pruned"][0]["superseded_by"]
+    assert payload["refreshed"] == []
+    assert payload["ingest"] is None
+    assert payload["pruning"]["pruned"] == [
+        {
+            "path": f"wiki/sources/{original_id}.md",
+            "source_id": original_id,
+            "superseded_by": refreshed_id,
+            "manifest_path": f"state/manifests/sources/{original_id}.json",
+        }
+    ]
+    assert not (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
+    original_manifest = load_source_record(
+        tmp_path / "state" / "manifests" / "sources" / f"{original_id}.json"
+    )
+    assert f"wiki/sources/{original_id}.md" not in original_manifest.linked_pages
+
+
+def test_cli_workspace_refresh_changed_rebuilds_index_without_ingest(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending"])
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--rebuild-index"]
+    )
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Rebuilt index: " in out
+    assert "Next: splendor ingest --pending, then splendor wiki rebuild-index" in out
+    assert list((tmp_path / "state" / "queue").glob("ingest-*.json"))
 
 
 def test_cli_workspace_refresh_prunes_superseded_summaries_and_updates_topic_refs(
@@ -2221,7 +2314,6 @@ def test_cli_workspace_refresh_reports_skipped_superseded_prune_candidates(
             str(tmp_path),
             "workspace",
             "refresh",
-            "--changed",
             "--prune-superseded",
             "--json",
         ]
