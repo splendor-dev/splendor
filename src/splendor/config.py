@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from splendor.schemas.types import SourceClass, StorageMode, SummaryMode
+from splendor.schemas.types import AuthorityLifecycle, SourceClass, StorageMode, SummaryMode
 
 CONFIG_FILENAME = "splendor.yaml"
 
@@ -89,9 +89,14 @@ class AuthorityDocumentConfig(BaseModel):
         "generated-summary",
     ] = "reference"
     freshness: Literal["current", "watch", "stale", "historical"] = "current"
+    authority_lifecycle: AuthorityLifecycle | None = None
     title: str | None = None
     purpose: str | None = None
     applies_to: list[str] = Field(default_factory=list)
+    issue_refs: list[str] = Field(default_factory=list)
+    pr_refs: list[str] = Field(default_factory=list)
+    supersedes: list[str] = Field(default_factory=list)
+    superseded_by: str | None = None
 
     @field_validator("path")
     @classmethod

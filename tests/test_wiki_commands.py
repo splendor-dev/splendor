@@ -24,7 +24,12 @@ def write_wiki_page(
     tags: list[str] | None = None,
     authority_role: str | None = None,
     authority_freshness: str | None = None,
+    authority_lifecycle: str | None = None,
     authority_scope: list[str] | None = None,
+    issue_refs: list[str] | None = None,
+    pr_refs: list[str] | None = None,
+    supersedes: list[str] | None = None,
+    superseded_by: str | None = None,
     body: str = "",
 ) -> None:
     frontmatter = KnowledgePageFrontmatter(
@@ -37,7 +42,12 @@ def write_wiki_page(
         tags=tags or [],
         authority_role=authority_role,
         authority_freshness=authority_freshness,
+        authority_lifecycle=authority_lifecycle,
         authority_scope=authority_scope or [],
+        issue_refs=issue_refs or [],
+        pr_refs=pr_refs or [],
+        supersedes=supersedes or [],
+        superseded_by=superseded_by,
         confidence=0.8,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1560,6 +1570,155 @@ def test_brief_agent_context_ranks_configured_authority_docs(tmp_path: Path, cap
     assert authority_actions[0]["path"] == "README.md"
 
 
+def test_brief_agent_context_ranks_authority_lifecycle_and_links(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "current.md").write_text("# Current\n\nCurrent planning authority.\n", encoding="utf-8")
+    (docs / "reviewed.md").write_text(
+        "# Reviewed\n\nReviewed planning authority.\n", encoding="utf-8"
+    )
+    (docs / "pr.md").write_text("# PR Linked\n\nPR-linked planning authority.\n", encoding="utf-8")
+    (docs / "superseded.md").write_text(
+        "# Superseded\n\nSuperseded planning authority.\n", encoding="utf-8"
+    )
+    (docs / "archived.md").write_text(
+        "# Archived\n\nArchived planning authority.\n", encoding="utf-8"
+    )
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/superseded.md",
+            role="current-authority",
+            authority_lifecycle="superseded",
+            superseded_by="docs/current.md",
+            applies_to=["planning authority"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/archived.md",
+            role="current-authority",
+            authority_lifecycle="archived",
+            applies_to=["planning authority"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/pr.md",
+            role="current-authority",
+            authority_lifecycle="pr-linked",
+            issue_refs=["#116"],
+            pr_refs=["#132"],
+            applies_to=["planning authority"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/reviewed.md",
+            role="current-authority",
+            authority_lifecycle="reviewed",
+            applies_to=["planning authority"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/current.md",
+            role="current-authority",
+            authority_lifecycle="current",
+            applies_to=["planning authority"],
+        ),
+    ]
+    write_config(tmp_path, config)
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "planning", "authority", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority = payload["authority_briefs"]
+    assert [item["path"] for item in authority[:5]] == [
+        "docs/current.md",
+        "docs/reviewed.md",
+        "docs/pr.md",
+        "docs/superseded.md",
+        "docs/archived.md",
+    ]
+    assert authority[2]["lifecycle"] == "pr-linked"
+    assert authority[2]["issue_refs"] == ["#116"]
+    assert authority[2]["pr_refs"] == ["#132"]
+    assert authority[3]["superseded_by"] == "docs/current.md"
+
+
+def test_brief_agent_context_treats_lifecycle_as_precedence_tier(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "current.md").write_text("# Current\n\nStill authoritative.\n", encoding="utf-8")
+    (docs / "archived.md").write_text(
+        "# Archived\n\nalpha beta gamma delta epsilon zeta.\n", encoding="utf-8"
+    )
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/archived.md",
+            role="current-authority",
+            authority_lifecycle="archived",
+            applies_to=["alpha", "beta", "gamma", "delta", "epsilon", "zeta"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/current.md",
+            role="current-authority",
+            authority_lifecycle="current",
+        ),
+    ]
+    write_config(tmp_path, config)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "alpha",
+            "beta",
+            "gamma",
+            "delta",
+            "epsilon",
+            "zeta",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [item["path"] for item in payload["authority_briefs"][:2]] == [
+        "docs/current.md",
+        "docs/archived.md",
+    ]
+    assert payload["authority_briefs"][1]["score"] > payload["authority_briefs"][0]["score"]
+
+
+def test_brief_agent_context_keeps_stale_freshness_separate_from_supersession(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "stale.md").write_text("# Stale\n\nNeeds review.\n", encoding="utf-8")
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="stale.md",
+            role="current-authority",
+            freshness="stale",
+        )
+    ]
+    write_config(tmp_path, config)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--agent-context", "--json"])
+
+    assert exit_code == 0
+    authority = json.loads(capsys.readouterr().out)["authority_briefs"][0]
+    assert authority["freshness"] == "stale"
+    assert authority["lifecycle"] == "current"
+    assert authority["superseded_by"] is None
+
+
 def test_brief_agent_context_warns_but_does_not_rank_missing_authority_docs(
     tmp_path: Path, capsys
 ) -> None:
@@ -1652,7 +1811,77 @@ def test_suggest_next_derives_draft_wiki_authority_freshness_as_watch(
     authority_actions = [
         action for action in payload["actions"] if action["category"] == "authority"
     ]
-    assert authority_actions[0]["reason"].startswith("current-authority/watch:")
+    assert authority_actions[0]["reason"].startswith("current-authority/watch/current:")
+
+
+def test_suggest_next_includes_lifecycle_aware_decision_authority(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "decision",
+            "create",
+            "Prefer",
+            "lifecycle",
+            "authority",
+            "ranking",
+            "--id",
+            "decision-current-authority-ranking",
+            "--status",
+            "accepted",
+            "--decided-at",
+            "2026-05-06",
+            "--authority-lifecycle",
+            "reviewed",
+            "--supersedes",
+            "decision-old-authority-ranking",
+            "--issue-ref",
+            "#116",
+            "--pr-ref",
+            "#133",
+        ]
+    )
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "decision",
+            "create",
+            "Older",
+            "authority",
+            "ranking",
+            "research",
+            "--id",
+            "decision-old-authority-ranking",
+            "--status",
+            "superseded",
+            "--decided-at",
+            "2026-04-30",
+            "--superseded-by",
+            "decision-current-authority-ranking",
+        ]
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "suggest-next", "authority", "ranking", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    decisions = [item for item in payload["authority_briefs"] if item["role"] == "decision"]
+    assert [item["path"] for item in decisions] == [
+        "planning/decisions/decision-current-authority-ranking.md",
+        "planning/decisions/decision-old-authority-ranking.md",
+    ]
+    assert decisions[0]["lifecycle"] == "reviewed"
+    assert decisions[0]["issue_refs"] == ["#116"]
+    assert decisions[0]["pr_refs"] == ["#133"]
+    assert decisions[1]["lifecycle"] == "superseded"
+    assert decisions[1]["superseded_by"] == "decision-current-authority-ranking"
+    authority_actions = [
+        action for action in payload["actions"] if action["category"] == "authority"
+    ]
+    assert authority_actions[0]["title"].startswith("Review decision ")
 
 
 def test_suggest_next_json_ranks_changed_sources_before_review_work(tmp_path: Path, capsys) -> None:

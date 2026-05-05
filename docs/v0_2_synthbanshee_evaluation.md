@@ -117,7 +117,8 @@ fixtures. The first public acceptance suite should force three workflows:
    topic refs, and passing `splendor lint` plus `splendor health`.
 2. Agent handoff on a planning question that spans multiple authorities. `brief --agent-context`
    should surface the implementation plan, current decision record, and relevant contradicting
-   research note, with current authority ranked above stale or merely token-similar material.
+   research note, with current, reviewed, or PR-linked authority ranked above stale, superseded,
+   archived, or merely token-similar material.
 3. Recovery from polluted source state. A seeded polluted registry should be recoverable through a
    documented Splendor command, ending with ignored cache/local-agent manifests removed, duplicate
    active source refs reconciled, and no manual deletion under `state/manifests/sources/`.

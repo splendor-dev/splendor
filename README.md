@@ -250,6 +250,13 @@ historical review, proposal, reference, and generated-summary context, with fres
 current, watch, stale, or historical. Generated `source-summary` pages remain ingestion artifacts
 and are excluded from maintained authority ranking.
 
+`M17-P2.1` expands that authority model for issue #116 without changing schema version `1`.
+Configured authority docs, maintained wiki authority pages, and goal-relevant decision records can
+now expose lifecycle state (`current`, `reviewed`, `pr-linked`, `historical`, `superseded`, or
+`archived`) plus issue/PR and supersession links. `brief --agent-context` and `suggest-next` use
+that lifecycle so current, reviewed, and PR-linked decisions outrank older research, stale plans,
+superseded docs, and archived context while keeping those historical records visible when relevant.
+
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
 display; copied, external, parsed PDF, and OCR-derived sources keep fuller extracts by default
@@ -281,12 +288,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M16-P3.3`
+- Previous completed PR sub-slice: `M17-P1.1`
 - Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P1.1`
+- Current PR sub-slice: `M17-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M17 v1 public readiness`
-- Next planned PR sub-slice: `M17-P2.1`
+- Next planned PR sub-slice: `M17-P3.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -429,6 +436,10 @@ acceptance workflows in [docs/public_mock_client_acceptance.md](docs/public_mock
 The reviewed external state is pinned by the `m17-p1.1-acceptance-main` and
 `m17-p1.1-source-refresh-scenario` tags, and the mock repository includes merged PR history for
 external evaluator exercises.
+
+`M17-P2.1` implements the planning authority lifecycle for issue #116. Authority handoff surfaces
+now carry lifecycle and issue/PR linkage metadata, and accepted planning decisions participate in
+goal-relevant authority ranking while superseded decisions remain historical context.
 
 `M14-P1.5` adds the explicit stale-ingest repair path for issue #93:
 `splendor ingest --changed` detects checksum-drifted curated workspace-backed sources, refreshes
