@@ -240,12 +240,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M15-P1.2`
-- Current planned slice: `Ingest run-duration precision`
-- Current PR sub-slice: `M10-P3.1`
+- Previous completed PR sub-slice: `M10-P3.1`
+- Current planned slice: `Repo-scan registration overhead`
+- Current PR sub-slice: `M13-P3.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely post-M15 issue triage or performance follow-up`
-- Next planned PR sub-slice: `likely TBD, possibly #30 or #37 after #47`
+- Next planned slice: `likely local web UI document-list scaling or issue #79 disposition`
+- Next planned PR sub-slice: `likely TBD, possibly #37 or a narrowed #79 follow-up`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel

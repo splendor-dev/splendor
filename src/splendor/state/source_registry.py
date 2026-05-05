@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from splendor import __version__
-from splendor.config import load_config
-from splendor.layout import resolve_layout
+from splendor.config import SplendorConfig, load_config
+from splendor.layout import ResolvedLayout, resolve_layout
 from splendor.schemas import SourcePointerArtifact, SourceRecord
 from splendor.schemas.types import SourceClass, SourceDiscoveryMode, StorageMode
 from splendor.state.paths import resolve_workspace_path
@@ -50,6 +50,18 @@ class MaterializedSource:
     stored_path: Path
     storage_mode: StorageMode
     source_ref: str
+
+
+@dataclass(frozen=True)
+class SourceRegistrationContext:
+    config: SplendorConfig
+    layout: ResolvedLayout
+
+
+def source_registration_context(root: Path) -> SourceRegistrationContext:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    return SourceRegistrationContext(config=config, layout=layout)
 
 
 def manifest_path_for(root: Path, source_id: str) -> Path:
@@ -432,6 +444,7 @@ def register_source(
     source_labels: list[str] | None = None,
     discovered_by: SourceDiscoveryMode | None = None,
     refresh_existing_metadata: bool = False,
+    context: SourceRegistrationContext | None = None,
 ) -> RegisteredSource:
     candidate = source_path.expanduser().resolve()
     if not candidate.exists():
@@ -441,8 +454,13 @@ def register_source(
         msg = f"Source path must be a file: {source_path}"
         raise IsADirectoryError(msg)
 
-    config = load_config(root)
-    layout = resolve_layout(root, config)
+    if context is None:
+        context = source_registration_context(root)
+    config = context.config
+    layout = context.layout
+    if layout.root.resolve() != root.resolve():
+        msg = f"Source registration context root does not match workspace root: {layout.root}"
+        raise ValueError(msg)
     ensure_directory(layout.source_records_dir)
     ensure_directory(layout.raw_sources_dir)
 

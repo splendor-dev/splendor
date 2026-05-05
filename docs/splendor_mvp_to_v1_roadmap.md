@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M15-P1.2`
-- Current planned slice: `Ingest run-duration precision`
-- Current PR sub-slice: `M10-P3.1`
+- Previous completed PR sub-slice: `M10-P3.1`
+- Current planned slice: `Repo-scan registration overhead`
+- Current PR sub-slice: `M13-P3.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely post-M15 issue triage or performance follow-up`
-- Next planned PR sub-slice: `likely TBD, possibly #30 or #37 after #47`
+- Next planned slice: `likely local web UI document-list scaling or issue #79 disposition`
+- Next planned PR sub-slice: `likely TBD, possibly #37 or a narrowed #79 follow-up`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -791,6 +791,7 @@ freshness, contested knowledge, planning state, and next actions rather than mos
 - `M13-P2.5` Source-summary policy and path-first UX
 - `M13-P3.1` Release hardening and v1 readiness
 - `M13-P3.2` Final release checklist and post-v1 handoff
+- `M13-P3.3` Repo-scan registration overhead
 
 ### Deliverables
 - v1 schema versions
@@ -830,6 +831,11 @@ adds the concise release handoff in `docs/v1_release_handoff.md`, and makes the 
 explicit: #72 owns source lifecycle and agent workflow follow-up; #79 owns the deferred mutating
 compile/update path from #41; #47 owns ingest run durations and is targeted by `M10-P3.1`; #30 and
 #37 remain independent performance/scaling follow-ups.
+
+`M13-P3.3` handles issue #30 as a focused repo-scan apply performance/refactor slice. It preserves
+safe non-mutating scan previews, explicit apply gates, source IDs, manifest validation, and queue
+handoff behavior while avoiding repeated config loading and layout resolution during bulk
+registration.
 
 ### M13-P3 v1 release-readiness checklist
 
