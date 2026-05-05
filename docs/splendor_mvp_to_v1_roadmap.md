@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M13-P3.3`
-- Current planned slice: `Local web UI document-list scaling`
-- Current PR sub-slice: `M9-P3.1`
+- Previous completed PR sub-slice: `M9-P3.1`
+- Current planned slice: `Issue #79 compile/update disposition`
+- Current PR sub-slice: `M15-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely issue #79 disposition or narrowed compile/update follow-up`
-- Next planned PR sub-slice: `likely TBD, possibly M15-P1.3 if a concrete #79 follow-up is defined`
+- Next planned slice: `likely no open issue after #79 closes; release/tagging readiness`
+- Next planned PR sub-slice: `TBD`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1057,6 +1057,26 @@ JSON suggestions include structured `compile_preview_args` alongside the rendere
 so agents can execute the preview command without shell parsing. This slice does not add automatic
 multi-page apply, LLM synthesis, web mutation, source registration changes, broad workspace
 refresh, or performance/scaling work from #47, #37, or #30.
+
+### Completed disposition: M15-P1.3 issue #79 disposition
+
+`M15-P1.3` is a focused disposition/audit PR for issue #79. It does not add another mutating
+surface. The audit records that the desired #79 follow-up is materially represented by `M15-P1.1`
+and `M15-P1.2`.
+
+| #79 requirement | Current disposition | Evidence |
+| --- | --- | --- |
+| Proposed diffs before mutation | `splendor wiki compile <source-id|title|path> --page <maintained-page>` returns a one-page proposal with `proposed_diff`, target/source-summary hashes, `proposal_hash`, and `proposed_markdown`; preview mode does not write the target page. | `src/splendor/commands/wiki.py` `compile_source_into_page`; `tests/test_wiki_commands.py` `test_wiki_compile_proposes_maintained_page_update_without_mutating`; `test_wiki_compile_text_proposal_prints_reviewable_diff_and_hash` |
+| Explicit accept/apply semantics | The only write path is `--apply --proposal-hash <hash>`. The hash is recomputed from source ID, target path, target hash, source-summary path/hash, and proposed markdown hash so stale previews are rejected. | `src/splendor/commands/wiki.py` `_compile_proposal_hash`; `tests/test_wiki_commands.py` `test_wiki_compile_apply_updates_only_maintained_target_page`; `test_wiki_compile_apply_rejects_stale_proposal_hash`; `test_wiki_compile_apply_requires_page`; `test_wiki_compile_apply_requires_proposal_hash` |
+| Deterministic output | Compile evidence is extracted deterministically from generated source-summary sections, fenced content and generated key-fact boilerplate are skipped, output includes stable hashes, and repeated accepted compiles become no-ops. | `src/splendor/commands/wiki.py` `_compile_evidence_lines`; `_render_compile_diff`; `tests/test_wiki_commands.py` `test_wiki_compile_skips_fenced_extract_contents`; `test_wiki_compile_apply_updates_only_maintained_target_page` |
+| Schema-bound frontmatter validation | Compiled markdown is validated through `KnowledgePageFrontmatter` before proposal/apply output is accepted, and invalid wiki pages block compile. | `src/splendor/commands/wiki.py` `_validate_compiled_markdown`; `tests/test_wiki_commands.py` `test_wiki_compile_rejects_invalid_wiki_pages` |
+| Generated source-summary versus maintained synthesis separation | Compile targets must be maintained synthesis pages (`architecture`, `concept`, `entity`, `glossary`, or `topic`); generated `source-summary` pages are rejected as targets and are only used as evidence. | `src/splendor/commands/wiki.py` `SYNTHESIS_KINDS`; `compile_source_into_page`; `tests/test_wiki_commands.py` `test_wiki_compile_rejects_generated_source_summary_target`; `test_wiki_compile_apply_updates_only_maintained_target_page` |
+| Docs/tests for mutating command behavior | Product docs describe the non-mutating contract, one-page proposal, and explicit reviewed apply gate; focused wiki command tests cover preview, apply, stale hash, invalid input, generated-target rejection, and suggestion preview arguments. | `docs/splendor_product_spec.md` section 14.6; `README.md` current MVP surface; `tests/test_wiki_commands.py` compile and suggest coverage |
+
+Remaining deliberate non-goals are automatic multi-page mutation, LLM synthesis, mutating web UI
+actions, search/index redesign, source lifecycle work, and broad roadmap expansion. Unless
+maintainers identify a newly scoped gap, #79 should close with this disposition rather than
+expanding the parent issue beyond the reviewed one-page compile/apply contract.
 
 ### M10-P3.1 ingest run-duration precision
 

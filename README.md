@@ -240,12 +240,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M13-P3.3`
-- Current planned slice: `Local web UI document-list scaling`
-- Current PR sub-slice: `M9-P3.1`
+- Previous completed PR sub-slice: `M9-P3.1`
+- Current planned slice: `Issue #79 compile/update disposition`
+- Current PR sub-slice: `M15-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `likely issue #79 disposition or narrowed compile/update follow-up`
-- Next planned PR sub-slice: `likely TBD, possibly M15-P1.3 if a concrete #79 follow-up is defined`
+- Next planned slice: `likely no open issue after #79 closes; release/tagging readiness`
+- Next planned PR sub-slice: `TBD`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -334,14 +334,13 @@ ingest handoff, #44's query snippets, #45's web status/source detail pages, and 
 visibility as represented in current behavior. `M15-P1.1` now starts #41's deferred mutating
 compile/update workflow through #79 with explicit one-page proposal/apply semantics. `M15-P1.2`
 is implemented: bare compile/suggest output now includes ranked compile-target previews while
-preserving the explicit apply gate. Issue #47 is targeted next by `M10-P3.1` as a focused
-ingest/run-state timing follow-up. Issues #30 and #37
-remain post-v1 performance work. Issue #70 is closed after the M13-P2/M13-P3.1 response. Issue #72
-is the parent feedback loop for the M14 source-lifecycle sequence; stable logical source
-identities, supersession lifecycle, safe workspace refresh, superseded summary pruning, topic-ref
-migration, and PR-summary support have landed. `M14-P3.1` recommends closing #72 once maintainers
-accept the gate result, with the narrower remaining handoff gap tracked by #86.
-Issue #79 tracks the reviewed compile/update sequence that started in `M15-P1.1`.
+preserving the explicit apply gate. `M15-P1.3` audits #79 and records the disposition that the
+desired reviewed compile/update follow-up is materially represented by the existing one-page
+proposal/apply workflow, generated/maintained page separation, deterministic output, schema-bound
+frontmatter validation, and focused regression coverage. The detailed disposition matrix lives in
+[docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md#completed-disposition-m15-p13-issue-79-disposition).
+Issue #79 should close with the `M15-P1.3` disposition PR unless maintainers identify a new narrow
+follow-up outside the current reviewed one-page compile/apply contract.
 
 `M14-P1.1` adds the first stable logical source identity layer above content-addressed source IDs:
 workspace-backed manifests now persist `source:<workspace-path>` logical IDs and path aliases while
