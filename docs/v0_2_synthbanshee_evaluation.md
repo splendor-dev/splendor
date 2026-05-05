@@ -94,6 +94,30 @@ v0.3 items land:
 Lower-priority v0.3 polish includes standalone workspace maintenance actions, JSON output for
 pending ingest drains, and easier release artifacts for trial installs.
 
+## Public Mock Client Acceptance Workflows
+
+The evaluation reinforced the need for a public mock client repository before public v1. The mock
+repo should not replace real SynthBanshee trials, but it should give external evaluators and CI a
+safe, realistic place to exercise the failure modes found here.
+
+Healthy `main` should model a small project that is already several months old: human-authored
+specs, implementation plans, decision records, research notes with a few real contradictions, a
+non-trivial merged PR history, an `AGENTS.md` or equivalent agent instruction file, and realistic
+ignored cache/local-agent directories that appear in working trees after normal tool use.
+
+Failure scenarios should live outside healthy `main`, preferably as dedicated scenario branches or
+fixtures. The first public acceptance suite should force three workflows:
+
+1. Source refresh after a real PR changes several curated sources. The expected result is one
+   active manifest per changed source, pruned superseded source-summary pages, migrated maintained
+   topic refs, and passing `splendor lint` plus `splendor health`.
+2. Agent handoff on a planning question that spans multiple authorities. `brief --agent-context`
+   should surface the implementation plan, current decision record, and relevant contradicting
+   research note, with current authority ranked above stale or merely token-similar material.
+3. Recovery from polluted source state. A seeded polluted registry should be recoverable through a
+   documented Splendor command, ending with ignored cache/local-agent manifests removed, duplicate
+   active source refs reconciled, and no manual deletion under `state/manifests/sources/`.
+
 ## Roadmap Consequence
 
 The next product direction is not broader synthesis, a mutating web UI, or advanced search. The
