@@ -392,3 +392,6 @@ For source-registry recovery PRs, use `splendor source forget` in preview mode b
 cleanup. Applied recovery changes should be reviewed as intentional source-registry maintenance:
 selected manifests and source-owned generated state may be removed, while residual maintained
 wiki/planning references should remain visible in the command output and PR description.
+Use `splendor source reconcile` in preview mode before applying duplicate canonical source-version
+repairs. Applied reconciliation changes should be limited to source manifest lifecycle links and
+should leave generated pages, maintained wiki pages, queue records, and run records untouched.

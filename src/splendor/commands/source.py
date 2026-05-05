@@ -64,6 +64,28 @@ class SourcePathUpdateResult:
 
 
 @dataclass(frozen=True)
+class SourceReconcileUpdate:
+    source: SourceRecord
+    manifest_path: Path
+    before_supersedes: list[str]
+    after_supersedes: list[str]
+    before_superseded_by: str | None
+    after_superseded_by: str | None
+
+
+@dataclass(frozen=True)
+class SourceReconcileResult:
+    applied: bool
+    selector: str
+    current_selector: str | None
+    canonical_ref: str
+    current: SourceRecord
+    current_manifest_path: Path
+    active_before: list[SourceRecord]
+    updates: list[SourceReconcileUpdate]
+
+
+@dataclass(frozen=True)
 class SourceFreshnessItem:
     source: SourceRecord
     manifest_path: Path
@@ -431,6 +453,91 @@ def update_source_path(
     )
 
 
+def reconcile_sources(
+    root: Path,
+    selector: str,
+    *,
+    current_selector: str | None = None,
+    apply: bool = False,
+) -> SourceReconcileResult:
+    group = _reconcile_group(root, selector)
+    canonical_ref = canonical_source_ref(group[0].source)
+    active_group = [result for result in group if result.source.superseded_by is None]
+    if not active_group:
+        msg = f"No active source versions found for canonical source ref: {canonical_ref}"
+        raise ValueError(msg)
+
+    current_match = (
+        _current_reconcile_match(root, current_selector, canonical_ref)
+        if current_selector is not None
+        else _default_reconcile_current(selector, group, active_group)
+    )
+    current = current_match.source
+    if current.superseded_by is not None:
+        msg = f"Current source version is already superseded: {current.source_id}"
+        raise ValueError(msg)
+
+    superseded_ids = [
+        result.source.source_id
+        for result in sorted(active_group, key=_latest_source_sort_key)
+        if result.source.source_id != current.source_id
+    ]
+    updates: list[SourceReconcileUpdate] = []
+    for result in sorted(active_group, key=lambda item: item.source.source_id):
+        source = result.source
+        if source.source_id == current.source_id:
+            continue
+        if source.superseded_by == current.source_id:
+            continue
+        updates.append(
+            SourceReconcileUpdate(
+                source=source,
+                manifest_path=result.manifest_path,
+                before_supersedes=list(source.supersedes),
+                after_supersedes=list(source.supersedes),
+                before_superseded_by=source.superseded_by,
+                after_superseded_by=current.source_id,
+            )
+        )
+
+    current_supersedes = _dedupe_aliases([*current.supersedes, *superseded_ids])
+    if current_supersedes != current.supersedes:
+        updates.append(
+            SourceReconcileUpdate(
+                source=current,
+                manifest_path=current_match.manifest_path,
+                before_supersedes=list(current.supersedes),
+                after_supersedes=current_supersedes,
+                before_superseded_by=current.superseded_by,
+                after_superseded_by=None,
+            )
+        )
+
+    if apply:
+        for update in updates:
+            updated = SourceRecord.model_validate(
+                update.source.model_dump(mode="json")
+                | {
+                    "supersedes": update.after_supersedes,
+                    "superseded_by": update.after_superseded_by,
+                }
+            )
+            write_source_record(update.manifest_path, updated)
+
+    return SourceReconcileResult(
+        applied=apply,
+        selector=selector,
+        current_selector=current_selector,
+        canonical_ref=canonical_ref,
+        current=current,
+        current_manifest_path=current_match.manifest_path,
+        active_before=[
+            result.source for result in sorted(active_group, key=_latest_source_sort_key)
+        ],
+        updates=updates,
+    )
+
+
 def ingest_changed_sources(root: Path) -> StaleIngestResult:
     initial_freshness = scan_source_freshness(root)
     missing_items = [item for item in initial_freshness.sources if item.status == "missing"]
@@ -571,6 +678,50 @@ def _select_refresh_candidate(
     raise ValueError(msg)
 
 
+def _reconcile_group(root: Path, selector: str) -> list[SourceLookupResult]:
+    matches = resolve_source_query_matches(root, selector)
+    refs = {canonical_source_ref(match.source) for match in matches}
+    if len(refs) != 1:
+        ids = ", ".join(match.source.source_id for match in matches[:5])
+        suffix = "" if len(matches) <= 5 else ", ..."
+        msg = f"Source reconcile selector is ambiguous for {selector!r}: {ids}{suffix}"
+        raise ValueError(msg)
+    canonical_ref = next(iter(refs))
+    group = [
+        result
+        for result in list_sources(root)
+        if canonical_source_ref(result.source) == canonical_ref
+    ]
+    return sorted(group, key=_latest_source_sort_key)
+
+
+def _default_reconcile_current(
+    selector: str,
+    group: list[SourceLookupResult],
+    active_group: list[SourceLookupResult],
+) -> SourceLookupResult:
+    exact_id_matches = [result for result in group if result.source.source_id == selector]
+    if exact_id_matches:
+        return exact_id_matches[0]
+    return max(active_group, key=_latest_source_sort_key)
+
+
+def _current_reconcile_match(
+    root: Path, current_selector: str | None, canonical_ref: str
+) -> SourceLookupResult:
+    if current_selector is None:
+        msg = "--current requires a source selector"
+        raise ValueError(msg)
+    current_match = resolve_source_query_exact(root, current_selector)
+    if canonical_source_ref(current_match.source) != canonical_ref:
+        msg = (
+            "Current source version must share the selected canonical source ref: "
+            f"expected {canonical_ref}, got {canonical_source_ref(current_match.source)}"
+        )
+        raise ValueError(msg)
+    return current_match
+
+
 def _latest_source_sort_key(result: SourceLookupResult) -> tuple[str, str]:
     return (result.source.added_at, result.source.source_id)
 
@@ -674,6 +825,37 @@ def render_source_path_update_json(root: Path, result: SourcePathUpdateResult) -
         },
         indent=2,
     )
+
+
+def render_source_reconcile_json(root: Path, result: SourceReconcileResult) -> str:
+    return json.dumps(
+        {
+            "applied": result.applied,
+            "selector": result.selector,
+            "current_selector": result.current_selector,
+            "canonical_ref": result.canonical_ref,
+            "current_source_id": result.current.source_id,
+            "current_manifest_path": result.current_manifest_path.relative_to(root).as_posix(),
+            "active_before": [source.source_id for source in result.active_before],
+            "summary": {
+                "active_before": len(result.active_before),
+                "updates": len(result.updates),
+            },
+            "updates": [_reconcile_update_payload(root, update) for update in result.updates],
+            "next_commands": source_reconcile_next_commands(result),
+        },
+        indent=2,
+    )
+
+
+def source_reconcile_next_commands(result: SourceReconcileResult) -> list[str]:
+    if not result.applied and result.updates:
+        command = f"splendor source reconcile {shlex.quote(result.selector)}"
+        if result.current_selector is not None:
+            command += f" --current {shlex.quote(result.current_selector)}"
+        command += " --apply"
+        return [command]
+    return ["splendor lint", "splendor health"]
 
 
 def write_source_freshness_report(
@@ -1028,4 +1210,19 @@ def _source_payload(root: Path, result: SourceLookupResult) -> dict[str, object]
         "manifest_path": result.manifest_path.relative_to(root).as_posix(),
         "queue_job_id": ingest_job_id(source.source_id),
         "linked_pages": source.linked_pages,
+    }
+
+
+def _reconcile_update_payload(root: Path, update: SourceReconcileUpdate) -> dict[str, object]:
+    return {
+        "source_id": update.source.source_id,
+        "manifest_path": update.manifest_path.relative_to(root).as_posix(),
+        "before": {
+            "supersedes": update.before_supersedes,
+            "superseded_by": update.before_superseded_by,
+        },
+        "after": {
+            "supersedes": update.after_supersedes,
+            "superseded_by": update.after_superseded_by,
+        },
     }
