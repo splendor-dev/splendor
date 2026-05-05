@@ -1110,7 +1110,10 @@ Current implementation:
 - `splendor suggest-next [goal]` renders the ranked action subset directly. It is read-only and
   deterministic, and ranks source freshness, queue failures or pending work, stale/contested or
   review-needed pages, missing synthesis follow-up, task-relevant authority docs, active planning
-  records, recent maintenance reports, and query matches for the optional goal.
+  records, recent maintenance reports, and query matches for the optional goal. Handoff ranking
+  uses deterministic relevance scoring over weighted title/path/record/scope fields, supporting
+  refs, snippets, and review/authority lifecycle signals so current task authority beats stale or
+  merely token-similar material without introducing vector search.
 - Authority docs come from `briefing.authority_documents` in `splendor.yaml` and optional
   maintained wiki page frontmatter (`authority_role`, `authority_freshness`, and
   `authority_lifecycle`, `authority_scope`, issue/PR refs, and supersession links). Generated

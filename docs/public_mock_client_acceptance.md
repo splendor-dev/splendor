@@ -47,6 +47,9 @@ Expected result: lint and health pass on `main`, and the agent-context brief ran
 spec, rollout plan, CSV-first decision, and held-entry research above the stale JSONL research note.
 With M17-P2.1 lifecycle-aware handoff, current, reviewed, or PR-linked authority should also rank
 above superseded or archived planning context when those records are present.
+With M17-P3.1 deterministic relevance scoring, `brief --agent-context` and `suggest-next` should
+prefer task-relevant authority, accepted decisions, active planning records, and focused
+contradicting research over stale or token-similar notes without requiring vector search.
 
 ## Source-Refresh Scenario
 
