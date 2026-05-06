@@ -295,6 +295,7 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
 - [docs/release_artifacts.md](docs/release_artifacts.md)
 - [docs/public_mock_client_acceptance.md](docs/public_mock_client_acceptance.md)
+- [docs/v0_3_0_release_notes.md](docs/v0_3_0_release_notes.md)
 - [docs/v1_release_handoff.md](docs/v1_release_handoff.md)
 - [docs/m14_synthbanshee_reevaluation.md](docs/m14_synthbanshee_reevaluation.md)
 - [docs/v0_2_synthbanshee_evaluation.md](docs/v0_2_synthbanshee_evaluation.md)
@@ -562,3 +563,8 @@ rewritten.
 - [x] Pending ingest drains provide JSON output for agent handoff.
 - [x] GitHub Release wheels and source distributions are documented as the canonical trial-install
   artifact path.
+- [x] Public mock-client acceptance fixtures cover source refresh, polluted-registry recovery,
+  renamed-source repair, and authority-ranking handoff.
+- [x] Agent handoff ranks current authority and task-relevant planning records above stale,
+  token-similar, and generated-review noise.
+- [x] `v0.3.0` package metadata and release notes are ready for the SynthBanshee Claude Code retry.
