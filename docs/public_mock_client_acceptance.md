@@ -50,6 +50,10 @@ above superseded or archived planning context when those records are present.
 With M17-P3.1 deterministic relevance scoring, `brief --agent-context` and `suggest-next` should
 prefer task-relevant authority, accepted decisions, active planning records, and focused
 contradicting research over stale or token-similar notes without requiring vector search.
+With M17-P4.1 contradiction-review task noise reduction, generated contradiction-review tasks
+should not crowd out human-authored planning records in default handoff. Operators should use
+explicit task-list, resolve, and mute workflows when they want to inspect generated review tasks,
+while contested source-summary evidence remains discoverable through query and page metadata.
 
 ## Source-Refresh Scenario
 

@@ -26,7 +26,7 @@ from splendor.utils.planning import (
     record_id_field,
 )
 
-from .planning import model_for_planning_kind
+from .planning import is_generated_contradiction_review_task, model_for_planning_kind
 from .query import QueryMatch, QueryValidationError, run_query
 from .queue import QueueInspectResult, inspect_queue
 from .source import SourceFreshnessResult, scan_source_freshness
@@ -53,6 +53,7 @@ _SUGGESTION_CATEGORY_LIMITS = {
     "goal-match": 3,
     "authority": 3,
     "planning": 2,
+    "contradiction-review": 1,
     "synthesis": 2,
     "wiki-review": 2,
     "maintenance": 2,
@@ -66,11 +67,12 @@ _SUGGESTION_CATEGORY_ORDER = {
     "goal-match": 3,
     "authority": 4,
     "planning": 5,
-    "synthesis": 6,
-    "wiki-review": 7,
-    "maintenance": 8,
-    "query": 9,
-    "orientation": 10,
+    "contradiction-review": 6,
+    "synthesis": 7,
+    "wiki-review": 8,
+    "maintenance": 9,
+    "query": 10,
+    "orientation": 11,
 }
 _SUGGESTION_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 _AUTHORITY_LIMIT = 6
@@ -124,6 +126,15 @@ _PLANNING_STATUSES = {
     "milestone": {"planned", "active"},
     "decision": {"proposed"},
     "question": {"open", "deferred"},
+}
+_CONTRADICTION_GOAL_TOKENS = {
+    "conflict",
+    "conflicts",
+    "conflicting",
+    "contradiction",
+    "contradictions",
+    "contradicting",
+    "contested",
 }
 
 
@@ -251,6 +262,7 @@ class BriefStateSnapshot:
     sources_by_id: dict[str, SourceRecord]
     wiki_pages: list[WikiPageSnapshot]
     invalid_wiki_pages: list[InvalidWikiPageSnapshot]
+    generated_review_task_count: int
 
 
 @dataclass(frozen=True)
@@ -336,13 +348,18 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
             query_warning = BriefWarning(area="query", path=None, message=query_summary)
         if query_result is not None:
             query_summary = query_result.summary
+            brief_matches = [
+                _brief_match(match)
+                for match in query_result.matches
+                if not _is_generated_review_task_match(match)
+            ]
             matches = _rank_brief_matches(
-                [_brief_match(match) for match in query_result.matches],
+                brief_matches,
                 goal_tokens,
                 goal_phrase,
             )[:_BRIEF_MATCH_LIMIT]
 
-    planning_items, warnings = _active_planning_items(
+    planning_items, warnings, generated_review_task_count = _active_planning_items(
         root, layout, normalized_goal or None, goal_phrase
     )
     if query_warning is not None:
@@ -377,6 +394,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
         sources_by_id=sources_by_id,
         wiki_pages=wiki_pages,
         invalid_wiki_pages=invalid_wiki_pages,
+        generated_review_task_count=generated_review_task_count,
     )
 
 
@@ -393,6 +411,15 @@ def _brief_match(match: QueryMatch) -> BriefMatch:
         review_state=match.review_state,
         source_refs=match.source_refs,
         snippet=match.snippet,
+    )
+
+
+def _is_generated_review_task_match(match: QueryMatch) -> bool:
+    return (
+        match.document_class == "planning"
+        and match.kind == "task"
+        and match.record_origin == "generated"
+        and match.generated_kind == "contradiction-review"
     )
 
 
@@ -447,9 +474,10 @@ def _brief_error(exc: Exception) -> str:
 
 def _active_planning_items(
     root: Path, layout, goal: str | None, goal_phrase: str
-) -> tuple[list[BriefPlanningItem], list[BriefWarning]]:
+) -> tuple[list[BriefPlanningItem], list[BriefWarning], int]:
     items: list[BriefPlanningItem] = []
     warnings: list[BriefWarning] = []
+    generated_review_task_count = 0
     goal_tokens = _tokens(goal or "")
     for kind, statuses in _PLANNING_STATUSES.items():
         model = model_for_planning_kind(kind)
@@ -467,6 +495,10 @@ def _active_planning_items(
                 )
                 continue
             record = parsed.record
+            if kind == "task" and is_generated_contradiction_review_task(record):
+                if record.review_task_state == "active":
+                    generated_review_task_count += 1
+                continue
             status = record.status
             if status not in statuses:
                 continue
@@ -504,7 +536,7 @@ def _active_planning_items(
         )
     else:
         items.sort(key=lambda item: (item.kind, item.status, item.record_id))
-    return items[:_BRIEF_PLANNING_LIMIT], warnings
+    return items[:_BRIEF_PLANNING_LIMIT], warnings, generated_review_task_count
 
 
 def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot], goal: str | None):
@@ -1121,6 +1153,19 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             path=item.path,
             record_id=item.record_id,
             relevance_score=item.relevance_score,
+        )
+
+    if snapshot.generated_review_task_count and goal_tokens & _CONTRADICTION_GOAL_TOKENS:
+        add(
+            "low",
+            "contradiction-review",
+            "Inspect generated contradiction-review tasks",
+            (
+                f"{snapshot.generated_review_task_count} generated contradiction-review task(s) "
+                "are available for intentional listing, resolution, or muting."
+            ),
+            "splendor task list --generated-review --review-task-state active",
+            relevance_score=1,
         )
 
     for warning in snapshot.warnings:

@@ -78,6 +78,9 @@ class QueryMatch:
     title: str
     path: str
     status: str | None
+    record_origin: str | None
+    generated_kind: str | None
+    review_task_state: str | None
     review_state: str | None
     last_generated_at: str | None
     snippet: str
@@ -109,6 +112,9 @@ class _QueryDocument:
     title: str
     path: str
     status: str | None
+    record_origin: str | None
+    generated_kind: str | None
+    review_task_state: str | None
     review_state: str | None
     last_generated_at: str | None
     source_refs: list[str]
@@ -181,6 +187,9 @@ def run_query(
             title=item.document.title,
             path=item.document.path,
             status=item.document.status,
+            record_origin=item.document.record_origin,
+            generated_kind=item.document.generated_kind,
+            review_task_state=item.document.review_task_state,
             review_state=item.document.review_state,
             last_generated_at=item.document.last_generated_at,
             snippet=item.snippet,
@@ -290,6 +299,9 @@ def _iter_wiki_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocum
                 title=frontmatter.title,
                 path=path.relative_to(root).as_posix(),
                 status=frontmatter.status,
+                record_origin=None,
+                generated_kind=None,
+                review_task_state=None,
                 review_state=frontmatter.review_state,
                 last_generated_at=frontmatter.last_generated_at,
                 source_refs=list(frontmatter.source_refs),
@@ -324,6 +336,9 @@ def _iter_planning_documents(root: Path, layout: ResolvedLayout) -> list[_QueryD
             payload = record.model_dump(mode="json")
             record_id = str(getattr(record, record_id_field(kind)))
             status = payload.get("status")
+            record_origin = payload.get("record_origin")
+            generated_kind = payload.get("generated_kind")
+            review_task_state = payload.get("review_task_state")
             source_refs = list(payload.get("source_refs", []))
             keyword_values = [kind]
             if isinstance(status, str):
@@ -343,6 +358,11 @@ def _iter_planning_documents(root: Path, layout: ResolvedLayout) -> list[_QueryD
                     title=record.title,
                     path=path.relative_to(root).as_posix(),
                     status=status if isinstance(status, str) else None,
+                    record_origin=record_origin if isinstance(record_origin, str) else None,
+                    generated_kind=generated_kind if isinstance(generated_kind, str) else None,
+                    review_task_state=(
+                        review_task_state if isinstance(review_task_state, str) else None
+                    ),
                     review_state=None,
                     last_generated_at=None,
                     source_refs=source_refs,

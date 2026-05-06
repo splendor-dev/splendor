@@ -20,6 +20,7 @@ from splendor.schemas import (
     ProvenanceLink,
     TaskRecord,
 )
+from splendor.schemas.planning import status_for_review_task_state
 from splendor.utils.planning import parse_planning_document, planning_path, render_planning_document
 from splendor.utils.time import utc_now_iso
 from splendor.utils.wiki import parse_wiki_markdown
@@ -495,9 +496,15 @@ def _upsert_review_task(
     if task_path.exists():
         parsed = parse_planning_document(task_path, TaskRecord)
         assert isinstance(parsed.record, TaskRecord)
+        review_task_state = parsed.record.review_task_state
+        status = status_for_review_task_state(parsed.record.status, review_task_state)
         record = parsed.record.model_copy(
             update={
                 "title": title,
+                "status": status,
+                "record_origin": "generated",
+                "generated_kind": "contradiction-review",
+                "review_task_state": review_task_state,
                 "updated_at": timestamp,
                 "source_refs": sorted(
                     {
@@ -522,6 +529,9 @@ def _upsert_review_task(
             title=title,
             status="todo",
             priority=priority,
+            record_origin="generated",
+            generated_kind="contradiction-review",
+            review_task_state="active",
             created_at=timestamp,
             updated_at=timestamp,
             source_refs=list(annotation.related_source_ids),
