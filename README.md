@@ -225,7 +225,9 @@ ambiguous `--current` selectors are rejected without rewriting manifests.
 
 `splendor ingest --pending --json` emits machine-readable pending-drain results with queue totals,
 processed/succeeded/failed/skipped counts, per-item outcomes, and deterministic next actions so
-agents do not need to parse human queue-drain text.
+agents do not need to parse human queue-drain text. This is still a direct drain verb in v0.4: it
+mutates queue, run, wiki, and index/log state when work is due. The post-v0.4 review findings make
+preview/apply harmonization for this and other legacy mutating verbs the next planned safety work.
 
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
@@ -314,16 +316,18 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [Product spec](docs/splendor_product_spec.md)
 - [Roadmap](docs/splendor_mvp_to_v1_roadmap.md)
 - [v0.4 external retry bar](docs/evaluations/v0_4_external_retry_bar.md)
+- [v0.4 external review summary](docs/evaluations/v0_4_external_review_round_summary.md)
+- [v0.4 external findings register](docs/evaluations/v0_4_external_findings_register.md)
 - [v0.4.0 release notes](docs/releases/v0_4_0_release_notes.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P3.1`
-- Current planned slice: `v0.4.0 release preparation`
-- Current PR sub-slice: `v0.4.0-release-prep`
+- Previous completed PR sub-slice: `v0.4.0-release-prep`
+- Current planned slice: `M19 post-v0.4 external review response`
+- Current PR sub-slice: `M19-P4.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 post-v1 product bets`
-- Next planned PR sub-slice: `M20-P1.1`
+- Next planned slice: `M19 legacy mutation safety`
+- Next planned PR sub-slice: `M19-P5.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -624,3 +628,12 @@ now expose a deterministic `mutation` object with `mode`, `mutates`, `planned`, 
 fields, while human output labels preview-only invocations and apply/direct write modes clearly.
 `M19-P3.1` adds preview/apply queue cleanup closure paths for orphaned, superseded, and completed
 ingest queue records, with additive cleanup state in queue inspection and maintenance handoff.
+
+`M19-P4.1` captures the post-v0.4 external review round before implementation work resumes. The
+raw hocrgen, SynthBanshee, and hocrsyngen trial materials are preserved under `docs/evaluations/`,
+with a review-round summary and findings register that identify the next durability gaps. The
+review round keeps M20 vector/search and mutating-web bets visible, but defers them until the
+remaining M19 workflow-safety and handoff-correctness issues are closed. The next planned
+implementation slice is `M19-P5.1`: legacy preview/apply harmonization for mutating maintenance and
+workflow commands such as `ingest --pending`, `source refresh`, `source update-path`, and
+`workspace refresh`.

@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P3.1`
-- Current planned slice: `v0.4.0 release preparation`
-- Current PR sub-slice: `v0.4.0-release-prep`
+- Previous completed PR sub-slice: `v0.4.0-release-prep`
+- Current planned slice: `M19 post-v0.4 external review response`
+- Current PR sub-slice: `M19-P4.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 post-v1 product bets`
-- Next planned PR sub-slice: `M20-P1.1`
+- Next planned slice: `M19 legacy mutation safety`
+- Next planned PR sub-slice: `M19-P5.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1265,6 +1265,11 @@ and consistently safe enough for public v1.
 - Orphan queue cleanup and closeable provenance-missing acknowledgements.
 - Reverse curated-source classification in `pr-summary`.
 - Public acceptance coverage for the SynthBanshee and hocrgen v0.4 retry bars.
+- Post-v0.4 external review intake, synthesis, and M19 sequencing.
+- Legacy preview/apply harmonization for older mutating maintenance/workflow commands.
+- Completion-aware current-state inference for recently merged roadmap slices.
+- Broader work-thread and policy-cited implementation-surface surfacing in handoff.
+- Cold-start/local-state ergonomics and narrow robustness fixes for first-time repos.
 
 ### Milestone 19 status
 
@@ -1290,11 +1295,35 @@ Queue inspection now exposes additive cleanup state, and agent handoff keeps the
 discoverable under maintenance context without promoting generated queue cleanup above work-first
 handoff.
 
+`M19-P4.1` records the post-v0.4 external review round and realigns the remaining pre-v1 durability
+work. SynthBanshee validated the M18 work-first direction and verified the M19-P3.1 queue-cleanup
+closure path, but prioritized legacy preview/apply harmonization because mixed semantics make
+exploratory agent sessions unsafe. hocrgen and hocrsyngen both failed the same handoff pattern:
+Splendor had git/GitHub and roadmap evidence that a slice was merged, but still ranked recently
+completed work above the next roadmap item. The review findings are summarized in
+`docs/evaluations/v0_4_external_review_round_summary.md` and registered in
+`docs/evaluations/v0_4_external_findings_register.md`.
+
+The remaining M19 sequence is therefore:
+
+- `M19-P5.1` Legacy preview/apply harmonization for mutating commands that still write or drain
+  immediately, especially `ingest --pending`, `source refresh`, `source update-path`, and
+  `workspace refresh`.
+- `M19-P6.1` Completion-aware current-state handoff inference: reconcile stale dynamic planning
+  docs against git/GitHub merge state and ordered roadmap items so completed slices lead to the
+  next open slice.
+- `M19-P7.1` Handoff breadth and policy-cited implementation surfacing: show multiple relevant
+  open work threads and boost files/symbols named by high-authority docs.
+- `M19-P8.1` Cold-start adoption and focused robustness: make first-run state location/review
+  explicit and fix the PATH-safe git lookup failure seen in the hocrsyngen trial.
+
 ## Milestone 20 — post-v1 product bets
 
 ### Goal
 Keep larger product bets visible without treating them as the next blocker. Current external
-feedback points to handoff shape and workflow safety before search infrastructure.
+feedback points to handoff shape and workflow safety before search infrastructure. After the v0.4
+external review round, Milestone 20 remains deferred until the remaining M19 durability sequence is
+closed or explicitly reprioritized.
 
 ### Candidate PR slices
 - `M20-P1.1` Add advanced semantic search or a vector index (#118).

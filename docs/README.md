@@ -33,6 +33,8 @@ workflow.
 - [v0.3 hocrgen evaluation](evaluations/v0_3_hocrgen_evaluation.md)
 - [v0.3 hocrgen follow-up](evaluations/v0_3_hocrgen_followup.md)
 - [v0.4 external retry bar](evaluations/v0_4_external_retry_bar.md)
+- [v0.4 external review round summary](evaluations/v0_4_external_review_round_summary.md)
+- [v0.4 external findings register](evaluations/v0_4_external_findings_register.md)
 - [Public mock client acceptance](evaluations/public_mock_client_acceptance.md)
 
 ## Releases

@@ -89,13 +89,14 @@ hocrgen and hocrsyngen both selected completion-aware current-state inference as
 their next trial. Both failures involved the same pattern: recently completed work remained ranked as
 next work when the roadmap pointed to the following slice.
 
-The combined sequence suggested by the review round is:
+The combined sequence accepted for the remaining M19 durability track is:
 
-1. Legacy preview/apply harmonization for mutating maintenance/workflow verbs.
-2. Completion-aware current-state planning inference.
-3. Broader work-thread surfacing for related open issues.
-4. Cold-start/local-state ergonomics.
-5. Focused robustness and polish: PATH-safe git lookup, policy-cited path boosting, clearer no-diff
+1. `M19-P5.1`: legacy preview/apply harmonization for mutating maintenance/workflow verbs.
+2. `M19-P6.1`: completion-aware current-state planning inference.
+3. `M19-P7.1`: broader work-thread surfacing for related open issues and policy-cited
+   implementation surfaces.
+4. `M19-P8.1`: cold-start/local-state ergonomics and PATH-safe git lookup.
+5. Later scoped polish: ingest progress, scan ranking, lint link cleanup, clearer no-diff
    PR summaries, and removal of trailing maintenance next-actions.
 
 ## Out Of Scope For This PR

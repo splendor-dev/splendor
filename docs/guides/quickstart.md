@@ -164,6 +164,10 @@ uv run splendor --root /tmp/demo-repo ingest --pending
 `ingest --pending` also handles due failed retries and expired ingest leases. Failed jobs wait until
 their persisted `next_attempt_at` backoff time, and exhausted jobs move to `dead_letter` until an
 operator runs `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
+Unlike preview-first cleanup commands such as `queue clean`, `ingest --pending` is currently a
+direct drain verb: it writes source-summary, queue, run, and index/log state when work is due. The
+post-v0.4 durability plan is to harmonize this with explicit preview/apply behavior; until then,
+run it only when you intend to process queued ingest work.
 
 This creates:
 
@@ -264,6 +268,9 @@ generated-summary pruning, and maintained-page topic-ref migration can run stand
 `workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index`.
 If pruning runs before successor source-summary pages exist, rerun
 `workspace refresh --prune-superseded` after the refreshed sources are ingested.
+These refresh commands are also part of the post-v0.4 preview/apply harmonization plan. Review
+`source freshness`, `queue inspect`, and `pr-summary` before using them in a shared branch if you
+only intended to inspect state.
 
 ## 5. Add a planning record
 

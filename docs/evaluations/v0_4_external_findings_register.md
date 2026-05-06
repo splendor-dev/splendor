@@ -39,17 +39,18 @@ Severity legend:
 
 The review round does not settle exact milestone names, but it does give a practical order:
 
-1. **Safety first:** address V04-F1, because mixed mutation semantics can destroy exploratory
-   handoff safety.
-2. **Handoff correctness second:** address V04-F2, because two partners failed the same
-   completed-slice-to-next-slice inference test.
-3. **Handoff breadth third:** address V04-F3 and V04-F6 together if scope allows.
-4. **Cold-start adoption fourth:** address V04-F4 plus the narrower V04-F5 robustness bug.
+1. **`M19-P5.1` safety first:** address V04-F1, because mixed mutation semantics can destroy
+   exploratory handoff safety.
+2. **`M19-P6.1` handoff correctness second:** address V04-F2, because two partners failed the
+   same completed-slice-to-next-slice inference test.
+3. **`M19-P7.1` handoff breadth third:** address V04-F3 and V04-F6 together if scope allows.
+4. **`M19-P8.1` cold-start adoption fourth:** address V04-F4 plus the narrower V04-F5 robustness
+   bug.
 5. **Polish later:** address V04-F7 through V04-F12 as scoped follow-ups or opportunistic fixes.
 
 ## Non-Decisions
 
-- This register does not choose the next PR sub-slice name.
+- This register records the accepted M19 sequencing but does not implement any of those slices.
 - This register does not update product or roadmap commitments.
 - This register does not change the v0.4.0 release notes.
 - This register does not decide whether raw external notes should remain unedited long term.
