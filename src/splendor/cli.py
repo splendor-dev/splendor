@@ -82,6 +82,7 @@ from splendor.commands.source import (
     resolve_source_query_exact,
     scan_source_freshness,
     source_reconcile_next_commands,
+    source_refresh_written_records,
     update_source_path,
     write_source_freshness_report,
 )
@@ -107,6 +108,7 @@ from splendor.commands.wiki import (
 from splendor.commands.workspace import (
     refresh_workspace,
     render_workspace_refresh_json,
+    workspace_refresh_written_records,
 )
 from splendor.config import load_config
 from splendor.layout import resolve_layout
@@ -1117,6 +1119,7 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
         return 0
 
     if result.changed:
+        print("Mutation mode: apply")
         print(f"Detected changed source content for {canonical_source_ref(result.requested)}")
         print(f"Requested source ID: {result.requested.source_id}")
         if result.refreshed.record.source_id != result.requested.source_id:
@@ -1129,6 +1132,7 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
                 f"{result.requested.source_id} -> {result.refreshed.record.source_id}"
             )
     else:
+        print("Mutation mode: apply")
         print(f"No source content change detected for {canonical_source_ref(result.requested)}")
         print(f"Source ID: {result.requested.source_id}")
     print(f"Source ref: {result.refreshed.source_ref}")
@@ -1145,6 +1149,7 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
     else:
         print(f"Refresh skipped: {result.message}")
         print(f"Next: splendor wiki suggest {result.refreshed.record.source_id}")
+    _print_mutation_written_paths(source_refresh_written_records(root, result))
     return 0
 
 
@@ -1199,6 +1204,9 @@ def handle_source_reconcile(args: argparse.Namespace) -> int:
 
     action = "Applied source reconciliation" if result.applied else "Source reconciliation preview"
     print(action)
+    print(f"Mutation mode: {'apply' if result.applied else 'preview'}")
+    if not result.applied:
+        print("Preview only: no source manifests written.")
     print(f"Canonical source ref: {result.canonical_ref}")
     print(f"Current source ID: {result.current.source_id}")
     print(
@@ -1560,6 +1568,9 @@ def _print_source_lookup_results(results: list[SourceLookupResult]) -> None:
 def _print_source_forget_result(result: SourceForgetResult) -> None:
     mode = "applied" if result.applied else "preview"
     print(f"Source forget {mode}")
+    print(f"Mutation mode: {'apply' if result.applied else 'preview'}")
+    if not result.applied:
+        print("Preview only: no source manifests or generated source-owned state removed.")
     print(
         "Summary: "
         f"candidates={len(result.candidates)} "
@@ -1743,8 +1754,11 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
         print(f"Status: {result.source_status}")
         print(f"Target page: {result.target_path}")
         print(f"Source summary: {result.source_summary_path}")
+        print(f"Mutation mode: {result.mode}")
         print(f"Compile status: {result.status}")
         print(f"Mutates wiki: {'yes' if result.mutates else 'no'}")
+        if result.mode == "preview":
+            print("Preview only: no wiki pages written.")
         print(f"Target SHA-256: {result.target_sha256}")
         print(f"Source summary SHA-256: {result.source_summary_sha256}")
         print(f"Proposal hash: {result.proposal_hash}")
@@ -1767,7 +1781,9 @@ def handle_wiki_compile(args: argparse.Namespace) -> int:
     print(f"Title: {result.source_title}")
     print(f"Status: {result.source_status}")
     print("Compile contract: review-gated synthesis maintenance")
+    print("Mutation mode: preview")
     print("Mutates wiki: no")
+    print("Preview only: no wiki pages written.")
     for item in result.contract:
         print(f"- {item}")
     if result.suggested_pages:
@@ -1833,6 +1849,7 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         return 0
 
     print("Workspace refresh")
+    print("Mutation mode: apply")
     print(
         "Initial freshness: "
         f"total={result.initial_freshness.total} "
@@ -1912,6 +1929,7 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         f"unsupported={result.final_freshness.unsupported} "
         f"historical={result.final_freshness.historical}"
     )
+    _print_mutation_written_paths(workspace_refresh_written_records(root, result))
 
     if result.ingest is not None and result.ingest.failed:
         print("Next: splendor queue inspect")
@@ -1930,6 +1948,15 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
     else:
         print("Next: splendor source freshness")
     return 0
+
+
+def _print_mutation_written_paths(records: list[dict[str, str]]) -> None:
+    if not records:
+        print("Written paths: none")
+        return
+    print("Written paths:")
+    for record in records:
+        print(f"- {record['action']}: {record['kind']} {record['path']}")
 
 
 def handle_pr_summary(args: argparse.Namespace) -> int:

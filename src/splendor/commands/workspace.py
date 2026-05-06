@@ -7,12 +7,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from splendor.commands.ingest import DrainItemResult, DrainResult, run_ingest_job
+from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.commands.source import (
     SourceFreshnessItem,
     SourceFreshnessResult,
     SourceRefreshResult,
     refresh_source,
     scan_source_freshness,
+    source_refresh_written_records,
 )
 from splendor.commands.wiki import WikiIndexRebuildResult, rebuild_wiki_index
 from splendor.config import load_config
@@ -300,6 +302,10 @@ def render_workspace_refresh_json(root: Path, result: WorkspaceRefreshResult) ->
             "pruning": None if result.pruning is None else asdict(result.pruning),
             "topic_ref_migration": (
                 None if result.topic_ref_migration is None else asdict(result.topic_ref_migration)
+            ),
+            "mutation": mutation_contract(
+                mode="apply",
+                written=workspace_refresh_written_records(root, result),
             ),
         },
         indent=2,
@@ -616,3 +622,62 @@ def _ingest_payload(root: Path, result: DrainResult) -> dict[str, object]:
             for item in result.items
         ],
     }
+
+
+def workspace_refresh_written_records(
+    root: Path, result: WorkspaceRefreshResult
+) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for refresh in result.refreshed:
+        records.extend(source_refresh_written_records(root, refresh))
+    if result.ingest is not None:
+        records.extend(_ingest_written_records(root, result.ingest))
+    if result.index is not None:
+        records.append(mutation_record(action="write", path=result.index.path, kind="wiki_index"))
+    if result.pruning is not None:
+        records.extend(
+            mutation_record(
+                action="delete",
+                path=item.path,
+                kind="source_summary_page",
+                source_id=item.source_id,
+            )
+            for item in result.pruning.pruned
+        )
+    if result.topic_ref_migration is not None:
+        records.extend(
+            mutation_record(action="write", path=item.path, kind="maintained_wiki_page")
+            for item in result.topic_ref_migration.updated
+        )
+    return sorted(records, key=lambda item: (item["kind"], item["path"], item["action"]))
+
+
+def _ingest_written_records(root: Path, result: DrainResult) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for item in result.items:
+        if item.outcome != "succeeded" or not item.message.startswith("run "):
+            continue
+        run_id = item.message.removeprefix("run ")
+        records.extend(
+            [
+                mutation_record(
+                    action="write",
+                    path=item.queue_path.relative_to(root).as_posix(),
+                    kind="queue_record",
+                    source_id=item.source_id,
+                ),
+                mutation_record(
+                    action="write",
+                    path=f"state/runs/{run_id}.json",
+                    kind="run_record",
+                    source_id=item.source_id,
+                ),
+                mutation_record(
+                    action="write",
+                    path=f"wiki/sources/{item.source_id}.md",
+                    kind="source_summary_page",
+                    source_id=item.source_id,
+                ),
+            ]
+        )
+    return records

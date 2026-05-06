@@ -735,6 +735,12 @@ def test_wiki_compile_reports_review_gated_contract_without_mutating(
     assert payload["source_id"] == added.source_id
     assert payload["mutates"] is False
     assert payload["status"] == "contract-only"
+    assert payload["mutation"] == {
+        "mode": "preview",
+        "mutates": False,
+        "planned": [],
+        "written": [],
+    }
     assert payload["suggested_pages"] == []
     assert "Run `splendor wiki suggest" in payload["next_steps"][0]
     assert (
@@ -876,8 +882,22 @@ def test_wiki_compile_proposes_maintained_page_update_without_mutating(
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "proposed"
+    assert payload["mode"] == "preview"
     assert payload["mutates"] is False
     assert payload["changed"] is True
+    assert payload["mutation"] == {
+        "mode": "preview",
+        "mutates": False,
+        "planned": [
+            {
+                "action": "write",
+                "path": "wiki/topics/compile-loop.md",
+                "kind": "maintained_wiki_page",
+                "source_id": added.source_id,
+            }
+        ],
+        "written": [],
+    }
     assert payload["target_path"] == "wiki/topics/compile-loop.md"
     assert payload["source_summary_path"] == f"wiki/sources/{added.source_id}.md"
     assert added.source_id in payload["proposed_source_refs"]
@@ -925,6 +945,8 @@ def test_wiki_compile_text_proposal_prints_reviewable_diff_and_hash(tmp_path: Pa
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "Target SHA-256:" in out
+    assert "Mutation mode: preview" in out
+    assert "Preview only: no wiki pages written." in out
     assert "Source summary SHA-256:" in out
     assert "Proposal hash:" in out
     assert "Proposed diff:" in out
@@ -988,7 +1010,21 @@ def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "applied"
+    assert payload["mode"] == "apply"
     assert payload["mutates"] is True
+    assert payload["mutation"] == {
+        "mode": "apply",
+        "mutates": True,
+        "planned": [],
+        "written": [
+            {
+                "action": "write",
+                "path": "wiki/topics/compile-loop.md",
+                "kind": "maintained_wiki_page",
+                "source_id": added.source_id,
+            }
+        ],
+    }
     target = parse_wiki_markdown(tmp_path / "wiki" / "topics" / "compile-loop.md")
     assert target.frontmatter.kind == "topic"
     assert target.frontmatter.source_refs == [added.source_id]
@@ -1016,7 +1052,14 @@ def test_wiki_compile_apply_updates_only_maintained_target_page(tmp_path: Path, 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "no-op"
+    assert payload["mode"] == "preview"
     assert payload["mutates"] is False
+    assert payload["mutation"] == {
+        "mode": "preview",
+        "mutates": False,
+        "planned": [],
+        "written": [],
+    }
 
 
 def test_wiki_compile_inserts_additional_sources_inside_managed_section(

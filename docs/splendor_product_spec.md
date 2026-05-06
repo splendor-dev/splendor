@@ -883,7 +883,13 @@ Current implementation:
   preview commands. With `--page <maintained-page>`, it proposes a deterministic source-summary
   evidence update and unified diff for one maintained synthesis page, and `--apply
   --proposal-hash <hash>` explicitly accepts and writes that page after frontmatter and
-  proposal-hash validation.
+  proposal-hash validation. JSON compile output includes a deterministic `mutation` object so
+  agents can distinguish preview-only proposals, apply no-ops, and applied writes without parsing
+  prose.
+- Preview/apply and direct-write CLI surfaces expose consistent mutation signals where natural:
+  `source forget`, `source reconcile`, `source refresh`, and `workspace refresh` JSON include
+  `mutation.mode`, `mutation.mutates`, `mutation.planned`, and `mutation.written`; human output
+  labels preview mode as non-mutating and apply/direct mode as writing workspace state.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
   pages themselves.

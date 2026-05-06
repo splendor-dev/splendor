@@ -9,6 +9,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Literal
 
+from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.commands.source import (
     SourceLookupResult,
     list_sources,
@@ -113,6 +114,15 @@ def forget_sources(
 
 
 def render_source_forget_json(root: Path, result: SourceForgetResult) -> str:
+    mutation_records = [
+        mutation_record(
+            action="delete",
+            path=action.path,
+            kind=action.kind,
+            source_id=action.source_id,
+        )
+        for action in result.actions
+    ]
     return json.dumps(
         {
             "applied": result.applied,
@@ -131,6 +141,11 @@ def render_source_forget_json(root: Path, result: SourceForgetResult) -> str:
                 _residual_reference_payload(residual) for residual in result.residual_references
             ],
             "next_commands": forget_next_commands(result),
+            "mutation": mutation_contract(
+                mode="apply" if result.applied else "preview",
+                planned=[] if result.applied else mutation_records,
+                written=mutation_records if result.applied else [],
+            ),
         },
         indent=2,
     )

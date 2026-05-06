@@ -15,6 +15,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
+from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.commands.source import resolve_source_query, resolve_source_query_matches
 from splendor.config import load_config
 from splendor.layout import resolve_layout
@@ -157,6 +158,7 @@ class WikiCompileProposal:
     target_title: str
     target_kind: str
     source_summary_path: str
+    mode: str
     status: str
     mutates: bool
     applied: bool
@@ -847,6 +849,7 @@ def compile_source_into_page(
         target_title=target_page.frontmatter.title,
         target_kind=target_page.frontmatter.kind,
         source_summary_path=summary_page.path,
+        mode="apply" if apply else "preview",
         status=status,
         mutates=apply and changed,
         applied=apply and changed,
@@ -1144,11 +1147,25 @@ def render_wiki_suggest_json(result: WikiSuggestResult) -> str:
 
 
 def render_wiki_compile_contract_json(result: WikiCompileContract) -> str:
-    return json.dumps(asdict(result), indent=2)
+    payload = asdict(result)
+    payload["mutation"] = mutation_contract(mode="preview")
+    return json.dumps(payload, indent=2)
 
 
 def render_wiki_compile_proposal_json(result: WikiCompileProposal) -> str:
-    return json.dumps(asdict(result), indent=2)
+    payload = asdict(result)
+    record = mutation_record(
+        action="write",
+        path=result.target_path,
+        kind="maintained_wiki_page",
+        source_id=result.source_id,
+    )
+    payload["mutation"] = mutation_contract(
+        mode=result.mode,
+        planned=[record] if result.mode == "preview" and result.changed else [],
+        written=[record] if result.mode == "apply" and result.changed else [],
+    )
+    return json.dumps(payload, indent=2)
 
 
 def render_topic_scaffold_json(result: TopicScaffoldResult) -> str:
