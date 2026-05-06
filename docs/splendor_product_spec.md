@@ -850,8 +850,13 @@ Current implementation:
   existing report files to group curated source lifecycle changes, generated source-summary pages,
   maintained wiki/topic edits, queue/run/report/derived churn, latest local lint/health report
   status, and reviewer notes that separate meaningful generated knowledge from mechanical runtime
-  records. Latest maintenance status is explicitly reported as local report state rather than
-  fresh validation for the current `HEAD`. `--json` emits the same summary for agent handoff.
+  records. The compact committed review section leads with review-first knowledge and maintained
+  wiki changes, separates usually mechanical queue/run/report/query/derived churn, and flags
+  attention items such as invalid manifests, non-passing latest local reports, and uncategorized
+  paths. Compact JSON groups include action counts and per-path actions so reviewers can tell
+  additions, edits, deletions, and renames apart without expanding the detailed path groups. Latest
+  maintenance status is explicitly reported as local report state rather than fresh validation for
+  the current `HEAD`. `--json` emits the same summary for agent handoff.
 - `splendor add-topic "Title"` scaffolds a maintained topic page under `wiki/topics/<slug>.md`
   with valid knowledge-page frontmatter, optional tags/source refs, and deterministic markdown
   templates for default synthesis, research synthesis, and issue tracking.
@@ -1123,6 +1128,11 @@ Current implementation:
   Maintenance-focused goals can keep maintenance actions first. Handoff ranking uses deterministic
   relevance scoring over weighted title/path/record/scope fields, supporting refs, snippets,
   git/GitHub text, and review/authority lifecycle signals without introducing vector search.
+- Git-aware `brief --agent-context` and `suggest-next` include the `splendor pr-summary --since
+  <base>` command under Splendor maintenance context when a branch has Splendor-specific compact
+  review groups or attention diagnostics. This keeps compact committed generated-state review
+  discoverable without promoting it into normal work-first actions or adding noise to plain code
+  branches.
 - Generated contradiction-review tasks are classified separately from human-authored planning
   tasks. Default `task list`, `brief --agent-context`, and `suggest-next` keep them out of active
   planning handoff; operators can list, resolve, or mute them explicitly with task subcommands, and

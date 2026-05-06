@@ -3206,6 +3206,139 @@ def test_implementation_handoff_keeps_maintenance_commands_below_work_context(
     assert "Wiki status:" not in out
 
 
+def test_git_handoff_exposes_pr_summary_as_maintenance_command(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path)
+    _commit_all(tmp_path, "Initial workspace")
+    _git(tmp_path, "switch", "-c", "feature")
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Implement",
+            "compact",
+            "review",
+            "--id",
+            "task-compact-review",
+            "--status",
+            "in_progress",
+        ]
+    )
+    source = tmp_path / "generated-state.md"
+    source.write_text("# Generated state\n\nNeeds compact review.\n", encoding="utf-8")
+    added_source = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added_source.source_id])
+    _commit_all(tmp_path, "Add compact review planning task")
+    capsys.readouterr()
+
+    brief_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "implement",
+            "compact",
+            "review",
+            "--json",
+        ]
+    )
+    brief_payload = json.loads(capsys.readouterr().out)
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "implement",
+            "compact",
+            "review",
+            "--json",
+        ]
+    )
+    suggest_payload = json.loads(capsys.readouterr().out)
+
+    assert brief_exit == 0
+    assert suggest_exit == 0
+    assert brief_payload["work_context"]["actions"]
+    assert suggest_payload["work_context"]["actions"]
+    assert all(
+        action["category"] != "pr-summary" for action in brief_payload["work_context"]["actions"]
+    )
+    brief_commands = {
+        command["command"] for command in brief_payload["maintenance_context"]["commands"]
+    }
+    suggest_commands = {
+        command["command"] for command in suggest_payload["maintenance_context"]["commands"]
+    }
+    assert "splendor pr-summary --since main" in brief_commands
+    assert "splendor pr-summary --since main" in suggest_commands
+
+
+def test_git_handoff_skips_pr_summary_for_plain_work_changes(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path)
+    _commit_all(tmp_path, "Initial workspace")
+    _git(tmp_path, "switch", "-c", "feature")
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Implement",
+            "plain",
+            "work",
+            "--id",
+            "task-plain-work",
+            "--status",
+            "in_progress",
+        ]
+    )
+    _commit_all(tmp_path, "Add plain work planning task")
+    capsys.readouterr()
+
+    brief_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "implement",
+            "plain",
+            "work",
+            "--json",
+        ]
+    )
+    brief_payload = json.loads(capsys.readouterr().out)
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "implement",
+            "plain",
+            "work",
+            "--json",
+        ]
+    )
+    suggest_payload = json.loads(capsys.readouterr().out)
+
+    assert brief_exit == 0
+    assert suggest_exit == 0
+    assert brief_payload["work_context"]["actions"]
+    assert suggest_payload["work_context"]["actions"]
+    brief_commands = {
+        command["command"] for command in brief_payload["maintenance_context"]["commands"]
+    }
+    suggest_commands = {
+        command["command"] for command in suggest_payload["maintenance_context"]["commands"]
+    }
+    assert "splendor pr-summary --since main" not in brief_commands
+    assert "splendor pr-summary --since main" not in suggest_commands
+
+
 def test_maintenance_guidance_preserves_dead_letter_repair_command(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     source = tmp_path / "dead-letter.md"
