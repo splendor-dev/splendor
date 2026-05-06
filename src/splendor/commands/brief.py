@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import subprocess
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -46,7 +47,11 @@ _BRIEF_PLANNING_LIMIT = 8
 _BRIEF_SOURCE_LIMIT = 5
 _BRIEF_REPORT_COMMANDS = ("lint", "health")
 _SUGGESTION_LIMIT = 8
+_GIT_CONTEXT_LIMIT = 5
+_GIT_FILE_LIMIT = 8
 _SUGGESTION_CATEGORY_LIMITS = {
+    "work-thread": 4,
+    "git-context": 3,
     "source-freshness": 3,
     "queue": 3,
     "wiki-validation": 2,
@@ -60,19 +65,47 @@ _SUGGESTION_CATEGORY_LIMITS = {
     "query": 1,
     "orientation": 1,
 }
-_SUGGESTION_CATEGORY_ORDER = {
+_WORK_FIRST_CATEGORY_ORDER = {
+    "work-thread": 0,
+    "git-context": 1,
+    "authority": 2,
+    "planning": 3,
+    "goal-match": 4,
+    "source-freshness": 5,
+    "queue": 6,
+    "wiki-validation": 7,
+    "contradiction-review": 8,
+    "synthesis": 9,
+    "wiki-review": 10,
+    "maintenance": 11,
+    "query": 12,
+    "orientation": 13,
+}
+_MAINTENANCE_FIRST_CATEGORY_ORDER = {
     "source-freshness": 0,
     "queue": 1,
     "wiki-validation": 2,
-    "goal-match": 3,
-    "authority": 4,
-    "planning": 5,
+    "maintenance": 3,
+    "synthesis": 4,
+    "wiki-review": 5,
     "contradiction-review": 6,
-    "synthesis": 7,
-    "wiki-review": 8,
-    "maintenance": 9,
-    "query": 10,
-    "orientation": 11,
+    "work-thread": 7,
+    "git-context": 8,
+    "authority": 9,
+    "planning": 10,
+    "goal-match": 11,
+    "query": 12,
+    "orientation": 13,
+}
+_MAINTENANCE_CATEGORIES = {
+    "source-freshness",
+    "queue",
+    "wiki-validation",
+    "contradiction-review",
+    "synthesis",
+    "wiki-review",
+    "maintenance",
+    "query",
 }
 _SUGGESTION_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 _AUTHORITY_LIMIT = 6
@@ -135,6 +168,21 @@ _CONTRADICTION_GOAL_TOKENS = {
     "contradictions",
     "contradicting",
     "contested",
+}
+_MAINTENANCE_GOAL_TOKENS = {
+    "source",
+    "sources",
+    "queue",
+    "ingest",
+    "lint",
+    "health",
+    "refresh",
+    "wiki",
+    "review",
+    "splendor",
+    "maintenance",
+    "synthesis",
+    "freshness",
 }
 
 
@@ -222,10 +270,48 @@ class SuggestedAction:
     reason: str
     command: str | None
     path: str | None = None
+    url: str | None = None
     source_id: str | None = None
     source_ref: str | None = None
     record_id: str | None = None
     relevance_score: int = 0
+
+
+@dataclass(frozen=True)
+class GitCommitBrief:
+    sha: str
+    short_sha: str
+    subject: str
+    body: str
+    paths: list[str]
+    relevance_score: int
+
+
+@dataclass(frozen=True)
+class GitThreadBrief:
+    kind: str
+    number: int
+    title: str
+    url: str
+    state: str
+    summary: str
+    relevance_score: int
+
+
+@dataclass(frozen=True)
+class GitContext:
+    enabled: bool
+    available: bool
+    since: str | None
+    base_ref: str | None
+    merge_base: str | None
+    branch: str | None
+    head: str | None
+    repository: str | None
+    commits: list[GitCommitBrief]
+    threads: list[GitThreadBrief]
+    read_first_paths: list[str]
+    warnings: list[str]
 
 
 @dataclass(frozen=True)
@@ -240,6 +326,9 @@ class SuggestNextResult:
     planning_items: list[BriefPlanningItem]
     latest_reports: list[BriefReportSnapshot]
     warnings: list[BriefWarning]
+    git_context: GitContext
+    work_actions: list[SuggestedAction]
+    maintenance_actions: list[SuggestedAction]
 
 
 @dataclass(frozen=True)
@@ -263,6 +352,8 @@ class BriefStateSnapshot:
     wiki_pages: list[WikiPageSnapshot]
     invalid_wiki_pages: list[InvalidWikiPageSnapshot]
     generated_review_task_count: int
+    git_context: GitContext
+    maintenance_goal: bool
 
 
 @dataclass(frozen=True)
@@ -279,12 +370,18 @@ class ProjectBrief:
     last_query: BriefLastQuery | None
     warnings: list[BriefWarning]
     suggested_actions: list[SuggestedAction]
+    work_actions: list[SuggestedAction]
+    maintenance_actions: list[SuggestedAction]
+    git_context: GitContext
     next_actions: list[str]
 
 
-def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
-    snapshot = _collect_brief_state(root, goal)
+def build_project_brief(
+    root: Path, goal: str | None, *, include_git: bool = True, since: str | None = None
+) -> ProjectBrief:
+    snapshot = _collect_brief_state(root, goal, include_git=include_git, since=since)
     suggested_actions = _ranked_suggestions(snapshot)
+    work_actions, maintenance_actions = _split_actions(suggested_actions)
     next_actions = _next_actions(
         status=snapshot.status,
         matches=snapshot.matches,
@@ -306,13 +403,19 @@ def build_project_brief(root: Path, goal: str | None) -> ProjectBrief:
         last_query=snapshot.last_query,
         warnings=snapshot.warnings,
         suggested_actions=suggested_actions,
+        work_actions=work_actions,
+        maintenance_actions=maintenance_actions,
+        git_context=snapshot.git_context,
         next_actions=next_actions,
     )
 
 
-def build_suggest_next(root: Path, goal: str | None = None) -> SuggestNextResult:
-    snapshot = _collect_brief_state(root, goal)
+def build_suggest_next(
+    root: Path, goal: str | None = None, *, include_git: bool = True, since: str | None = None
+) -> SuggestNextResult:
+    snapshot = _collect_brief_state(root, goal, include_git=include_git, since=since)
     actions = _ranked_suggestions(snapshot)
+    work_actions, maintenance_actions = _split_actions(actions)
     return SuggestNextResult(
         goal=snapshot.goal,
         actions=actions,
@@ -324,10 +427,15 @@ def build_suggest_next(root: Path, goal: str | None = None) -> SuggestNextResult
         planning_items=snapshot.planning_items,
         latest_reports=snapshot.latest_reports,
         warnings=snapshot.warnings,
+        git_context=snapshot.git_context,
+        work_actions=work_actions,
+        maintenance_actions=maintenance_actions,
     )
 
 
-def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
+def _collect_brief_state(
+    root: Path, goal: str | None, *, include_git: bool, since: str | None
+) -> BriefStateSnapshot:
     config = load_config(root)
     layout = resolve_layout(root, config)
     status = build_wiki_status(root)
@@ -336,6 +444,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
     normalized_goal = goal.strip() if goal is not None else ""
     goal_tokens = _tokens(normalized_goal)
     goal_phrase = _normalize_goal_phrase(normalized_goal)
+    maintenance_goal = _is_maintenance_goal(goal_tokens)
     query_summary: str | None = None
     query_warning: BriefWarning | None = None
     matches: list[BriefMatch] = []
@@ -375,6 +484,9 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
     recent_runs = status.recent_runs
     latest_reports = _latest_reports(root, layout)
     last_query = _last_query(layout)
+    git_context = _build_git_context(
+        root, normalized_goal or None, include_git=include_git, since=since
+    )
     return BriefStateSnapshot(
         root=root,
         goal=normalized_goal or None,
@@ -395,6 +507,8 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
         wiki_pages=wiki_pages,
         invalid_wiki_pages=invalid_wiki_pages,
         generated_review_task_count=generated_review_task_count,
+        git_context=git_context,
+        maintenance_goal=maintenance_goal,
     )
 
 
@@ -831,6 +945,10 @@ def _tokens(text: str) -> set[str]:
     return tokens
 
 
+def _is_maintenance_goal(goal_tokens: set[str]) -> bool:
+    return bool(goal_tokens and goal_tokens <= _MAINTENANCE_GOAL_TOKENS)
+
+
 def _flatten_handoff_values(value) -> list[str]:
     if value is None:
         return []
@@ -871,6 +989,312 @@ def _goal_relevance_score(
         if len(goal_tokens) >= 2 and goal_phrase and goal_phrase in normalized_text:
             score += weight * 3
     return score
+
+
+def _build_git_context(
+    root: Path, goal: str | None, *, include_git: bool, since: str | None
+) -> GitContext:
+    if not include_git:
+        return GitContext(
+            enabled=False,
+            available=False,
+            since=since,
+            base_ref=None,
+            merge_base=None,
+            branch=None,
+            head=None,
+            repository=None,
+            commits=[],
+            threads=[],
+            read_first_paths=[],
+            warnings=[],
+        )
+
+    warnings: list[str] = []
+    inside = _git_output(root, ["rev-parse", "--is-inside-work-tree"], required=False)
+    if inside != "true":
+        return GitContext(
+            enabled=True,
+            available=False,
+            since=since,
+            base_ref=None,
+            merge_base=None,
+            branch=None,
+            head=None,
+            repository=None,
+            commits=[],
+            threads=[],
+            read_first_paths=[],
+            warnings=["Not inside a git worktree."],
+        )
+
+    branch = _git_output(root, ["rev-parse", "--abbrev-ref", "HEAD"], required=False)
+    head = _git_output(root, ["rev-parse", "--short", "HEAD"], required=False)
+    base_ref = since or _default_main_ref(root)
+    merge_base = _merge_base_for_context(root, base_ref) if base_ref else None
+    if since is not None and merge_base is None:
+        warnings.append(f"Git base ref could not be resolved: {since}")
+    commits = _git_commits(root, goal, base_ref=base_ref, merge_base=merge_base)
+    repository = _github_repository(root)
+    threads: list[GitThreadBrief] = []
+    if repository is not None:
+        loaded_threads, thread_warnings = _github_threads(root, repository, goal)
+        threads = loaded_threads
+        warnings.extend(thread_warnings)
+    else:
+        warnings.append("GitHub remote repository could not be inferred from origin.")
+    read_first_paths = _read_first_paths(commits, threads, goal)
+    return GitContext(
+        enabled=True,
+        available=True,
+        since=since,
+        base_ref=base_ref,
+        merge_base=merge_base,
+        branch=branch,
+        head=head,
+        repository=repository,
+        commits=commits,
+        threads=threads,
+        read_first_paths=read_first_paths,
+        warnings=warnings,
+    )
+
+
+def _git_output(root: Path, args: list[str], *, required: bool = True) -> str | None:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        if required:
+            message = result.stderr.strip() or result.stdout.strip() or "git command failed"
+            raise ValueError(message)
+        return None
+    return result.stdout.strip()
+
+
+def _default_main_ref(root: Path) -> str | None:
+    for ref in ("origin/main", "main"):
+        if _git_output(root, ["rev-parse", "--verify", f"{ref}^{{commit}}"], required=False):
+            return ref
+    return None
+
+
+def _merge_base_for_context(root: Path, base_ref: str | None) -> str | None:
+    if base_ref is None:
+        return None
+    return _git_output(root, ["merge-base", base_ref, "HEAD"], required=False)
+
+
+def _git_commits(
+    root: Path, goal: str | None, *, base_ref: str | None, merge_base: str | None
+) -> list[GitCommitBrief]:
+    range_ref = None
+    if base_ref is not None and merge_base is not None:
+        range_ref = f"{merge_base}..HEAD"
+    args = ["log", "--first-parent", f"--max-count={_GIT_CONTEXT_LIMIT * 4}"]
+    if range_ref is not None:
+        args.append(range_ref)
+    args.extend(["--pretty=format:%H%x1f%h%x1f%s%x1f%b%x1e", "--name-only"])
+    output = _git_output(root, args, required=False)
+    if not output and range_ref is not None:
+        output = _git_output(
+            root,
+            [
+                "log",
+                "--first-parent",
+                f"--max-count={_GIT_CONTEXT_LIMIT * 4}",
+                "--pretty=format:%H%x1f%h%x1f%s%x1f%b%x1e",
+                "--name-only",
+            ],
+            required=False,
+        )
+    goal_tokens = _tokens(goal or "")
+    goal_phrase = _normalize_goal_phrase(goal or "")
+    commits: list[GitCommitBrief] = []
+    for entry in (output or "").split("\x1e"):
+        lines = [line for line in entry.splitlines() if line.strip()]
+        if not lines:
+            continue
+        header = lines[0].split("\x1f")
+        if len(header) < 4:
+            continue
+        sha, short_sha, subject, body = header[:4]
+        paths = sorted(dict.fromkeys(line.strip() for line in lines[1:] if line.strip()))
+        relevance_score = _goal_relevance_score(
+            goal_tokens,
+            goal_phrase=goal_phrase,
+            high_text=" ".join([subject, " ".join(paths)]),
+            medium_text=body,
+        )
+        commits.append(
+            GitCommitBrief(
+                sha=sha,
+                short_sha=short_sha,
+                subject=subject.strip(),
+                body=body.strip(),
+                paths=paths,
+                relevance_score=relevance_score,
+            )
+        )
+    if goal_tokens:
+        commits.sort(key=lambda item: (-item.relevance_score, item.short_sha))
+    return commits[:_GIT_CONTEXT_LIMIT]
+
+
+def _github_repository(root: Path) -> str | None:
+    remote = _git_output(root, ["config", "--get", "remote.origin.url"], required=False)
+    if remote is None:
+        return None
+    remote = remote.strip()
+    patterns = (
+        r"github\.com[:/](?P<repo>[^/\s]+/[^/\s]+?)(?:\.git)?$",
+        r"^https://github\.com/(?P<repo>[^/\s]+/[^/\s]+?)(?:\.git)?$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, remote)
+        if match:
+            return match.group("repo")
+    return None
+
+
+def _github_threads(
+    root: Path, repository: str, goal: str | None
+) -> tuple[list[GitThreadBrief], list[str]]:
+    warnings: list[str] = []
+    raw_threads: list[dict[str, object]] = []
+    commands = [
+        [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            repository,
+            "--state",
+            "open",
+            "--limit",
+            "30",
+            "--json",
+            "number,title,url,body,state,labels",
+        ],
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repository,
+            "--state",
+            "all",
+            "--limit",
+            "30",
+            "--json",
+            "number,title,url,body,state,isDraft,mergedAt,labels",
+        ],
+    ]
+    kinds = ["issue", "pr"]
+    for kind, command in zip(kinds, commands, strict=True):
+        try:
+            result = subprocess.run(command, cwd=root, check=False, capture_output=True, text=True)
+        except OSError as exc:
+            warnings.append(f"Could not run gh {kind} list: {exc}")
+            continue
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip() or f"gh {kind} list failed"
+            warnings.append(message)
+            continue
+        try:
+            payload = json.loads(result.stdout or "[]")
+        except json.JSONDecodeError as exc:
+            warnings.append(f"Could not parse gh {kind} output: {exc}")
+            continue
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, dict):
+                    raw_threads.append({"kind": kind, **item})
+
+    goal_tokens = _tokens(goal or "")
+    goal_phrase = _normalize_goal_phrase(goal or "")
+    threads: list[GitThreadBrief] = []
+    for item in raw_threads:
+        title = str(item.get("title") or "")
+        body = str(item.get("body") or "")
+        url = str(item.get("url") or "")
+        number = item.get("number")
+        if not isinstance(number, int) or not title or not url:
+            continue
+        state = str(item.get("state") or "unknown").lower()
+        kind = str(item.get("kind") or "thread")
+        relevance_score = _goal_relevance_score(
+            goal_tokens,
+            goal_phrase=goal_phrase,
+            high_text=title,
+            medium_text=body,
+        )
+        summary = _one_line(body) or title
+        threads.append(
+            GitThreadBrief(
+                kind=kind,
+                number=number,
+                title=title,
+                url=url,
+                state=state,
+                summary=summary,
+                relevance_score=relevance_score,
+            )
+        )
+    if goal_tokens:
+        threads.sort(
+            key=lambda item: (
+                item.state != "open",
+                -item.relevance_score,
+                item.kind != "issue",
+                item.number,
+            )
+        )
+    else:
+        threads.sort(key=lambda item: (item.state != "open", item.kind != "issue", item.number))
+    return threads[:_GIT_CONTEXT_LIMIT], warnings
+
+
+def _one_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip(" #\t")
+        if stripped:
+            return stripped[:160]
+    return ""
+
+
+def _read_first_paths(
+    commits: list[GitCommitBrief], threads: list[GitThreadBrief], goal: str | None
+) -> list[str]:
+    goal_tokens = _tokens(goal or "")
+    goal_phrase = _normalize_goal_phrase(goal or "")
+    scored: dict[str, int] = {}
+    for commit in commits:
+        for path in commit.paths:
+            scored[path] = max(
+                scored.get(path, 0),
+                commit.relevance_score
+                + _goal_relevance_score(
+                    goal_tokens,
+                    goal_phrase=goal_phrase,
+                    high_text=path,
+                    low_text=commit.subject,
+                ),
+            )
+    for thread in threads:
+        for path in _repo_paths_in_text(" ".join([thread.title, thread.summary])):
+            scored[path] = max(scored.get(path, 0), thread.relevance_score + 20)
+    ranked = sorted(scored, key=lambda path: (-scored[path], path))
+    return ranked[:_GIT_FILE_LIMIT]
+
+
+def _repo_paths_in_text(text: str) -> list[str]:
+    candidates = re.findall(r"(?<![\w/.-])(?:[\w.-]+/)+[\w.-]+(?:\.[A-Za-z0-9]+)?", text)
+    return sorted(dict.fromkeys(candidate.strip("`.,)") for candidate in candidates))
 
 
 def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:
@@ -1000,6 +1424,41 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
                 **kwargs,
             )
         )
+
+    if snapshot.git_context.enabled and snapshot.git_context.available:
+        for thread in snapshot.git_context.threads:
+            priority = "high" if thread.state == "open" else "medium"
+            add(
+                priority,
+                "work-thread",
+                f"Review {thread.kind} #{thread.number}: {thread.title}",
+                thread.summary,
+                None,
+                url=thread.url,
+                relevance_score=thread.relevance_score,
+            )
+        for commit in snapshot.git_context.commits:
+            add(
+                "medium",
+                "git-context",
+                f"Review commit {commit.short_sha}: {commit.subject}",
+                "Recent git context relevant to the stated goal.",
+                None,
+                record_id=commit.short_sha,
+                relevance_score=commit.relevance_score,
+            )
+        for path in snapshot.git_context.read_first_paths:
+            add(
+                "medium",
+                "git-context",
+                f"Read changed file {path}",
+                "Recent git or GitHub context points at this file for the work handoff.",
+                None,
+                path=path,
+                relevance_score=_goal_relevance_score(
+                    goal_tokens, goal_phrase=goal_phrase, high_text=path
+                ),
+            )
 
     for item in snapshot.freshness.sources:
         source = item.source
@@ -1187,20 +1646,25 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             "splendor brief --agent-context",
         )
 
-    return _finalize_suggestions(actions)
+    return _finalize_suggestions(actions, maintenance_goal=snapshot.maintenance_goal)
 
 
 def _first_command(commands: list[str]) -> str | None:
     return commands[0] if commands else None
 
 
-def _finalize_suggestions(actions: list[SuggestedAction]) -> list[SuggestedAction]:
+def _finalize_suggestions(
+    actions: list[SuggestedAction], *, maintenance_goal: bool
+) -> list[SuggestedAction]:
     by_category: dict[str, int] = {}
     capped: list[tuple[int, SuggestedAction]] = []
+    category_order = (
+        _MAINTENANCE_FIRST_CATEGORY_ORDER if maintenance_goal else _WORK_FIRST_CATEGORY_ORDER
+    )
     ordered = sorted(
         enumerate(actions),
         key=lambda item: (
-            _SUGGESTION_CATEGORY_ORDER.get(item[1].category, 99),
+            category_order.get(item[1].category, 99),
             _SUGGESTION_PRIORITY_ORDER.get(item[1].priority, 99),
             -item[1].relevance_score,
             item[0],
@@ -1216,7 +1680,7 @@ def _finalize_suggestions(actions: list[SuggestedAction]) -> list[SuggestedActio
 
     capped.sort(
         key=lambda item: (
-            _SUGGESTION_CATEGORY_ORDER.get(item[1].category, 99),
+            category_order.get(item[1].category, 99),
             _SUGGESTION_PRIORITY_ORDER.get(item[1].priority, 99),
             -item[1].relevance_score,
             item[0],
@@ -1226,6 +1690,16 @@ def _finalize_suggestions(actions: list[SuggestedAction]) -> list[SuggestedActio
         replace(action, rank=rank)
         for rank, (_sequence, action) in enumerate(capped[:_SUGGESTION_LIMIT], start=1)
     ]
+
+
+def _split_actions(
+    actions: list[SuggestedAction],
+) -> tuple[list[SuggestedAction], list[SuggestedAction]]:
+    work_actions = [action for action in actions if action.category not in _MAINTENANCE_CATEGORIES]
+    maintenance_actions = [
+        action for action in actions if action.category in _MAINTENANCE_CATEGORIES
+    ]
+    return work_actions, maintenance_actions
 
 
 def _review_page_actions(
@@ -1321,6 +1795,19 @@ def render_suggest_next_json(result: SuggestNextResult) -> str:
         {
             "goal": result.goal,
             "actions": [asdict(action) for action in result.actions],
+            "work_context": {"actions": [asdict(action) for action in result.work_actions]},
+            "maintenance_context": {
+                "actions": [asdict(action) for action in result.maintenance_actions],
+                "status": {
+                    "changed_sources": result.freshness.changed,
+                    "missing_sources": result.freshness.missing,
+                    "queue": result.queue.total,
+                    "review_needed": result.status.review_needed_pages,
+                    "contested": result.status.contested_pages,
+                    "stale": result.status.stale_pages,
+                },
+            },
+            "git_context": asdict(result.git_context),
             "status": {
                 "source_total": result.status.source_total,
                 "page_total": result.status.page_total,
@@ -1366,7 +1853,12 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
             "latest_reports": [asdict(report) for report in brief.latest_reports],
             "last_query": asdict(brief.last_query) if brief.last_query else None,
             "warnings": [asdict(warning) for warning in brief.warnings],
+            "git_context": asdict(brief.git_context),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
+            "work_context": {"actions": [asdict(action) for action in brief.work_actions]},
+            "maintenance_context": {
+                "actions": [asdict(action) for action in brief.maintenance_actions]
+            },
             "next_actions": brief.next_actions,
         },
         indent=2,
@@ -1392,7 +1884,22 @@ def render_agent_context_json(brief: ProjectBrief) -> str:
             "matches": [asdict(match) for match in brief.matches],
             "authority_briefs": [asdict(item) for item in brief.authority_briefs],
             "source_refs": _agent_context_source_refs(brief),
+            "git_context": asdict(brief.git_context),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
+            "work_context": {"actions": [asdict(action) for action in brief.work_actions]},
+            "maintenance_context": {
+                "actions": [asdict(action) for action in brief.maintenance_actions],
+                "wiki_status": {
+                    "source_total": brief.status.source_total,
+                    "page_total": brief.status.page_total,
+                    "queue_status_counts": brief.status.queue_status_counts,
+                    "review_needed_pages": brief.status.review_needed_pages,
+                    "machine_generated_pages": brief.status.machine_generated_pages,
+                    "contested_pages": brief.status.contested_pages,
+                    "stale_pages": brief.status.stale_pages,
+                    "sources_missing_synthesis": brief.status.sources_missing_synthesis,
+                },
+            },
             "active_planning": [asdict(item) for item in brief.planning_items],
             "recent_sources": [asdict(source) for source in brief.recent_sources],
             "recent_runs": [asdict(run) for run in brief.recent_runs],

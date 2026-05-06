@@ -911,11 +911,13 @@ M13-P2 repo-discovery contracts:
   checksums where available, historical source-version status for paths already covered by a current
   manifest, and exact next commands. The default command is non-mutating; `--json` emits
   machine-readable output and `--report PATH` writes only an explicit freshness report.
-- `brief --agent-context` leads with project state, stale/contested/actionable items, and ranked
-  next actions before metadata.
-- `splendor suggest-next [goal]` ranks work from open tasks, stale sources, failed jobs, missing
-  synthesis, contested/review-needed pages, maintenance reports, and goal matches. `--json` emits a
-  machine-readable handoff payload.
+- `brief --agent-context [--since <ref>] [--no-git]` leads with work context, including local git
+  and best-effort GitHub issue/PR signals when available, before structurally separated Splendor
+  maintenance state.
+- `splendor suggest-next [--since <ref>] [--no-git] [goal]` ranks work from open threads, recent
+  commits, read-first files, active planning, authority docs, and goal matches before stale
+  sources, failed jobs, missing synthesis, contested/review-needed pages, and maintenance reports
+  unless the goal is maintenance-focused. `--json` emits a machine-readable handoff payload.
 
 Release-readiness boundary:
 
@@ -1104,17 +1106,20 @@ Current implementation:
 - `splendor brief [goal]` assembles a terminal-friendly and JSON project brief from deterministic
   query matches, wiki status, active planning records, recent sources/runs, latest lint/health
   reports, the last query snapshot, ranked authority docs, and likely next actions.
-- `splendor brief --agent-context [goal]` renders the same deterministic state as a compact
-  coding-agent handoff with relevant matches, source refs, wiki status, active planning records,
-  ranked authority docs, recent sources/runs, maintenance reports, warnings, and ranked suggested
-  actions.
-- `splendor suggest-next [goal]` renders the ranked action subset directly. It is read-only and
-  deterministic, and ranks source freshness, queue failures or pending work, stale/contested or
-  review-needed pages, missing synthesis follow-up, task-relevant authority docs, active planning
-  records, recent maintenance reports, and query matches for the optional goal. Handoff ranking
-  uses deterministic relevance scoring over weighted title/path/record/scope fields, supporting
-  refs, snippets, and review/authority lifecycle signals so current task authority beats stale or
-  merely token-similar material without introducing vector search.
+- `splendor brief --agent-context [--since <ref>] [--no-git] [goal]` renders a compact coding-agent
+  handoff with work context before Splendor maintenance. Inside git worktrees it includes
+  runtime-only local branch/head/base context, recent relevant commits, best-effort read-only
+  GitHub issue/PR context through `gh` when available, read-first file paths, relevant matches,
+  source refs, active planning records, ranked authority docs, recent sources/runs, maintenance
+  reports, warnings, and ranked suggested actions.
+- `splendor suggest-next [--since <ref>] [--no-git] [goal]` renders the ranked action subset
+  directly. It is read-only and deterministic. For non-maintenance goals it ranks open work
+  threads, recent git/PR context, task-relevant authority docs, active planning records, read-first
+  files, and query matches before source freshness, queue failures or pending work,
+  stale/contested/review-needed pages, missing synthesis follow-up, and recent maintenance reports.
+  Maintenance-focused goals can keep maintenance actions first. Handoff ranking uses deterministic
+  relevance scoring over weighted title/path/record/scope fields, supporting refs, snippets,
+  git/GitHub text, and review/authority lifecycle signals without introducing vector search.
 - Generated contradiction-review tasks are classified separately from human-authored planning
   tasks. Default `task list`, `brief --agent-context`, and `suggest-next` keep them out of active
   planning handoff; operators can list, resolve, or mute them explicitly with task subcommands, and
@@ -1149,6 +1154,10 @@ v0.4 direction from external trials:
   `CLAUDE.md`, `README.md`, roadmap-like docs, and planning tests.
 - Important uncurated documentation may be used as provisional context only when clearly labeled
   as uncurated and paired with an exact curation command.
+
+`M18-P1.1` implements the git-aware work-first ranking and work/maintenance separation while
+keeping all new context runtime-only. The inferred-authority and provisional uncurated-doc
+fallbacks remain planned follow-up work for `M18-P2.1`.
 
 ## 18. Search Model
 

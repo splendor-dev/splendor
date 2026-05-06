@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -12,6 +14,51 @@ from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport, TaskRe
 from splendor.state.source_registry import load_source_record
 from splendor.utils.planning import render_planning_markdown
 from splendor.utils.wiki import parse_wiki_markdown
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
+
+
+def _init_git_repo(root: Path, *, repo: str = "example/project") -> None:
+    _git(root, "init", "-b", "main")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test User")
+    _git(root, "remote", "add", "origin", f"git@github.com:{repo}.git")
+
+
+def _commit_all(root: Path, message: str) -> None:
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", message)
+
+
+def _install_fake_gh(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    issues: list[dict[str, object]],
+    prs: list[dict[str, object]],
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "gh"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "import sys\n"
+        f"issues = {issues!r}\n"
+        f"prs = {prs!r}\n"
+        "if sys.argv[1:3] == ['issue', 'list']:\n"
+        "    print(json.dumps(issues))\n"
+        "elif sys.argv[1:3] == ['pr', 'list']:\n"
+        "    print(json.dumps(prs))\n"
+        "else:\n"
+        "    print('unsupported fake gh call', file=sys.stderr)\n"
+        "    sys.exit(2)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ.get('PATH', '')}")
 
 
 def write_wiki_page(
@@ -1753,6 +1800,296 @@ def test_brief_agent_context_warns_but_does_not_rank_missing_authority_docs(
     ]
 
 
+def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="CLAUDE.md",
+            role="current-authority",
+            purpose="ASR sanity policy.",
+            applies_to=["M17 ASR effective prosody"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/m17_phase_a_validation_report.md",
+            role="reference",
+            purpose="M17 ASR validation report.",
+            applies_to=["M17 ASR"],
+        ),
+    ]
+    write_config(tmp_path, config)
+    (tmp_path / "CLAUDE.md").write_text(
+        "# CLAUDE\n\nASR sanity checks gate M17 effective prosody work.\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "m17_phase_a_validation_report.md").write_text(
+        "# M17 Phase A Validation Report\n\nASR WER sanity baseline and effective prosody gap.\n",
+        encoding="utf-8",
+    )
+    renderer = tmp_path / "synthbanshee" / "tts" / "renderer.py"
+    renderer.parent.mkdir(parents=True)
+    renderer.write_text("def _apply_effective_prosody_cap():\n    return 'asr'\n", encoding="utf-8")
+    renderer_test = tmp_path / "tests" / "unit" / "test_effective_prosody_cap.py"
+    renderer_test.parent.mkdir(parents=True, exist_ok=True)
+    renderer_test.write_text(
+        "def test_effective_prosody_cap():\n    assert True\n", encoding="utf-8"
+    )
+    source = tmp_path / "stale.md"
+    source.write_text("# Stale\n\nOriginal maintenance source.\n", encoding="utf-8")
+    add_source(tmp_path, source)
+    source.write_text("# Stale\n\nChanged maintenance source.\n", encoding="utf-8")
+    _init_git_repo(tmp_path, repo="SynthBanshee/SynthBanshee")
+    _commit_all(tmp_path, "Initial SynthBanshee context")
+    renderer.write_text(
+        "def _apply_effective_prosody_cap():\n    return 'm17 asr effective prosody'\n",
+        encoding="utf-8",
+    )
+    _commit_all(tmp_path, "M17 effective-prosody cap addresses ASR sanity policy")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[
+            {
+                "number": 89,
+                "title": "fix(tts): M17 ASR follow-up after effective-prosody cap",
+                "url": "https://github.com/SynthBanshee/SynthBanshee/issues/89",
+                "body": "Next open ASR issue: close WER gap. Read synthbanshee/tts/renderer.py "
+                "and tests/unit/test_effective_prosody_cap.py.",
+                "state": "open",
+                "labels": [],
+            }
+        ],
+        prs=[
+            {
+                "number": 90,
+                "title": "effective-prosody cap addresses Whisper backdoor",
+                "url": "https://github.com/SynthBanshee/SynthBanshee/pull/90",
+                "body": "Merged PR context for ASR sanity and "
+                "docs/m17_phase_a_validation_report.md.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-06T07:14:00Z",
+                "labels": [],
+            }
+        ],
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "pick",
+            "up",
+            "M17",
+            "ASR",
+            "work",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    actions = payload["suggested_actions"]
+    assert actions[0]["category"] == "work-thread"
+    assert actions[0]["url"] == "https://github.com/SynthBanshee/SynthBanshee/issues/89"
+    assert payload["git_context"]["threads"][0]["number"] == 89
+    assert any("effective-prosody cap" in item["title"] for item in actions)
+    read_first = payload["git_context"]["read_first_paths"]
+    assert "synthbanshee/tts/renderer.py" in read_first
+    assert "tests/unit/test_effective_prosody_cap.py" in read_first
+    authority_paths = [item["path"] for item in payload["authority_briefs"]]
+    assert authority_paths[:2] == ["CLAUDE.md", "docs/m17_phase_a_validation_report.md"]
+    maintenance_categories = [
+        action["category"] for action in payload["maintenance_context"]["actions"]
+    ]
+    assert "queue" in maintenance_categories or "source-freshness" in maintenance_categories
+    flattened_categories = [action["category"] for action in actions]
+    assert flattened_categories.index("work-thread") < min(
+        flattened_categories.index(category)
+        for category in flattened_categories
+        if category in {"queue", "source-freshness"}
+    )
+
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "pick",
+            "up",
+            "M17",
+            "ASR",
+            "work",
+            "--json",
+        ]
+    )
+    assert suggest_exit == 0
+    suggest_payload = json.loads(capsys.readouterr().out)
+    suggest_categories = [action["category"] for action in suggest_payload["actions"]]
+    assert suggest_categories[0] == "work-thread"
+    assert suggest_categories.index("work-thread") < min(
+        suggest_categories.index(category)
+        for category in suggest_categories
+        if category in {"queue", "source-freshness"}
+    )
+
+
+def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path=".agent-plan.md",
+            role="current-authority",
+            purpose="Current F3b planning state.",
+            applies_to=["hocrgen F3a F3b"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/HeOCR_hocrgen_long_term_roadmap.md",
+            role="roadmap",
+            purpose="Roadmap critical path after F3a.",
+            applies_to=["hocrgen F3b critical path"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/modern_handwritten_acquisition_policy.md",
+            role="current-authority",
+            purpose="Modern handwritten acquisition policy for F3b.",
+            applies_to=["hocrgen F3b"],
+        ),
+        AuthorityDocumentConfig(path="README.md", role="current-authority", applies_to=["hocrgen"]),
+        AuthorityDocumentConfig(
+            path="CONTRIBUTING.md",
+            role="reference",
+            applies_to=["hocrgen planning tests"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/outside_review.md",
+            role="historical-review",
+            freshness="historical",
+            applies_to=["hocrgen F3b"],
+        ),
+    ]
+    write_config(tmp_path, config)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\nCurrent critical path: F3a complete; next implementation step is F3b.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrgen\n\nF3b adds typed repo-tracked operator intake manifests.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "CONTRIBUTING.md").write_text(
+        "# Contributing\n\nRun planning tests before changing F3 planning docs.\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "HeOCR_hocrgen_long_term_roadmap.md").write_text(
+        "# Roadmap\n\n## Current critical path\n\nF3b follows F3a and precedes F4/F5.\n",
+        encoding="utf-8",
+    )
+    (docs / "modern_handwritten_acquisition_policy.md").write_text(
+        "# Modern Handwritten Acquisition Policy\n\n"
+        "F3b must implement consent, release terms, privacy screening, and intake manifests.\n",
+        encoding="utf-8",
+    )
+    (docs / "outside_review.md").write_text(
+        "# Outside Review\n\nHistorical hocrgen review mentions F3b repeatedly.\n",
+        encoding="utf-8",
+    )
+    planning_test = tmp_path / "tests" / "test_planning_docs.py"
+    planning_test.parent.mkdir(exist_ok=True)
+    planning_test.write_text("def test_f3b_planning_docs():\n    assert True\n", encoding="utf-8")
+    _init_git_repo(tmp_path, repo="HeOCR/hocrgen")
+    _commit_all(tmp_path, "Initial hocrgen planning")
+    planning_test.write_text("def test_f3b_planning_docs():\n    assert 'F3b'\n", encoding="utf-8")
+    _commit_all(tmp_path, "F3a defines rights-clean modern handwritten acquisition policy")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[],
+        prs=[
+            {
+                "number": 63,
+                "title": "F3a: Define rights-clean modern handwritten acquisition policy",
+                "url": "https://github.com/HeOCR/hocrgen/pull/63",
+                "body": "Recent F3a context. Next is F3b with tests/test_planning_docs.py.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-06T07:14:00Z",
+                "labels": [],
+            }
+        ],
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "Resume",
+            "hocrgen",
+            "planning",
+            "after",
+            "F3a",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority_paths = [item["path"] for item in payload["authority_briefs"]]
+    assert authority_paths[0] == ".agent-plan.md"
+    current_paths = {
+        "docs/HeOCR_hocrgen_long_term_roadmap.md",
+        "docs/modern_handwritten_acquisition_policy.md",
+        "README.md",
+        "CONTRIBUTING.md",
+    }
+    assert current_paths <= set(authority_paths[:5])
+    assert all(
+        authority_paths.index("docs/outside_review.md") > authority_paths.index(path)
+        for path in current_paths
+    )
+    assert payload["git_context"]["threads"][0]["number"] == 63
+    assert "tests/test_planning_docs.py" in payload["git_context"]["read_first_paths"]
+    work_titles = " ".join(action["title"] for action in payload["work_context"]["actions"])
+    assert "F3a" in work_titles or "F3b" in work_titles
+
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "Resume",
+            "hocrgen",
+            "planning",
+            "after",
+            "F3a",
+            "--json",
+        ]
+    )
+    assert suggest_exit == 0
+    suggest_payload = json.loads(capsys.readouterr().out)
+    suggest_categories = [action["category"] for action in suggest_payload["actions"]]
+    assert suggest_categories[0] in {"work-thread", "git-context", "authority", "planning"}
+    if "goal-match" in suggest_categories:
+        assert suggest_categories.index("authority") < suggest_categories.index("goal-match")
+
+
 def test_suggest_next_uses_wiki_authority_metadata_but_skips_source_summaries(
     tmp_path: Path, capsys
 ) -> None:
@@ -2206,7 +2543,7 @@ def test_suggest_next_json_ranks_changed_sources_before_review_work(tmp_path: Pa
     source.write_text("# Handoff\n\nUpdated briefing state.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "suggest-next", "handoff", "--json"])
+    exit_code = main(["--root", str(tmp_path), "suggest-next", "source", "refresh", "--json"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
