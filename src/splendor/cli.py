@@ -700,7 +700,7 @@ def build_parser() -> argparse.ArgumentParser:
     task_list_parser.add_argument(
         "--review-task-state",
         choices=("active", "resolved", "muted"),
-        help="Filter generated review tasks by operator review state.",
+        help="List generated contradiction-review tasks with this operator review state.",
     )
     task_list_parser.set_defaults(handler=handle_task_list)
     task_resolve_parser = task_subparsers.add_parser(

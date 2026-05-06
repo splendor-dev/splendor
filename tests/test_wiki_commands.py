@@ -2313,6 +2313,8 @@ def test_suggest_next_exposes_generated_review_tasks_for_contradiction_goal(
 
     assert default_exit == 0
     assert focused_exit == 0
+    assert all("task-review" not in match["path"] for match in focused_payload["matches"])
+    assert all("task-review" not in str(action["path"]) for action in focused_payload["actions"])
     assert all(
         action["category"] != "contradiction-review" for action in default_payload["actions"]
     )

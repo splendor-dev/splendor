@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import posixpath
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +30,7 @@ _RECORD_MODELS = {
     "decision": DecisionRecord,
     "question": QuestionRecord,
 }
+_LEGACY_GENERATED_REVIEW_TASK_ID_PATTERN = re.compile(r"^task-review-.+-[a-f0-9]{10}$")
 
 
 @dataclass(frozen=True)
@@ -220,11 +222,12 @@ def list_tasks(
     review_task_state: str | None = None,
 ) -> list[TaskListRow]:
     rows: list[TaskListRow] = []
+    generated_review_only = generated_review or review_task_state is not None
     for record in _load_records(root, "task"):
         is_generated_review = is_generated_contradiction_review_task(record)
-        if generated_review and not is_generated_review:
+        if generated_review_only and not is_generated_review:
             continue
-        if not generated_review and not include_generated_review and is_generated_review:
+        if not generated_review_only and not include_generated_review and is_generated_review:
             continue
         if status is not None and record.status != status:
             continue
@@ -253,8 +256,11 @@ def list_tasks(
 def is_generated_contradiction_review_task(record: TaskRecord) -> bool:
     if record.record_origin == "generated" and record.generated_kind == "contradiction-review":
         return True
-    return record.task_id.startswith("task-review-") and record.title.startswith(
-        "Review contradiction:"
+    has_generated_refs = bool(record.source_refs or record.page_refs or record.run_refs)
+    return (
+        has_generated_refs
+        and record.title.startswith("Review contradiction:")
+        and _LEGACY_GENERATED_REVIEW_TASK_ID_PATTERN.fullmatch(record.task_id) is not None
     )
 
 

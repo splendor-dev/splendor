@@ -4488,6 +4488,35 @@ def test_cli_task_list_hides_generated_review_tasks_by_default(tmp_path: Path, c
     assert "generated/contradiction-review/active" in out
 
 
+def test_cli_task_review_state_filter_implies_generated_review(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    main(["--root", str(tmp_path), "task", "create", "Write", "CLI", "docs"])
+    review_task = TaskRecord(
+        task_id="task-review-src-a-src-b-1234567890",
+        title="Review contradiction: A vs B",
+        status="todo",
+        priority="high",
+        record_origin="generated",
+        generated_kind="contradiction-review",
+        review_task_state="active",
+        created_at="2026-05-06T00:00:00Z",
+        updated_at="2026-05-06T00:00:00Z",
+    )
+    task_path = tmp_path / "planning" / "tasks" / f"{review_task.task_id}.md"
+    task_path.write_text(
+        render_planning_markdown(review_task, title=review_task.title),
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "task", "list", "--review-task-state", "active"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert review_task.task_id in out
+    assert "task-write-cli-docs" not in out
+
+
 def test_cli_task_resolve_and_mute_generated_review_tasks(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     for task_id in [
