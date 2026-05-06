@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `v0.4.0-release-prep`
-- Current planned slice: `M19 post-v0.4 external review response`
-- Current PR sub-slice: `M19-P4.1`
+- Previous completed PR sub-slice: `M19-P4.1`
+- Current planned slice: `M19 legacy mutation safety`
+- Current PR sub-slice: `M19-P5.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 legacy mutation safety`
-- Next planned PR sub-slice: `M19-P5.1`
+- Next planned slice: `M19 completion-aware current-state handoff inference`
+- Next planned PR sub-slice: `M19-P6.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1304,11 +1304,16 @@ completed work above the next roadmap item. The review findings are summarized i
 `docs/evaluations/v0_4_external_review_round_summary.md` and registered in
 `docs/evaluations/v0_4_external_findings_register.md`.
 
+`M19-P5.1` closes the highest-priority V04-F1 safety gap by harmonizing the legacy mutating
+workflow verbs called out by external reviewers. `ingest --pending`, `source refresh`,
+`source update-path`, and `workspace refresh` now preview by default, expose the shared
+`mutation.mode` / `mutation.mutates` / `mutation.planned` / `mutation.written` JSON contract, and
+require explicit `--apply` before draining queue jobs or writing source manifests, source-summary
+pages, run records, queue records, wiki index/log state, pruning changes, or maintained topic-ref
+migrations.
+
 The remaining M19 sequence is therefore:
 
-- `M19-P5.1` Legacy preview/apply harmonization for mutating commands that still write or drain
-  immediately, especially `ingest --pending`, `source refresh`, `source update-path`, and
-  `workspace refresh`.
 - `M19-P6.1` Completion-aware current-state handoff inference: reconcile stale dynamic planning
   docs against git/GitHub merge state and ordered roadmap items so completed slices lead to the
   next open slice.

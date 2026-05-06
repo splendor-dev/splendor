@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from splendor import __version__
-from splendor.commands.mutation import mutation_record
+from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.config import load_config
 from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, dispatch_source_content
 from splendor.layout import resolve_layout
@@ -110,7 +110,9 @@ class DrainResult:
     items: list[DrainItemResult]
 
 
-def render_pending_ingest_json(root: Path, result: DrainResult) -> str:
+def render_pending_ingest_json(root: Path, result: DrainResult, *, mode: str = "apply") -> str:
+    planned_records = pending_ingest_planned_records(root, result) if mode == "preview" else []
+    written_records = pending_ingest_written_records(result) if mode == "apply" else []
     return json.dumps(
         {
             "total": result.total,
@@ -122,6 +124,11 @@ def render_pending_ingest_json(root: Path, result: DrainResult) -> str:
             },
             "items": [_drain_item_payload(root, item) for item in result.items],
             "next_actions": pending_ingest_next_actions(result),
+            "mutation": mutation_contract(
+                mode=mode,
+                planned=planned_records,
+                written=written_records,
+            ),
         },
         indent=2,
     )
@@ -149,6 +156,53 @@ def _drain_item_payload(root: Path, item: DrainItemResult) -> dict[str, object]:
         "message": item.message,
         "written_records": item.written_records,
     }
+
+
+def pending_ingest_planned_records(root: Path, result: DrainResult) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for item in result.items:
+        if item.outcome != "planned":
+            continue
+        queue_ref = _relative_to_root(root, item.queue_path)
+        source_id = item.source_id
+        records.extend(
+            [
+                mutation_record(
+                    action="write",
+                    path=queue_ref,
+                    kind="queue_record",
+                    source_id=source_id,
+                ),
+                mutation_record(
+                    action="write",
+                    path=f"state/runs/<new-run-for-{source_id}>.json",
+                    kind="run_record",
+                    source_id=source_id,
+                ),
+                mutation_record(
+                    action="write",
+                    path=f"state/manifests/sources/{source_id}.json",
+                    kind="source_manifest",
+                    source_id=source_id,
+                ),
+                mutation_record(
+                    action="write",
+                    path=f"wiki/sources/{source_id}.md",
+                    kind="source_summary_page",
+                    source_id=source_id,
+                ),
+                mutation_record(action="write", path="wiki/index.md", kind="wiki_index"),
+                mutation_record(action="write", path="wiki/log.md", kind="wiki_log"),
+            ]
+        )
+    return records
+
+
+def pending_ingest_written_records(result: DrainResult) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for item in result.items:
+        records.extend(item.written_records)
+    return records
 
 
 def _make_run_id(source_id: str) -> str:
@@ -1453,6 +1507,52 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
         processed=processed,
         succeeded=succeeded,
         failed=failed,
+        skipped=skipped,
+        items=item_results,
+    )
+
+
+def preview_pending_ingest_jobs(root: Path) -> DrainResult:
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    queue_items: list[tuple[Path, QueueItemRecord]] = []
+    for queue_path in sorted(layout.queue_dir.glob("*.json")):
+        queue_items.append((queue_path, load_queue_item(queue_path)))
+
+    now = _utc_now()
+    ordered_items = sorted(queue_items, key=lambda item: (item[1].created_at, item[1].job_id))
+
+    skipped = 0
+    item_results: list[DrainItemResult] = []
+    for queue_path, queue_item in ordered_items:
+        source_id = source_id_from_ingest_job_id(queue_item.job_id) or queue_item.job_id
+        if not _is_queue_eligible(queue_item, now):
+            skipped += 1
+            item_results.append(
+                DrainItemResult(
+                    source_id=source_id,
+                    queue_path=queue_path,
+                    outcome="skipped",
+                    message=_skip_message(queue_item, now),
+                    written_records=[],
+                )
+            )
+            continue
+        item_results.append(
+            DrainItemResult(
+                source_id=source_id,
+                queue_path=queue_path,
+                outcome="planned",
+                message="would run ingest job with --apply",
+                written_records=[],
+            )
+        )
+
+    return DrainResult(
+        total=len(ordered_items),
+        processed=0,
+        succeeded=0,
+        failed=0,
         skipped=skipped,
         items=item_results,
     )

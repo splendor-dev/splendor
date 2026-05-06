@@ -26,6 +26,9 @@ from splendor.commands.ingest import (
     drain_pending_ingest_jobs,
     enqueue_ingest_job,
     ingest_source,
+    pending_ingest_planned_records,
+    pending_ingest_written_records,
+    preview_pending_ingest_jobs,
     render_pending_ingest_json,
 )
 from splendor.commands.init import initialize_workspace
@@ -83,6 +86,7 @@ from splendor.commands.source import (
     render_stale_ingest_json,
     resolve_source_query_exact,
     scan_source_freshness,
+    source_path_update_mutation_records,
     source_reconcile_next_commands,
     source_refresh_written_records,
     update_source_path,
@@ -247,6 +251,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     source_refresh_parser.add_argument("query", help="Source ID, title, or path to refresh")
     source_refresh_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help=(
+            "Write refreshed source manifests and queue ingest work. "
+            "Without this flag, preview only."
+        ),
+    )
+    source_refresh_parser.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
@@ -263,6 +275,14 @@ def build_parser() -> argparse.ArgumentParser:
         "new_path",
         type=Path,
         help="New workspace path for the curated source file",
+    )
+    source_update_path_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help=(
+            "Write the repaired source manifest and queue ingest work. "
+            "Without this flag, preview only."
+        ),
     )
     source_update_path_parser.add_argument(
         "--json",
@@ -351,7 +371,12 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument(
         "--pending",
         action="store_true",
-        help="Drain pending ingestion jobs from the queue.",
+        help="Preview pending ingestion jobs from the queue.",
+    )
+    ingest_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Drain pending ingestion jobs. Without this flag, --pending only previews.",
     )
     ingest_parser.add_argument(
         "--changed",
@@ -531,6 +556,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--update-topic-refs",
         action="store_true",
         help="Rewrite maintained wiki source_refs from superseded source IDs to active versions.",
+    )
+    workspace_refresh_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write the planned workspace maintenance changes. Without this flag, preview only.",
     )
     workspace_refresh_parser.add_argument(
         "--json",
@@ -1143,7 +1173,7 @@ def handle_source_lookup(args: argparse.Namespace) -> int:
 def handle_source_refresh(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
-        result = refresh_source(root, args.query)
+        result = refresh_source(root, args.query, apply=args.apply)
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
     if args.json_output:
@@ -1151,7 +1181,9 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
         return 0
 
     if result.changed:
-        print("Mutation mode: apply")
+        print(f"Mutation mode: {'apply' if result.applied else 'preview'}")
+        if not result.applied:
+            print("Preview only: no source manifests or queue records written.")
         print(f"Detected changed source content for {canonical_source_ref(result.requested)}")
         print(f"Requested source ID: {result.requested.source_id}")
         if result.refreshed.record.source_id != result.requested.source_id:
@@ -1164,7 +1196,9 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
                 f"{result.requested.source_id} -> {result.refreshed.record.source_id}"
             )
     else:
-        print("Mutation mode: apply")
+        print(f"Mutation mode: {'apply' if result.applied else 'preview'}")
+        if not result.applied:
+            print("Preview only: no source manifests or queue records written.")
         print(f"No source content change detected for {canonical_source_ref(result.requested)}")
         print(f"Source ID: {result.requested.source_id}")
     print(f"Source ref: {result.refreshed.source_ref}")
@@ -1176,19 +1210,29 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
     if result.refreshed.record.superseded_by is not None:
         print(f"Superseded by: {result.refreshed.record.superseded_by}")
     if result.queued and result.queue_path is not None:
-        print(f"Queued ingest: {result.queue_path}")
-        print("Next: splendor ingest --pending")
+        label = "Queued ingest" if result.applied else "Planned queue ingest"
+        print(f"{label}: {result.queue_path}")
+        if result.applied:
+            print("Next: splendor ingest --pending")
+        else:
+            print(f"Next: splendor source refresh {shlex.quote(args.query)} --apply")
     else:
         print(f"Refresh skipped: {result.message}")
         print(f"Next: splendor wiki suggest {result.refreshed.record.source_id}")
-    _print_mutation_written_paths(source_refresh_written_records(root, result))
+    records = source_refresh_written_records(root, result)
+    if result.applied:
+        _print_mutation_written_paths(records)
+    else:
+        _print_mutation_planned_paths(records)
     return 0
 
 
 def handle_source_update_path(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     try:
-        result = update_source_path(root, args.query, args.new_path, force=args.force)
+        result = update_source_path(
+            root, args.query, args.new_path, force=args.force, apply=args.apply
+        )
     except (FileNotFoundError, IsADirectoryError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
 
@@ -1196,6 +1240,10 @@ def handle_source_update_path(args: argparse.Namespace) -> int:
         print(render_source_path_update_json(root, result))
         return 0 if result.status == "repaired" else 1
 
+    print(f"Source path update {'applied' if result.applied else 'preview'}")
+    print(f"Mutation mode: {'apply' if result.applied else 'preview'}")
+    if not result.applied:
+        print("Preview only: no source manifest or queue record written.")
     print(f"Updated source path for {result.source.source_id}")
     print(f"Status: {result.status}")
     print(f"Old path: {result.old_path}")
@@ -1215,6 +1263,10 @@ def handle_source_update_path(args: argparse.Namespace) -> int:
         print("Path was updated, but content refresh is still required.")
     for command in result.next_commands:
         print(f"Next: {command}")
+    if result.applied:
+        _print_mutation_written_paths(source_path_update_mutation_records(root, result))
+    else:
+        _print_mutation_planned_paths(source_path_update_mutation_records(root, result))
     return 0 if result.status == "repaired" else 1
 
 
@@ -1341,18 +1393,31 @@ def handle_ingest(args: argparse.Namespace) -> int:
 
     if args.pending:
         try:
-            result = drain_pending_ingest_jobs(root)
+            result = (
+                drain_pending_ingest_jobs(root) if args.apply else preview_pending_ingest_jobs(root)
+            )
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             return _print_error(exc)
 
         if args.json_output:
-            print(render_pending_ingest_json(root, result))
+            print(
+                render_pending_ingest_json(
+                    root,
+                    result,
+                    mode="apply" if args.apply else "preview",
+                )
+            )
             return 1 if result.failed else 0
 
         if result.total == 0:
             print("No pending ingest jobs")
+            print(f"Mutation mode: {'apply' if args.apply else 'preview'}")
             return 0
 
+        print("Pending ingest apply" if args.apply else "Pending ingest preview")
+        print(f"Mutation mode: {'apply' if args.apply else 'preview'}")
+        if not args.apply:
+            print("Preview only: no queue, run, source, or wiki records written.")
         for item in result.items:
             print(f"{item.source_id}: {item.outcome} ({item.message})")
         print(
@@ -1362,6 +1427,14 @@ def handle_ingest(args: argparse.Namespace) -> int:
             f"failed={result.failed} "
             f"skipped={result.skipped}"
         )
+        if args.apply:
+            _print_mutation_written_paths(pending_ingest_written_records(result))
+        else:
+            planned_records = pending_ingest_planned_records(root, result)
+            _print_mutation_planned_paths(planned_records)
+            if planned_records:
+                print("Next: splendor ingest --pending --apply")
+                return 0
         succeeded_source_ids = [
             item.source_id for item in result.items if item.outcome == "succeeded"
         ]
@@ -1929,6 +2002,7 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
             rebuild_index=args.rebuild_index,
             prune_superseded=args.prune_superseded,
             update_topic_refs=args.update_topic_refs,
+            apply=args.apply,
         )
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return _print_error(exc)
@@ -1944,7 +2018,9 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         return 0
 
     print("Workspace refresh")
-    print("Mutation mode: apply")
+    print(f"Mutation mode: {'apply' if result.applied else 'preview'}")
+    if not result.applied:
+        print("Preview only: no workspace maintenance changes written.")
     print(
         "Initial freshness: "
         f"total={result.initial_freshness.total} "
@@ -2024,7 +2100,11 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         f"unsupported={result.final_freshness.unsupported} "
         f"historical={result.final_freshness.historical}"
     )
-    _print_mutation_written_paths(workspace_refresh_written_records(root, result))
+    records = workspace_refresh_written_records(root, result)
+    if result.applied:
+        _print_mutation_written_paths(records)
+    else:
+        _print_mutation_planned_paths(records)
 
     if result.ingest is not None and result.ingest.failed:
         print("Next: splendor queue inspect")
@@ -2033,7 +2113,10 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         print("Workspace refresh completed with unresolved curated sources.")
         print("Next: splendor source freshness")
         return 1
-    if result.ingest is None and result.refreshed:
+    if not result.applied and records:
+        command = _workspace_refresh_apply_command(args)
+        print(f"Next: {command}")
+    elif result.ingest is None and result.refreshed:
         if result.index is not None:
             print("Next: splendor ingest --pending, then splendor wiki rebuild-index")
         else:
@@ -2052,6 +2135,30 @@ def _print_mutation_written_paths(records: list[dict[str, str]]) -> None:
     print("Written paths:")
     for record in records:
         print(f"- {record['action']}: {record['kind']} {record['path']}")
+
+
+def _print_mutation_planned_paths(records: list[dict[str, str]]) -> None:
+    if not records:
+        print("Planned paths: none")
+        return
+    print("Planned paths:")
+    for record in records:
+        print(f"- {record['action']}: {record['kind']} {record['path']}")
+
+
+def _workspace_refresh_apply_command(args: argparse.Namespace) -> str:
+    flags = []
+    for attr, flag in [
+        ("changed", "--changed"),
+        ("ingest", "--ingest"),
+        ("rebuild_index", "--rebuild-index"),
+        ("prune_superseded", "--prune-superseded"),
+        ("update_topic_refs", "--update-topic-refs"),
+    ]:
+        if getattr(args, attr):
+            flags.append(flag)
+    flags.append("--apply")
+    return "splendor workspace refresh " + " ".join(flags)
 
 
 def handle_pr_summary(args: argparse.Namespace) -> int:
@@ -2976,6 +3083,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("ingest requires exactly one of <source_id>, --pending, or --changed")
         if args.json_output and not (args.changed or args.pending):
             parser.error("ingest --json is currently supported only with --pending or --changed")
+        if args.apply and not args.pending:
+            parser.error("ingest --apply is supported only with --pending")
     return args.handler(args)
 
 

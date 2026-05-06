@@ -242,7 +242,7 @@ def test_queue_clean_selects_superseded_and_completed_records(tmp_path: Path) ->
     old_queue_path = enqueue_ingest_job(tmp_path, old.source_id)
     done_queue_path = enqueue_ingest_job(tmp_path, done.source_id)
     old_path.write_text("# Old\n\nUpdated.\n", encoding="utf-8")
-    main(["--root", str(tmp_path), "source", "refresh", old.source_id])
+    main(["--root", str(tmp_path), "source", "refresh", old.source_id, "--apply"])
     write_queue_item(
         done_queue_path,
         load_queue_item(done_queue_path).model_copy(update={"status": "done"}),
@@ -274,7 +274,7 @@ def test_queue_clean_completed_selector_matches_done_orphaned_and_superseded_rec
     superseded_queue_path = enqueue_ingest_job(tmp_path, superseded.source_id)
     orphan.manifest_path.unlink()
     superseded_path.write_text("# Superseded\n\nUpdated.\n", encoding="utf-8")
-    main(["--root", str(tmp_path), "source", "refresh", superseded.source_id])
+    main(["--root", str(tmp_path), "source", "refresh", superseded.source_id, "--apply"])
     for queue_path in [orphan_queue_path, superseded_queue_path]:
         write_queue_item(
             queue_path,

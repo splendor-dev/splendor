@@ -159,15 +159,14 @@ Drain the pending ingest queue:
 
 ```bash
 uv run splendor --root /tmp/demo-repo ingest --pending
+uv run splendor --root /tmp/demo-repo ingest --pending --apply
 ```
 
 `ingest --pending` also handles due failed retries and expired ingest leases. Failed jobs wait until
 their persisted `next_attempt_at` backoff time, and exhausted jobs move to `dead_letter` until an
 operator runs `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
-Unlike preview-first cleanup commands such as `queue clean`, `ingest --pending` is currently a
-direct drain verb: it writes source-summary, queue, run, and index/log state when work is due. The
-post-v0.4 durability plan is to harmonize this with explicit preview/apply behavior; until then,
-run it only when you intend to process queued ingest work.
+`ingest --pending` previews by default and writes nothing; review the planned queue, run,
+source-summary, index, and log writes before rerunning with `--apply` to process queued ingest work.
 
 This creates:
 
@@ -224,7 +223,8 @@ uv run splendor --root /tmp/demo-repo source freshness
 uv run splendor --root /tmp/demo-repo source freshness --json
 uv run splendor --root /tmp/demo-repo source freshness --report /tmp/demo-repo/reports/source-freshness.json
 uv run splendor --root /tmp/demo-repo source refresh product-note.md
-uv run splendor --root /tmp/demo-repo ingest --pending
+uv run splendor --root /tmp/demo-repo source refresh product-note.md --apply
+uv run splendor --root /tmp/demo-repo ingest --pending --apply
 ```
 
 `source freshness` is a safe preview. By default it writes nothing and reports unchanged, changed,
@@ -258,19 +258,20 @@ they support the workspace update under review. They are deterministic state, no
 analysis. Failed or exploratory local reports do not need to be committed unless the report itself
 is the artifact being reviewed.
 
-`source refresh` creates a new canonical content-addressed source version when bytes change.
-Workspace-backed sources keep stable logical IDs, and `workspace refresh --changed` can combine
-changed-source refresh with targeted ingest. `--changed --ingest` drains only queue jobs created or
-reused for refreshed sources, leaving unrelated pending jobs alone. Index rebuilds, superseded
-generated-summary pruning, and maintained-page topic-ref migration can run standalone with
+`source refresh` previews by default and creates a new canonical content-addressed source version
+only when rerun with `--apply`. Workspace-backed sources keep stable logical IDs, and
+`workspace refresh --changed` can preview or apply changed-source refresh with targeted ingest.
+`--changed --ingest --apply` drains only queue jobs created or reused for refreshed sources, leaving
+unrelated pending jobs alone. Index rebuilds, superseded generated-summary pruning, and
+maintained-page topic-ref migration can run standalone with
 `workspace refresh --rebuild-index`, `workspace refresh --prune-superseded`, or
 `workspace refresh --update-topic-refs`, or in one pass with
-`workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index`.
+`workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index
+--apply`.
 If pruning runs before successor source-summary pages exist, rerun
-`workspace refresh --prune-superseded` after the refreshed sources are ingested.
-These refresh commands are also part of the post-v0.4 preview/apply harmonization plan. Review
-`source freshness`, `queue inspect`, and `pr-summary` before using them in a shared branch if you
-only intended to inspect state.
+`workspace refresh --prune-superseded --apply` after the refreshed sources are ingested. Review
+default previews, `source freshness`, `queue inspect`, and `pr-summary` before applying state
+changes in a shared branch.
 
 ## 5. Add a planning record
 

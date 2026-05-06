@@ -110,9 +110,17 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     parser = build_parser()
 
     lookup = parser.parse_args(["source", "lookup", "brief", "--json"])
-    refresh = parser.parse_args(["source", "refresh", "docs/brief.md", "--json"])
+    refresh = parser.parse_args(["source", "refresh", "docs/brief.md", "--apply", "--json"])
     update_path = parser.parse_args(
-        ["source", "update-path", "docs/old.md", "docs/new.md", "--force", "--json"]
+        [
+            "source",
+            "update-path",
+            "docs/old.md",
+            "docs/new.md",
+            "--force",
+            "--apply",
+            "--json",
+        ]
     )
     reconcile = parser.parse_args(
         ["source", "reconcile", "docs/brief.md", "--current", "src-a", "--apply", "--json"]
@@ -130,11 +138,13 @@ def test_cli_source_parser_accepts_lookup_and_refresh_json_flags() -> None:
     assert lookup.json_output is True
     assert refresh.source_command == "refresh"
     assert refresh.query == "docs/brief.md"
+    assert refresh.apply is True
     assert refresh.json_output is True
     assert update_path.source_command == "update-path"
     assert update_path.query == "docs/old.md"
     assert update_path.new_path == Path("docs/new.md")
     assert update_path.force is True
+    assert update_path.apply is True
     assert update_path.json_output is True
     assert reconcile.source_command == "reconcile"
     assert reconcile.selector == "docs/brief.md"
@@ -375,7 +385,7 @@ def test_cli_source_forget_preview_is_non_mutating(tmp_path: Path, capsys) -> No
     source_path = tmp_path / "brief.md"
     source_path.write_text("# Brief\n\nKeep preview safe.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source_path)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
     summary_path = tmp_path / "wiki" / "sources" / f"{source_id}.md"
@@ -413,7 +423,7 @@ def test_cli_source_forget_apply_removes_source_owned_state(tmp_path: Path, caps
     source_path = tmp_path / "brief.md"
     source_path.write_text("# Brief\n\nRemove generated state.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source_path)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
     summary_path = tmp_path / "wiki" / "sources" / f"{source_id}.md"
@@ -827,7 +837,15 @@ def test_cli_workspace_refresh_parser_accepts_safe_refresh_flags() -> None:
     parser = build_parser()
 
     args = parser.parse_args(
-        ["workspace", "refresh", "--changed", "--ingest", "--rebuild-index", "--json"]
+        [
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--rebuild-index",
+            "--apply",
+            "--json",
+        ]
     )
 
     assert args.command == "workspace"
@@ -835,6 +853,7 @@ def test_cli_workspace_refresh_parser_accepts_safe_refresh_flags() -> None:
     assert args.changed is True
     assert args.ingest is True
     assert args.rebuild_index is True
+    assert args.apply is True
     assert args.json_output is True
 
 
@@ -1332,7 +1351,7 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     out = capsys.readouterr().out
@@ -1355,6 +1374,39 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
     assert records_by_id[refreshed_id].superseded_by is None
 
 
+def test_cli_source_refresh_defaults_to_preview_without_mutating(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    original_manifests = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    }
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mutation"]["mode"] == "preview"
+    assert payload["mutation"]["mutates"] is False
+    assert payload["mutation"]["written"] == []
+    assert {item["kind"] for item in payload["mutation"]["planned"]} == {
+        "queue_record",
+        "source_manifest",
+    }
+    assert {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    } == original_manifests
+    assert not any(
+        path.name == f"ingest-{payload['source_id']}.json"
+        for path in (tmp_path / "state" / "queue").glob("*.json")
+    )
+
+
 def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -1362,11 +1414,11 @@ def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsy
     main(["--root", str(tmp_path), "add-source", str(source)])
     original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
-    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     out = capsys.readouterr().out
@@ -1409,7 +1461,9 @@ def test_cli_source_refresh_json_reports_materialized_artifact_write(
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--json"])
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply", "--json"]
+    )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1437,7 +1491,9 @@ def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--json"])
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply", "--json"]
+    )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1506,7 +1562,7 @@ def test_cli_source_refresh_preserves_no_commit_capture_intent(
     monkeypatch.setattr("splendor.state.source_registry.captured_source_commit", fail_if_called)
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     refreshed_records = [
@@ -1537,7 +1593,7 @@ def test_cli_source_refresh_preserves_positive_commit_capture_intent(
     )
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     refreshed_records = [
@@ -1571,7 +1627,7 @@ def test_cli_source_refresh_uses_config_default_for_legacy_commit_capture_intent
     )
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     refreshed_records = [
@@ -1608,7 +1664,7 @@ def test_cli_source_refresh_preserves_legacy_positive_commit_capture_intent(
     )
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     refreshed_records = [
@@ -1642,7 +1698,7 @@ def test_cli_source_refresh_supports_original_path_legacy_manifest(tmp_path: Pat
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     assert "Detected changed source content" in capsys.readouterr().out
@@ -1654,10 +1710,10 @@ def test_cli_source_refresh_by_path_uses_latest_matching_source_ref(tmp_path: Pa
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
-    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 0
     out = capsys.readouterr().out
@@ -1682,7 +1738,15 @@ def test_cli_source_update_path_repairs_missing_workspace_source(tmp_path: Path,
     capsys.readouterr()
 
     exit_code = main(
-        ["--root", str(tmp_path), "source", "update-path", "docs/brief.md", "moved/brief.md"]
+        [
+            "--root",
+            str(tmp_path),
+            "source",
+            "update-path",
+            "docs/brief.md",
+            "moved/brief.md",
+            "--apply",
+        ]
     )
 
     assert exit_code == 0
@@ -1733,12 +1797,23 @@ def test_cli_source_update_path_json_reports_deterministic_payload(tmp_path: Pat
     capsys.readouterr()
 
     exit_code = main(
-        ["--root", str(tmp_path), "source", "update-path", manifest.source_id, "new.md", "--json"]
+        [
+            "--root",
+            str(tmp_path),
+            "source",
+            "update-path",
+            manifest.source_id,
+            "new.md",
+            "--apply",
+            "--json",
+        ]
     )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
+    mutation = payload.pop("mutation")
     assert payload == {
+        "applied": True,
         "source_id": manifest.source_id,
         "logical_id": "source:old.md",
         "old_path": "old.md",
@@ -1757,6 +1832,60 @@ def test_cli_source_update_path_json_reports_deterministic_payload(tmp_path: Pat
             "splendor source freshness",
         ],
     }
+    assert mutation["mode"] == "apply"
+    assert mutation["mutates"] is True
+    assert mutation["planned"] == []
+    assert {
+        (item["action"], item["kind"], item["path"], item["source_id"])
+        for item in mutation["written"]
+    } == {
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{manifest.source_id}.json",
+            manifest.source_id,
+        ),
+        (
+            "write",
+            "queue_record",
+            f"state/queue/ingest-{manifest.source_id}.json",
+            manifest.source_id,
+        ),
+    }
+
+
+def test_cli_source_update_path_defaults_to_preview_without_mutating(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    old_source = tmp_path / "old.md"
+    new_source = tmp_path / "new.md"
+    old_source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "old.md"])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    before_manifest = manifest_path.read_text(encoding="utf-8")
+    manifest = load_source_record(manifest_path)
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{manifest.source_id}.json"
+    queue_before = queue_path.read_text(encoding="utf-8")
+    old_source.rename(new_source)
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "update-path", manifest.source_id, "new.md", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["applied"] is False
+    assert payload["mutation"]["mode"] == "preview"
+    assert payload["mutation"]["mutates"] is False
+    assert payload["mutation"]["written"] == []
+    assert {(item["kind"], item["path"]) for item in payload["mutation"]["planned"]} == {
+        ("source_manifest", f"state/manifests/sources/{manifest.source_id}.json"),
+        ("queue_record", f"state/queue/ingest-{manifest.source_id}.json"),
+    }
+    assert manifest_path.read_text(encoding="utf-8") == before_manifest
+    assert queue_path.read_text(encoding="utf-8") == queue_before
 
 
 @pytest.mark.parametrize(
@@ -1842,7 +1971,9 @@ def test_cli_source_update_path_does_not_mutate_maintained_synthesis(
     topic_before = topic.read_text(encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "update-path", "old.md", "new.md"])
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "update-path", "old.md", "new.md", "--apply"]
+    )
 
     assert exit_code == 0
     assert topic.read_text(encoding="utf-8") == topic_before
@@ -1858,13 +1989,15 @@ def test_cli_source_update_path_reingests_same_byte_move_to_refresh_provenance(
     main(["--root", str(tmp_path), "add-source", "old.md"])
     manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
     source_id = manifest_path.stem
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     page_path = tmp_path / "wiki" / "sources" / f"{source_id}.md"
     assert "old.md" in page_path.read_text(encoding="utf-8")
     source.rename(replacement)
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "update-path", "old.md", "new.md"])
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "update-path", "old.md", "new.md", "--apply"]
+    )
 
     assert exit_code == 0
     updated = load_source_record(manifest_path)
@@ -1872,7 +2005,7 @@ def test_cli_source_update_path_reingests_same_byte_move_to_refresh_provenance(
     assert updated.last_run_id is not None
     assert (tmp_path / "state" / "queue" / f"ingest-{source_id}.json").exists()
 
-    ingest_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    ingest_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert ingest_code == 0
     page_text = page_path.read_text(encoding="utf-8")
@@ -1893,7 +2026,16 @@ def test_cli_source_update_path_changed_bytes_reports_partial_repair(
     capsys.readouterr()
 
     exit_code = main(
-        ["--root", str(tmp_path), "source", "update-path", "old.md", "new.md", "--json"]
+        [
+            "--root",
+            str(tmp_path),
+            "source",
+            "update-path",
+            "old.md",
+            "new.md",
+            "--apply",
+            "--json",
+        ]
     )
 
     assert exit_code == 1
@@ -2021,7 +2163,7 @@ def test_cli_source_freshness_suggests_wiki_work_only_after_current_ingest(
     source.write_text("# Brief\n\nCurrent.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
     source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     capsys.readouterr()
 
     exit_code = main(["--root", str(tmp_path), "source", "freshness", "--json"])
@@ -2042,7 +2184,7 @@ def test_cli_source_freshness_marks_old_versions_historical_when_current_manifes
     main(["--root", str(tmp_path), "add-source", str(source)])
     original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
-    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
     refreshed_id = next(
         path.stem
         for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
@@ -2073,7 +2215,7 @@ def test_cli_source_freshness_targets_latest_manifest_when_file_reverts(
     main(["--root", str(tmp_path), "add-source", str(source)])
     original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
-    main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
     refreshed_id = next(
         path.stem
         for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
@@ -2208,7 +2350,9 @@ def test_cli_workspace_refresh_rebuilds_index_standalone(tmp_path: Path, capsys)
     main(["--root", str(tmp_path), "init"])
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--rebuild-index", "--json"])
+    exit_code = main(
+        ["--root", str(tmp_path), "workspace", "refresh", "--rebuild-index", "--apply", "--json"]
+    )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -2232,7 +2376,7 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     capsys.readouterr()
@@ -2246,6 +2390,7 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
             "--changed",
             "--ingest",
             "--rebuild-index",
+            "--apply",
             "--json",
         ]
     )
@@ -2306,6 +2451,58 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
     assert main(["--root", str(tmp_path), "health"]) == 0
 
 
+def test_cli_workspace_refresh_defaults_to_preview_without_mutating(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    write_config(tmp_path, config)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    manifests_before = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    }
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--rebuild-index",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    refreshed_id = payload["refreshed"][0]["source_id"]
+    assert payload["mutation"]["mode"] == "preview"
+    assert payload["mutation"]["mutates"] is False
+    assert payload["mutation"]["written"] == []
+    assert {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+    } == manifests_before
+    assert not (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
+    assert (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
+    assert {item["kind"] for item in payload["mutation"]["planned"]} >= {
+        "queue_record",
+        "run_record",
+        "source_manifest",
+        "source_summary_page",
+        "wiki_index",
+        "wiki_log",
+    }
+
+
 def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
     tmp_path: Path, capsys
 ) -> None:
@@ -2316,7 +2513,7 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     main(
@@ -2328,6 +2525,7 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
             "--changed",
             "--ingest",
             "--rebuild-index",
+            "--apply",
         ]
     )
     capsys.readouterr()
@@ -2339,6 +2537,7 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
             "workspace",
             "refresh",
             "--prune-superseded",
+            "--apply",
             "--json",
         ]
     )
@@ -2389,12 +2588,12 @@ def test_cli_workspace_refresh_changed_rebuilds_index_without_ingest(
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     capsys.readouterr()
 
     exit_code = main(
-        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--rebuild-index"]
+        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--rebuild-index", "--apply"]
     )
 
     assert exit_code == 0
@@ -2414,7 +2613,7 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_and_updates_topic_ref
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     main(
         [
@@ -2452,6 +2651,7 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_and_updates_topic_ref
             "--rebuild-index",
             "--prune-superseded",
             "--update-topic-refs",
+            "--apply",
             "--json",
         ]
     )
@@ -2517,7 +2717,7 @@ def test_cli_workspace_refresh_reports_skipped_superseded_prune_candidates(
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     main(
@@ -2529,6 +2729,7 @@ def test_cli_workspace_refresh_reports_skipped_superseded_prune_candidates(
             "--changed",
             "--ingest",
             "--rebuild-index",
+            "--apply",
         ]
     )
     old_summary = tmp_path / "wiki" / "sources" / f"{original_id}.md"
@@ -2542,6 +2743,7 @@ def test_cli_workspace_refresh_reports_skipped_superseded_prune_candidates(
             "workspace",
             "refresh",
             "--prune-superseded",
+            "--apply",
             "--json",
         ]
     )
@@ -2563,7 +2765,7 @@ def test_cli_workspace_refresh_ingests_only_refreshed_sources(tmp_path: Path, ca
     changed_source.write_text("# Changed\n\nOriginal.\n", encoding="utf-8")
     pending_source.write_text("# Pending\n\nQueued separately.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(changed_source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     main(["--root", str(tmp_path), "add-source", str(pending_source)])
     pending_id = next(
         load_source_record(path).source_id
@@ -2574,7 +2776,16 @@ def test_cli_workspace_refresh_ingests_only_refreshed_sources(tmp_path: Path, ca
     capsys.readouterr()
 
     exit_code = main(
-        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--ingest", "--json"]
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--apply",
+            "--json",
+        ]
     )
 
     assert exit_code == 0
@@ -2595,7 +2806,7 @@ def test_cli_workspace_refresh_reports_missing_source_as_unresolved(tmp_path: Pa
     source.unlink()
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed"])
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed", "--apply"])
 
     assert exit_code == 1
     out = capsys.readouterr().out
@@ -2625,7 +2836,7 @@ def test_cli_workspace_refresh_continues_valid_changed_source_when_another_sourc
     missing_source.unlink()
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed"])
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed", "--apply"])
 
     assert exit_code == 1
     out = capsys.readouterr().out
@@ -2661,7 +2872,9 @@ def test_cli_workspace_refresh_json_reports_skipped_missing_and_final_freshness(
     missing_source.unlink()
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed", "--json"])
+    exit_code = main(
+        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--apply", "--json"]
+    )
 
     assert exit_code == 1
     payload = json.loads(capsys.readouterr().out)
@@ -2694,7 +2907,7 @@ def test_cli_workspace_refresh_ingests_refreshed_valid_sources_despite_missing_s
     pending_source.write_text("# Pending\n\nQueued separately.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(changed_source)])
     main(["--root", str(tmp_path), "add-source", str(missing_source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     main(["--root", str(tmp_path), "add-source", str(pending_source)])
     pending_id = next(
         load_source_record(path).source_id
@@ -2706,7 +2919,16 @@ def test_cli_workspace_refresh_ingests_refreshed_valid_sources_despite_missing_s
     capsys.readouterr()
 
     exit_code = main(
-        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--ingest", "--json"]
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--apply",
+            "--json",
+        ]
     )
 
     assert exit_code == 1
@@ -2748,7 +2970,7 @@ def test_cli_workspace_refresh_continues_after_changed_source_refresh_failure(
     monkeypatch.setattr(workspace_module, "refresh_source", fail_one_source)
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed"])
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed", "--apply"])
 
     assert exit_code == 1
     out = capsys.readouterr().out
@@ -2772,7 +2994,7 @@ def test_cli_workspace_refresh_json_reports_failed_refresh_and_ingests_successes
     pending_source.write_text("# Pending\n\nQueued separately.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(ok_source)])
     main(["--root", str(tmp_path), "add-source", str(broken_source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     main(["--root", str(tmp_path), "add-source", str(pending_source)])
     pending_id = next(
         load_source_record(path).source_id
@@ -2791,7 +3013,16 @@ def test_cli_workspace_refresh_json_reports_failed_refresh_and_ingests_successes
     capsys.readouterr()
 
     exit_code = main(
-        ["--root", str(tmp_path), "workspace", "refresh", "--changed", "--ingest", "--json"]
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--apply",
+            "--json",
+        ]
     )
 
     assert exit_code == 1
@@ -2832,7 +3063,7 @@ def test_cli_workspace_refresh_human_output_is_path_first(tmp_path: Path, capsys
     source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed"])
+    exit_code = main(["--root", str(tmp_path), "workspace", "refresh", "--changed", "--apply"])
 
     assert exit_code == 0
     out = capsys.readouterr().out
@@ -2852,7 +3083,7 @@ def test_cli_pr_summary_reports_generated_state_without_mutating(tmp_path: Path,
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     write_queryable_wiki_page(
         tmp_path / "wiki" / "topics" / "brief.md",
         title="Brief synthesis",
@@ -2993,7 +3224,7 @@ def test_cli_pr_summary_respects_custom_layout_paths(tmp_path: Path, capsys) -> 
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     main(["--root", str(tmp_path), "lint"])
     capsys.readouterr()
 
@@ -3136,7 +3367,7 @@ def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, ca
     queue_path.write_text(queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 1
     assert f"Error: Queue item is already leased: ingest-{source_id}" in capsys.readouterr().out
@@ -3155,7 +3386,7 @@ def test_cli_source_refresh_preserves_dead_letter_protection(tmp_path: Path, cap
     queue_path.write_text(queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
 
     assert exit_code == 1
     out = capsys.readouterr().out
@@ -3620,7 +3851,7 @@ def test_cli_ingest_requires_exactly_one_target_mode() -> None:
 def test_cli_ingest_pending_reports_no_jobs(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert exit_code == 0
     captured = capsys.readouterr()
@@ -3631,16 +3862,18 @@ def test_cli_ingest_pending_json_reports_no_jobs(tmp_path: Path, capsys) -> None
     main(["--root", str(tmp_path), "init"])
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply", "--json"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
+    mutation = payload.pop("mutation")
     assert payload == {
         "total": 0,
         "summary": {"processed": 0, "succeeded": 0, "failed": 0, "skipped": 0},
         "items": [],
         "next_actions": [],
     }
+    assert mutation == {"mode": "apply", "mutates": False, "planned": [], "written": []}
 
 
 def test_cli_ingest_pending_reports_skipped_items(tmp_path: Path, capsys) -> None:
@@ -3661,13 +3894,44 @@ def test_cli_ingest_pending_reports_skipped_items(tmp_path: Path, capsys) -> Non
     )
     queue_path.write_text(queue_record.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert exit_code == 0
     captured = capsys.readouterr()
     assert f"{source_id}: skipped (lease active until 2099-01-01T00:00:00+00:00)" in captured.out
     assert "Drain summary: processed=0 succeeded=0 failed=0 skipped=1" in captured.out
     assert "No pending ingest jobs" not in captured.out
+
+
+def test_cli_ingest_pending_defaults_to_preview_without_mutating(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue_before = queue_path.read_text(encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["items"][0]["outcome"] == "planned"
+    assert payload["mutation"]["mode"] == "preview"
+    assert payload["mutation"]["mutates"] is False
+    assert payload["mutation"]["written"] == []
+    assert {item["kind"] for item in payload["mutation"]["planned"]} >= {
+        "queue_record",
+        "run_record",
+        "source_manifest",
+        "source_summary_page",
+        "wiki_index",
+        "wiki_log",
+    }
+    assert queue_path.read_text(encoding="utf-8") == queue_before
+    assert not (tmp_path / "wiki" / "sources" / f"{source_id}.md").exists()
+    assert not list((tmp_path / "state" / "runs").glob("*.json"))
 
 
 def test_cli_ingest_pending_prints_summary(tmp_path: Path, capsys) -> None:
@@ -3680,7 +3944,7 @@ def test_cli_ingest_pending_prints_summary(tmp_path: Path, capsys) -> None:
     source_id = manifest_paths[0].stem
     enqueue_ingest_job(tmp_path, source_id)
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert exit_code == 0
     captured = capsys.readouterr()
@@ -3696,7 +3960,7 @@ def test_cli_ingest_pending_json_reports_single_success_next_action(tmp_path: Pa
     source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply", "--json"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -3721,7 +3985,7 @@ def test_cli_ingest_pending_json_reports_batch_success_next_action(tmp_path: Pat
     main(["--root", str(tmp_path), "add-source", str(second)])
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply", "--json"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -3747,7 +4011,7 @@ def test_cli_ingest_pending_continues_after_failure(tmp_path: Path, capsys) -> N
     bad_source_id = next(path.stem for path in manifest_paths if path.stem != ok_source_id)
     enqueue_ingest_job(tmp_path, bad_source_id)
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert exit_code == 1
     captured = capsys.readouterr()
@@ -3775,7 +4039,7 @@ def test_cli_ingest_pending_json_reports_partial_failure(tmp_path: Path, capsys)
     )
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply", "--json"])
 
     assert exit_code == 1
     payload = json.loads(capsys.readouterr().out)
@@ -3805,7 +4069,7 @@ def test_cli_ingest_pending_reports_failed_and_skipped_mix(tmp_path: Path, capsy
     missing_source.unlink()
     enqueue_ingest_job(tmp_path, failing_source_id)
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert exit_code == 1
     captured = capsys.readouterr()
@@ -3854,7 +4118,7 @@ def test_cli_ingest_pending_json_reports_skipped_queue_states(tmp_path: Path, ca
         write_queue_item(queue_path, load_queue_item(queue_path).model_copy(update=queue_update))
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply", "--json"])
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)

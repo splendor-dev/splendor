@@ -1753,7 +1753,10 @@ def _next_actions(
             for action in suggested_actions[:5]
         )
     if status.queue_status_counts.get("pending", 0):
-        actions.append("Run `splendor ingest --pending` to drain pending source ingests.")
+        actions.append(
+            "Run `splendor ingest --pending` to preview pending source ingests, then add "
+            "`--apply` after review."
+        )
     if status.invalid_pages:
         actions.append("Fix invalid wiki pages before relying on synthesis or query output.")
     if status.sources_missing_synthesis:

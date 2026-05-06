@@ -786,22 +786,23 @@ Current implementation:
 - Mutating source commands use stricter selector resolution than lookup. Direct ingest accepts exact
   source IDs, exact logical IDs, exact path aliases/source refs, or exact unambiguous titles, not
   substring matches that can silently select the wrong source.
-- `splendor source refresh <source-id|title|path>` detects changed source content, registers the
-  current bytes as a new canonical source version when the checksum changed, and queues ingest via
-  the existing queue ledger while preserving active-lease and dead-letter protections.
+- `splendor source refresh <source-id|title|path>` detects changed source content and previews the
+  source manifest/artifact and queue writes needed to register current bytes as a new canonical
+  source version. Add `--apply` to write the new version and queue ingest via the existing queue
+  ledger while preserving active-lease and dead-letter protections.
   Stable logical source identities now remain constant for workspace-backed source paths across
   those content-addressed versions. Refresh also links changed versions with `supersedes` and
   `superseded_by` so health treats older workspace-backed manifests as historical records instead
   of active current-byte targets.
-- `splendor source update-path <source-id|logical-id|title|path> <new-path>` repairs an active
+- `splendor source update-path <source-id|logical-id|title|path> <new-path>` previews repair for an active
   `none`/`copy` storage workspace-backed source manifest after a curated file moves. It validates
   that the old path is missing unless `--force` is supplied, validates that the target is a
-  supported in-workspace file, rejects targets already curated by another active source, updates
-  the manifest's path/logical identity fields, and reports manifest/current checksums plus next
-  commands. Same-byte moves queue re-ingest for the existing source ID so generated provenance can
-  refresh; changed-byte moves are reported as partial repairs and point to `source refresh`. It
-  does not perform broad discovery, register uncurated files, rewrite historical run records, or
-  mutate maintained synthesis pages.
+  supported in-workspace file, rejects targets already curated by another active source, and reports
+  planned manifest/queue writes, manifest/current checksums, and next commands. Add `--apply` to
+  update the manifest's path/logical identity fields. Same-byte moves queue re-ingest for the
+  existing source ID so generated provenance can refresh; changed-byte moves are reported as
+  partial repairs and point to `source refresh`. It does not perform broad discovery, register
+  uncurated files, rewrite historical run records, or mutate maintained synthesis pages.
 - `splendor source forget <source-id|logical-id|title|path>` and
   `splendor source forget --matching <workspace-relative-glob>` are the CLI-first recovery path for
   polluted source registries. They preview by default and require `--apply` for destructive
@@ -826,14 +827,15 @@ Current implementation:
   `supersedes`/`superseded_by` manifest updates. It also repairs same-canonical one-way lifecycle
   links around the selected current version so interrupted reconciliation can be rerun. It rejects
   ambiguous selectors and cross-canonical reconciliation attempts instead of guessing.
-- `splendor workspace refresh --changed` safely refreshes only changed curated workspace-backed
+- `splendor workspace refresh --changed` safely previews refresh for changed curated workspace-backed
   sources by composing `source freshness` with the supersession-aware `source refresh` path. It
   reports missing or unsupported active curated workspace sources as skipped unresolved diagnostics,
   records per-source refresh failures without aborting the whole command, and can ingest only
-  refreshed sources' queue jobs with `--ingest`. Valid changed sources still refresh and ingest
-  even when unrelated curated sources are unresolved; the command exits non-zero while skipped
-  sources, failed refreshes, or targeted ingest failures remain. JSON output reports both initial
-  and final freshness counts plus skipped-source and failed-refresh diagnostics.
+  refreshed sources' queue jobs with `--ingest`. Add `--apply` to write the planned refresh,
+  targeted ingest, index, pruning, and topic-ref migration changes. Valid changed sources still
+  refresh and ingest even when unrelated curated sources are unresolved; the command exits non-zero
+  while skipped sources, failed refreshes, or targeted ingest failures remain. JSON output reports
+  both initial and final freshness counts plus skipped-source and failed-refresh diagnostics.
   `--rebuild-index`, `--prune-superseded`, and `--update-topic-refs` can run standalone or in the
   same invocation as changed-source refresh. A one-pass cleanup can run
   `workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index`,
@@ -874,13 +876,12 @@ Current implementation:
   image sources only enter OCR when `sources.ocr_enabled` is true; the current local provider reads
   adjacent sidecar text files named with `sources.ocr_sidecar_suffix` and writes normalized output
   under `derived/ocr/` plus sidecar checksum metadata under `derived/metadata/`.
-- `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
-  ingested, or points back to `wiki status` for batch follow-up. `--json` emits queue totals,
-  processed/succeeded/failed/skipped counts, per-item outcomes, and deterministic next actions.
-  The v0.4 external review round identified this as legacy mutate-on-call behavior: unlike newer
-  preview-first cleanup commands, `ingest --pending` drains the queue as soon as it runs. The next
-  durability update should either make this flow preview/apply-compatible or split the destructive
-  drain form from inspection so exploratory agent sessions are safe by default.
+- `splendor ingest --pending` previews actionable queue jobs by default and points to
+  `splendor ingest --pending --apply` when planned writes exist. `--json` emits queue totals,
+  processed/succeeded/failed/skipped counts, per-item outcomes, deterministic next actions, and a
+  `mutation` object. `--apply` drains the queue, writes source-summary/run/source/index/log state,
+  and prints the next `wiki suggest` command when exactly one source was ingested, or points back to
+  `wiki status` for batch follow-up.
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
   machine-generated, invalid-page, actionable synthesis-review, and missing
   synthesis-follow-up counts, with optional JSON output.
@@ -898,15 +899,13 @@ Current implementation:
   agents can distinguish preview-only proposals, apply no-ops, and applied writes without parsing
   prose.
 - Preview/apply and direct-write CLI surfaces expose consistent mutation signals where natural:
-  `source forget`, `source reconcile`, `source refresh`, `workspace refresh`, and `queue clean`
-  JSON include `mutation.mode`, `mutation.mutates`, `mutation.planned`, and `mutation.written`;
-  human output labels preview mode as non-mutating and apply/direct mode as writing workspace
-  state.
-- Post-v0.4 external reviews tightened the target: agent-facing maintenance and workflow commands
-  should not require per-command memory to know whether they mutate. Legacy direct-write surfaces
-  such as `ingest --pending`, `source refresh`, `source update-path`, and `workspace refresh`
-  should move toward explicit preview/apply or equally clear direct-write contracts before larger
-  post-v1 product bets such as vector search or mutating web review.
+  `ingest --pending`, `source forget`, `source reconcile`, `source refresh`,
+  `source update-path`, `workspace refresh`, and `queue clean` JSON include `mutation.mode`,
+  `mutation.mutates`, `mutation.planned`, and `mutation.written`; human output labels preview mode
+  as non-mutating and apply/direct mode as writing workspace state.
+- `M19-P5.1` harmonizes the legacy V04-F1 direct-write surfaces named by external reviewers:
+  `ingest --pending`, `source refresh`, `source update-path`, and `workspace refresh` are
+  preview-first and require explicit `--apply` for state-changing workflow maintenance.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
   pages themselves.

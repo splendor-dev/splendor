@@ -351,7 +351,7 @@ def add_topic_page(
     )
 
 
-def rebuild_wiki_index(root: Path) -> WikiIndexRebuildResult:
+def plan_wiki_index_rebuild(root: Path) -> WikiIndexRebuildResult:
     config = load_config(root)
     layout = resolve_layout(root, config)
     pages, invalid_pages = load_wiki_pages(root, layout)
@@ -371,14 +371,33 @@ def rebuild_wiki_index(root: Path) -> WikiIndexRebuildResult:
         for page in pages
     ]
     entries.sort(key=lambda entry: (entry.kind, entry.title.casefold(), entry.path))
-    content = _render_rebuilt_index(entries)
-    write_text_atomic(layout.index_file, content)
     section_counts = Counter(entry.kind for entry in entries)
     return WikiIndexRebuildResult(
         path=_relative(root, layout.index_file),
         page_count=len(entries),
         sections={kind: section_counts[kind] for kind in _INDEX_KIND_ORDER if section_counts[kind]},
     )
+
+
+def rebuild_wiki_index(root: Path) -> WikiIndexRebuildResult:
+    result = plan_wiki_index_rebuild(root)
+    config = load_config(root)
+    layout = resolve_layout(root, config)
+    pages, _invalid_pages = load_wiki_pages(root, layout)
+    entries = [
+        WikiIndexEntry(
+            kind=page.frontmatter.kind,
+            title=page.frontmatter.title,
+            page_id=page.frontmatter.page_id,
+            path=page.path,
+            status=page.frontmatter.status,
+            review_state=page.frontmatter.review_state,
+        )
+        for page in pages
+    ]
+    entries.sort(key=lambda entry: (entry.kind, entry.title.casefold(), entry.path))
+    write_text_atomic(layout.index_file, _render_rebuilt_index(entries))
+    return result
 
 
 def _render_rebuilt_index(entries: list[WikiIndexEntry]) -> str:
