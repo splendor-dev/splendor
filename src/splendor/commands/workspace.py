@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from splendor.commands.ingest import DrainItemResult, DrainResult, run_ingest_job
-from splendor.commands.mutation import mutation_contract, mutation_record
+from splendor.commands.mutation import dedupe_mutation_records, mutation_contract, mutation_record
 from splendor.commands.source import (
     SourceFreshnessItem,
     SourceFreshnessResult,
@@ -639,21 +639,29 @@ def workspace_refresh_written_records(
     if result.index is not None:
         records.append(mutation_record(action="write", path=result.index.path, kind="wiki_index"))
     if result.pruning is not None:
-        records.extend(
-            mutation_record(
-                action="delete",
-                path=item.path,
-                kind="source_summary_page",
-                source_id=item.source_id,
+        for item in result.pruning.pruned:
+            records.extend(
+                [
+                    mutation_record(
+                        action="delete",
+                        path=item.path,
+                        kind="source_summary_page",
+                        source_id=item.source_id,
+                    ),
+                    mutation_record(
+                        action="write",
+                        path=item.manifest_path,
+                        kind="source_manifest",
+                        source_id=item.source_id,
+                    ),
+                ]
             )
-            for item in result.pruning.pruned
-        )
     if result.topic_ref_migration is not None:
         records.extend(
             mutation_record(action="write", path=item.path, kind="maintained_wiki_page")
             for item in result.topic_ref_migration.updated
         )
-    return sorted(records, key=lambda item: (item["kind"], item["path"], item["action"]))
+    return dedupe_mutation_records(records)
 
 
 def _ingest_written_records(root: Path, result: DrainResult) -> list[dict[str, str]]:

@@ -2226,6 +2226,9 @@ def test_cli_workspace_refresh_rebuilds_index_standalone(tmp_path: Path, capsys)
 
 def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    write_config(tmp_path, config)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
@@ -2353,6 +2356,25 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
             "manifest_path": f"state/manifests/sources/{original_id}.json",
         }
     ]
+    assert payload["mutation"] == {
+        "mode": "apply",
+        "mutates": True,
+        "planned": [],
+        "written": [
+            {
+                "action": "write",
+                "path": f"state/manifests/sources/{original_id}.json",
+                "kind": "source_manifest",
+                "source_id": original_id,
+            },
+            {
+                "action": "delete",
+                "path": f"wiki/sources/{original_id}.md",
+                "kind": "source_summary_page",
+                "source_id": original_id,
+            },
+        ],
+    }
     assert not (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
     original_manifest = load_source_record(
         tmp_path / "state" / "manifests" / "sources" / f"{original_id}.json"
@@ -2451,6 +2473,20 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_and_updates_topic_ref
             "replacements": {original_id: refreshed_id},
         }
     ]
+    written_records = {
+        (item["action"], item["kind"], item["path"], item.get("source_id"))
+        for item in payload["mutation"]["written"]
+    }
+    assert written_records >= {
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{original_id}.json",
+            original_id,
+        ),
+        ("delete", "source_summary_page", f"wiki/sources/{original_id}.md", original_id),
+        ("write", "maintained_wiki_page", "wiki/topics/brief-synthesis.md", None),
+    }
     assert not (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
     assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
     original_manifest = load_source_record(
