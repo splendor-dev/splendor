@@ -2211,6 +2211,44 @@ def test_agent_context_explicit_since_empty_range_does_not_fallback_to_head(
     assert payload["git_context"]["commits"] == []
 
 
+def test_agent_context_multiline_commit_body_does_not_become_changed_paths(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    context_file = tmp_path / "src" / "context.py"
+    context_file.parent.mkdir()
+    context_file.write_text("VALUE = 'initial'\n", encoding="utf-8")
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    context_file.write_text("VALUE = 'm18 handoff'\n", encoding="utf-8")
+    _git(
+        tmp_path,
+        "add",
+        "src/context.py",
+    )
+    _git(
+        tmp_path,
+        "commit",
+        "-m",
+        "M18 multiline body context",
+        "-m",
+        "Body mentions docs/not-a-changed-path.md\nand tests/not_a_changed_path.py.",
+    )
+    _install_fake_gh(tmp_path, monkeypatch, issues=[], prs=[])
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "m18", "handoff", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    paths = payload["git_context"]["commits"][0]["paths"]
+    assert "src/context.py" in paths
+    assert "docs/not-a-changed-path.md" not in paths
+    assert "tests/not_a_changed_path.py." not in paths
+
+
 def test_suggest_next_uses_wiki_authority_metadata_but_skips_source_summaries(
     tmp_path: Path, capsys
 ) -> None:
@@ -2664,7 +2702,18 @@ def test_suggest_next_json_ranks_changed_sources_before_review_work(tmp_path: Pa
     source.write_text("# Handoff\n\nUpdated briefing state.\n", encoding="utf-8")
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "suggest-next", "source", "refresh", "--json"])
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "please",
+            "refresh",
+            "sources",
+            "now",
+            "--json",
+        ]
+    )
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)

@@ -186,6 +186,48 @@ _MAINTENANCE_GOAL_TOKENS = {
     "synthesis",
     "freshness",
 }
+_MAINTENANCE_GOAL_FILLER_TOKENS = {
+    "a",
+    "about",
+    "after",
+    "all",
+    "an",
+    "and",
+    "at",
+    "can",
+    "check",
+    "could",
+    "do",
+    "for",
+    "get",
+    "give",
+    "go",
+    "in",
+    "into",
+    "is",
+    "look",
+    "me",
+    "my",
+    "now",
+    "of",
+    "on",
+    "our",
+    "please",
+    "run",
+    "show",
+    "state",
+    "status",
+    "tell",
+    "that",
+    "the",
+    "this",
+    "to",
+    "up",
+    "what",
+    "with",
+    "would",
+    "you",
+}
 
 
 @dataclass(frozen=True)
@@ -949,7 +991,16 @@ def _tokens(text: str) -> set[str]:
 
 
 def _is_maintenance_goal(goal_tokens: set[str]) -> bool:
-    return bool(goal_tokens and goal_tokens <= _MAINTENANCE_GOAL_TOKENS)
+    meaningful_tokens = goal_tokens - _MAINTENANCE_GOAL_FILLER_TOKENS
+    if not meaningful_tokens:
+        return False
+    maintenance_matches = meaningful_tokens & _MAINTENANCE_GOAL_TOKENS
+    if not maintenance_matches:
+        return False
+    non_maintenance_tokens = meaningful_tokens - _MAINTENANCE_GOAL_TOKENS
+    if not non_maintenance_tokens:
+        return True
+    return len(maintenance_matches) >= 2 and len(maintenance_matches) >= len(non_maintenance_tokens)
 
 
 def _flatten_handoff_values(value) -> list[str]:
@@ -1112,7 +1163,7 @@ def _git_commits(
     args = ["log", "--first-parent", f"--max-count={_GIT_CONTEXT_LIMIT * 4}"]
     if range_ref is not None:
         args.append(range_ref)
-    args.extend(["--pretty=format:%H%x1f%h%x1f%s%x1f%b%x1e", "--name-only"])
+    args.append("--pretty=format:%H%x1f%h%x1f%s%x1e")
     output = _git_output(root, args, required=False)
     if not output and range_ref is not None and not explicit_since:
         output = _git_output(
@@ -1121,8 +1172,7 @@ def _git_commits(
                 "log",
                 "--first-parent",
                 f"--max-count={_GIT_CONTEXT_LIMIT * 4}",
-                "--pretty=format:%H%x1f%h%x1f%s%x1f%b%x1e",
-                "--name-only",
+                "--pretty=format:%H%x1f%h%x1f%s%x1e",
             ],
             required=False,
         )
@@ -1130,14 +1180,23 @@ def _git_commits(
     goal_phrase = _normalize_goal_phrase(goal or "")
     commits: list[GitCommitBrief] = []
     for entry in (output or "").split("\x1e"):
-        lines = [line for line in entry.splitlines() if line.strip()]
-        if not lines:
+        stripped_entry = entry.strip()
+        if not stripped_entry:
             continue
-        header = lines[0].split("\x1f")
-        if len(header) < 4:
+        header = stripped_entry.split("\x1f")
+        if len(header) < 3:
             continue
-        sha, short_sha, subject, body = header[:4]
-        paths = sorted(dict.fromkeys(line.strip() for line in lines[1:] if line.strip()))
+        sha, short_sha, subject = header[:3]
+        body = _git_output(root, ["log", "-1", "--pretty=format:%B", sha], required=False) or ""
+        path_output = (
+            _git_output(
+                root, ["show", "--pretty=format:", "--name-only", sha, "--"], required=False
+            )
+            or ""
+        )
+        paths = sorted(
+            dict.fromkeys(line.strip() for line in path_output.splitlines() if line.strip())
+        )
         relevance_score = _goal_relevance_score(
             goal_tokens,
             goal_phrase=goal_phrase,
