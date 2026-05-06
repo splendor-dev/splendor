@@ -48,8 +48,9 @@
 │   ├── splendor_mvp_to_v1_roadmap.md
 │   ├── source_resolution_refactor_plan.md
 │   ├── schema_contracts.md
-│   ├── ci_and_repo_automation.md
-│   └── github_automation_architecture.md
+│   └── operations/
+│       ├── ci_and_repo_automation.md
+│       └── github_automation_architecture.md
 └── .github/workflows/
     ├── ci.yml
     ├── pr-agent-context-refresh.yml
