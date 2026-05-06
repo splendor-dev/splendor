@@ -314,12 +314,13 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [Product spec](docs/splendor_product_spec.md)
 - [Roadmap](docs/splendor_mvp_to_v1_roadmap.md)
 - [v0.4 external retry bar](docs/evaluations/v0_4_external_retry_bar.md)
+- [v0.4.0 release notes](docs/releases/v0_4_0_release_notes.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P2.1`
-- Current planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Current PR sub-slice: `M19-P3.1`
+- Previous completed PR sub-slice: `M19-P3.1`
+- Current planned slice: `v0.4.0 release preparation`
+- Current PR sub-slice: `v0.4.0-release-prep`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M20 post-v1 product bets`
 - Next planned PR sub-slice: `M20-P1.1`
