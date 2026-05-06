@@ -292,7 +292,10 @@ Implemented fields:
   records, queue jobs, manifests, wiki pages, run records, reports, or GitHub state. Human output
   is path-first where possible; `--json` emits ranked action objects with category, priority,
   title, reason, command, path, optional URL, source ID/source ref, planning/page record IDs, and a
-  deterministic `relevance_score` when available.
+  deterministic `relevance_score` when available. Runtime authority entries also expose `origin`,
+  `curation_state`, and `curation_commands`; provisional uncurated authority is repeated under
+  `provisional_context` so agents can use it without confusing it for configured or curated source
+  authority.
 - Suggested actions are derived from local git commits, best-effort read-only GitHub issue/PR
   context through `gh` when available, source freshness, queue operator state, invalid/stale/
   contested/review-needed wiki pages, ingested sources missing maintained synthesis follow-up,

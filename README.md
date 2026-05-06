@@ -302,12 +302,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M18-P0.1`
+- Previous completed PR sub-slice: `M18-P1.1`
 - Current planned slice: `M18 v0.4 work-first agent handoff`
-- Current PR sub-slice: `M18-P1.1`
+- Current PR sub-slice: `M18-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M18 v0.4 work-first agent handoff`
-- Next planned PR sub-slice: `M18-P2.1`
+- Next planned PR sub-slice: `M18-P3.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -384,10 +384,12 @@ maintenance reports, and query matches for the optional goal. `brief --agent-con
 with the same suggested work before the lower-level metadata lists. Use `--json` on either command
 for machine handoff.
 
-`M18-P1.1` adds runtime-only git-aware handoff context to those same surfaces. For non-maintenance
-goals, open work threads, relevant commits, configured authority, active planning, changed/read-first
-files, and goal matches rank ahead of source freshness, queue, wiki review, synthesis, lint, and
-health maintenance. Maintenance-focused goals can still keep maintenance actions first.
+`M18-P1.1` adds runtime-only git-aware handoff context to those same surfaces. `M18-P2.1` adds
+runtime-only inferred authority fallback and provisional uncurated-document context. For
+non-maintenance goals, open work threads, relevant commits, configured authority, inferred current
+planning/policy context, active planning, changed/read-first files, and goal matches rank ahead of
+source freshness, queue, wiki review, synthesis, lint, and health maintenance. Maintenance-focused
+goals can still keep maintenance actions first.
 
 `M13-P2.5` is implemented: source-summary pages now keep readable in-repo source summaries compact
 and claim-bearing by default, while external, copied, parsed PDF, and OCR-derived sources keep
@@ -584,5 +586,5 @@ agent reached for when resuming real work. The v0.4 path therefore prioritizes g
 work-first handoff before vector search or mutating web review workflows.
 
 `M18-P1.1` implements the first v0.4 handoff step: git-aware work context and structural
-work/maintenance separation. Broader inferred-authority fallback and provisional uncurated-doc
-context remain planned for `M18-P2.1`.
+work/maintenance separation. `M18-P2.1` adds labeled inferred-authority fallback for conventional
+planning and policy paths plus provisional uncurated-doc context with exact curation commands.

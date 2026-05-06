@@ -110,7 +110,19 @@ _MAINTENANCE_CATEGORIES = {
     "query",
 }
 _SUGGESTION_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
-_AUTHORITY_LIMIT = 6
+_AUTHORITY_LIMIT = 8
+_AUTHORITY_SOURCE_SCORE = {
+    "configured-authority": 18,
+    "wiki-authority": 16,
+    "planning-decision": 14,
+    "inferred-authority": 0,
+}
+_AUTHORITY_ORIGIN_ORDER = {
+    "configured-authority": 0,
+    "wiki-authority": 0,
+    "planning-decision": 0,
+    "inferred-authority": 1,
+}
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
 _AUTHORITY_ROLE_ORDER = {
     "current-authority": 0,
@@ -228,6 +240,26 @@ _MAINTENANCE_GOAL_FILLER_TOKENS = {
     "would",
     "you",
 }
+_INFERRED_CONTEXT_FILLER_TOKENS = _MAINTENANCE_GOAL_FILLER_TOKENS | {
+    "agent",
+    "critical",
+    "current",
+    "doc",
+    "docs",
+    "file",
+    "implementation",
+    "next",
+    "path",
+    "plan",
+    "planning",
+    "project",
+    "read",
+    "repo",
+    "roadmap",
+    "step",
+    "test",
+    "tests",
+}
 
 
 @dataclass(frozen=True)
@@ -265,6 +297,9 @@ class AuthorityBrief:
     lifecycle: str
     score: int
     reason: str
+    origin: str
+    curation_state: str
+    curation_commands: list[str]
     issue_refs: list[str]
     pr_refs: list[str]
     supersedes: list[str]
@@ -374,6 +409,7 @@ class SuggestNextResult:
     git_context: GitContext
     work_actions: list[SuggestedAction]
     maintenance_actions: list[SuggestedAction]
+    provisional_context: list[AuthorityBrief]
 
 
 @dataclass(frozen=True)
@@ -417,6 +453,7 @@ class ProjectBrief:
     suggested_actions: list[SuggestedAction]
     work_actions: list[SuggestedAction]
     maintenance_actions: list[SuggestedAction]
+    provisional_context: list[AuthorityBrief]
     git_context: GitContext
     next_actions: list[str]
 
@@ -450,6 +487,7 @@ def build_project_brief(
         suggested_actions=suggested_actions,
         work_actions=work_actions,
         maintenance_actions=maintenance_actions,
+        provisional_context=_provisional_authority_briefs(snapshot.authority_briefs),
         git_context=snapshot.git_context,
         next_actions=next_actions,
     )
@@ -475,6 +513,7 @@ def build_suggest_next(
         git_context=snapshot.git_context,
         work_actions=work_actions,
         maintenance_actions=maintenance_actions,
+        provisional_context=_provisional_authority_briefs(snapshot.authority_briefs),
     )
 
 
@@ -522,7 +561,7 @@ def _collect_brief_state(
     sources_by_id = {source.source_id: source for source in sources}
     wiki_pages, invalid_wiki_pages = load_wiki_pages(root, layout)
     authority_briefs, authority_warnings = _authority_briefs(
-        root, layout, config, wiki_pages, normalized_goal or None
+        root, layout, config, wiki_pages, sources, normalized_goal or None
     )
     warnings.extend(authority_warnings)
     recent_sources = _recent_sources(sources)
@@ -698,7 +737,14 @@ def _active_planning_items(
     return items[:_BRIEF_PLANNING_LIMIT], warnings, generated_review_task_count
 
 
-def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot], goal: str | None):
+def _authority_briefs(
+    root: Path,
+    layout,
+    config,
+    pages: list[WikiPageSnapshot],
+    sources: list[SourceRecord],
+    goal: str | None,
+):
     items: list[AuthorityBrief] = []
     warnings: list[BriefWarning] = []
     goal_tokens = _tokens(goal or "")
@@ -730,6 +776,7 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             role=doc.role,
             freshness=doc.freshness,
             lifecycle=lifecycle,
+            origin="configured-authority",
             goal_tokens=goal_tokens,
             goal_phrase=goal_phrase,
             high_text=" ".join([title, path.as_posix(), " ".join(doc.applies_to)]),
@@ -748,6 +795,9 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
                 lifecycle=lifecycle,
                 score=score,
                 reason=reason,
+                origin="configured-authority",
+                curation_state="configured",
+                curation_commands=[],
                 issue_refs=doc.issue_refs,
                 pr_refs=doc.pr_refs,
                 supersedes=doc.supersedes,
@@ -773,6 +823,7 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
             role=page.frontmatter.authority_role,
             freshness=freshness,
             lifecycle=lifecycle,
+            origin="wiki-authority",
             goal_tokens=goal_tokens,
             goal_phrase=goal_phrase,
             high_text=" ".join(
@@ -809,6 +860,9 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
                 lifecycle=lifecycle,
                 score=score,
                 reason=reason,
+                origin="wiki-authority",
+                curation_state="curated",
+                curation_commands=[],
                 issue_refs=page.frontmatter.issue_refs,
                 pr_refs=page.frontmatter.pr_refs,
                 supersedes=page.frontmatter.supersedes,
@@ -817,11 +871,13 @@ def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot],
         )
 
     items.extend(_decision_authority_briefs(root, layout, goal_tokens, goal_phrase))
+    items.extend(_inferred_authority_briefs(root, config, sources, goal_tokens, goal_phrase, items))
     ranked = sorted(
         enumerate(items),
         key=lambda item: (
             _AUTHORITY_LIFECYCLE_TIER.get(item[1].lifecycle, 99),
             _AUTHORITY_FRESHNESS_ORDER.get(item[1].freshness, 99),
+            _AUTHORITY_ORIGIN_ORDER.get(item[1].origin, 99),
             -item[1].score,
             _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
             _AUTHORITY_LIFECYCLE_ORDER.get(item[1].lifecycle, 99),
@@ -840,6 +896,7 @@ def _authority_score(
     role: str,
     freshness: str,
     lifecycle: str,
+    origin: str,
     goal_tokens: set[str],
     goal_phrase: str = "",
     high_text: str = "",
@@ -851,6 +908,7 @@ def _authority_score(
         _AUTHORITY_ROLE_SCORE.get(role, 0)
         + _AUTHORITY_FRESHNESS_SCORE.get(freshness, 0)
         + _AUTHORITY_LIFECYCLE_SCORE.get(lifecycle, 0)
+        + _AUTHORITY_SOURCE_SCORE.get(origin, 0)
     )
     score += _goal_relevance_score(
         goal_tokens,
@@ -938,6 +996,7 @@ def _decision_authority_briefs(
                     role="decision",
                     freshness=freshness,
                     lifecycle=lifecycle,
+                    origin="planning-decision",
                     goal_tokens=goal_tokens,
                     goal_phrase=goal_phrase,
                     high_text=" ".join([record.title, record.decision_id, path.name]),
@@ -957,6 +1016,9 @@ def _decision_authority_briefs(
                     low_text=text,
                 ),
                 reason=reason,
+                origin="planning-decision",
+                curation_state="planning-record",
+                curation_commands=[],
                 issue_refs=record.issue_refs,
                 pr_refs=record.pr_refs,
                 supersedes=record.supersedes,
@@ -964,6 +1026,206 @@ def _decision_authority_briefs(
             )
         )
     return items
+
+
+def _inferred_authority_briefs(
+    root: Path,
+    config,
+    sources: list[SourceRecord],
+    goal_tokens: set[str],
+    goal_phrase: str,
+    existing_items: list[AuthorityBrief],
+) -> list[AuthorityBrief]:
+    configured_paths = {doc.path for doc in config.briefing.authority_documents}
+    existing_paths = {item.path for item in existing_items}
+    excluded_paths = configured_paths | existing_paths
+    fallback_context_tokens = _inferred_root_context_tokens(root)
+    candidates: list[AuthorityBrief] = []
+    for path in _inferred_authority_candidate_paths(root):
+        if path.as_posix() in excluded_paths:
+            continue
+        absolute = root / path
+        try:
+            body = absolute.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        path_text = path.as_posix()
+        title = _title_from_markdown(body) or _inferred_authority_title(path)
+        role = _inferred_authority_role(path)
+        freshness = "current"
+        lifecycle = "current"
+        reason = _inferred_authority_reason(path)
+        gating_tokens = goal_tokens | fallback_context_tokens
+        relevance_score = _goal_relevance_score(
+            gating_tokens,
+            goal_phrase=goal_phrase,
+            high_text=" ".join([title, path_text]),
+            low_text=body,
+        )
+        if _inferred_authority_requires_goal_match(path) and relevance_score <= 0:
+            continue
+        curated_source = _curated_source_for_path(sources, path_text)
+        if curated_source is None:
+            curation_state = "provisional-uncurated"
+            curation_commands = [
+                f"splendor add-source {shlex.quote(path_text)}",
+                f"splendor ingest {shlex.quote(path_text)}",
+            ]
+            reason = (
+                f"{reason} Detected by filename/path heuristic; provisional until curated as a "
+                "source."
+            )
+        else:
+            curation_state = "curated"
+            curation_commands = []
+            reason = f"{reason} Detected by filename/path heuristic over a curated source."
+        candidates.append(
+            AuthorityBrief(
+                rank=0,
+                path=path_text,
+                title=title,
+                role=role,
+                freshness=freshness,
+                lifecycle=lifecycle,
+                score=_authority_score(
+                    role=role,
+                    freshness=freshness,
+                    lifecycle=lifecycle,
+                    origin="inferred-authority",
+                    goal_tokens=goal_tokens,
+                    goal_phrase=goal_phrase,
+                    high_text=" ".join([title, path_text]),
+                    medium_text=reason,
+                    low_text=body,
+                ),
+                reason=reason,
+                origin="inferred-authority",
+                curation_state=curation_state,
+                curation_commands=curation_commands,
+                issue_refs=[],
+                pr_refs=[],
+                supersedes=[],
+                superseded_by=None,
+            )
+        )
+    return candidates
+
+
+def _inferred_authority_candidate_paths(root: Path) -> list[Path]:
+    candidates: list[Path] = []
+    for name in (".agent-plan.md", "AGENTS.md", "CLAUDE.md", "README.md", "CONTRIBUTING.md"):
+        path = root / name
+        if path.is_file():
+            candidates.append(Path(name))
+    docs_dir = root / "docs"
+    if docs_dir.is_dir():
+        for path in sorted(docs_dir.rglob("*.md")):
+            relative = path.relative_to(root)
+            if _is_inferred_docs_authority_path(relative):
+                candidates.append(relative)
+    tests_dir = root / "tests"
+    if tests_dir.is_dir():
+        for path in sorted(tests_dir.rglob("test_planning*.py")):
+            candidates.append(path.relative_to(root))
+    return sorted(dict.fromkeys(candidates), key=lambda item: item.as_posix())
+
+
+def _inferred_root_context_tokens(root: Path) -> set[str]:
+    tokens: set[str] = set()
+    for name in (".agent-plan.md", "README.md", "CONTRIBUTING.md"):
+        path = root / name
+        if not path.is_file():
+            continue
+        try:
+            body = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        tokens.update(_tokens(body) - _INFERRED_CONTEXT_FILLER_TOKENS)
+    return tokens
+
+
+def _inferred_authority_requires_goal_match(path: Path) -> bool:
+    return path.as_posix() not in {
+        ".agent-plan.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md",
+        "CONTRIBUTING.md",
+    }
+
+
+def _is_inferred_docs_authority_path(path: Path) -> bool:
+    name = path.name.lower()
+    return any(
+        marker in name
+        for marker in (
+            "roadmap",
+            "plan",
+            "planning",
+            "policy",
+            "policies",
+            "guideline",
+            "guidelines",
+        )
+    )
+
+
+def _inferred_authority_role(path: Path) -> str:
+    path_text = path.as_posix().lower()
+    name = path.name.lower()
+    if path_text == ".agent-plan.md" or "roadmap" in name or "plan" in name:
+        return "roadmap"
+    if path_text in {"agents.md", "claude.md", "readme.md"} or "policy" in name:
+        return "current-authority"
+    return "reference"
+
+
+def _inferred_authority_reason(path: Path) -> str:
+    path_text = path.as_posix()
+    name = path.name.lower()
+    if path_text == ".agent-plan.md":
+        return "Inferred current planning state from the conventional agent-plan file."
+    if path_text in {"AGENTS.md", "CLAUDE.md"}:
+        return "Inferred agent policy authority from a conventional repo-root policy file."
+    if path_text == "README.md":
+        return "Inferred project orientation authority from the repo README."
+    if path_text == "CONTRIBUTING.md":
+        return "Inferred contributor workflow context from the repo contributing guide."
+    if "roadmap" in name or "plan" in name:
+        return "Inferred roadmap or planning authority from a conventional docs path."
+    if "policy" in name or "guideline" in name:
+        return "Inferred policy context from a conventional docs path."
+    return "Inferred planning regression context from a conventional tests path."
+
+
+def _inferred_authority_title(path: Path) -> str:
+    if path.as_posix() == ".agent-plan.md":
+        return "Agent Plan"
+    return path.stem.replace("_", " ").replace("-", " ").title()
+
+
+def _curated_source_for_path(sources: list[SourceRecord], path: str) -> SourceRecord | None:
+    for source in sources:
+        if source.superseded_by is not None:
+            continue
+        identities = {
+            source.path,
+            canonical_source_ref(source),
+            source.original_path or "",
+            source.source_ref or "",
+            *source.aliases,
+        }
+        if path in identities:
+            return source
+    return None
+
+
+def _provisional_authority_briefs(items: list[AuthorityBrief]) -> list[AuthorityBrief]:
+    return [item for item in items if item.curation_state == "provisional-uncurated"]
+
+
+def _curated_authority_briefs(items: list[AuthorityBrief]) -> list[AuthorityBrief]:
+    return [item for item in items if item.curation_state != "provisional-uncurated"]
 
 
 def _derived_authority_freshness(frontmatter: KnowledgePageFrontmatter) -> str:
@@ -1700,13 +1962,24 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
         title = (
             f"Review decision {authority.path}"
             if authority.role == "decision"
+            else f"Read provisional doc {authority.path}"
+            if authority.curation_state == "provisional-uncurated"
             else f"Read authority doc {authority.path}"
+        )
+        command_note = (
+            " Curate with: " + "; ".join(authority.curation_commands)
+            if authority.curation_commands
+            else ""
         )
         add(
             priority,
             "authority",
             title,
-            f"{authority.role}/{authority.freshness}/{authority.lifecycle}: {authority.reason}",
+            (
+                f"{authority.role}/{authority.freshness}/{authority.lifecycle}/"
+                f"{authority.origin}/{authority.curation_state}: {authority.reason}"
+                f"{command_note}"
+            ),
             None,
             path=authority.path,
             relevance_score=authority.score,
@@ -1942,6 +2215,9 @@ def render_suggest_next_json(result: SuggestNextResult) -> str:
             },
             "matches": [asdict(match) for match in result.matches],
             "authority_briefs": [asdict(brief) for brief in result.authority_briefs],
+            "provisional_context": {
+                "authority": [asdict(brief) for brief in result.provisional_context]
+            },
             "planning_items": [asdict(item) for item in result.planning_items],
             "latest_reports": [asdict(report) for report in result.latest_reports],
             "warnings": [asdict(warning) for warning in result.warnings],
@@ -1958,6 +2234,9 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
             "status": asdict(brief.status),
             "matches": [asdict(match) for match in brief.matches],
             "authority_briefs": [asdict(item) for item in brief.authority_briefs],
+            "provisional_context": {
+                "authority": [asdict(item) for item in brief.provisional_context]
+            },
             "planning_items": [asdict(item) for item in brief.planning_items],
             "recent_sources": [asdict(source) for source in brief.recent_sources],
             "recent_runs": [asdict(run) for run in brief.recent_runs],
@@ -1994,6 +2273,9 @@ def render_agent_context_json(brief: ProjectBrief) -> str:
             },
             "matches": [asdict(match) for match in brief.matches],
             "authority_briefs": [asdict(item) for item in brief.authority_briefs],
+            "provisional_context": {
+                "authority": [asdict(item) for item in brief.provisional_context]
+            },
             "source_refs": _agent_context_source_refs(brief),
             "git_context": asdict(brief.git_context),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],

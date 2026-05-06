@@ -2214,14 +2214,25 @@ def handle_brief(args: argparse.Namespace) -> int:
         print("Relevant records:")
         for match in result.matches:
             print(f"- {match.path} [{match.kind}] score={match.score}: {match.title}")
-    if result.authority_briefs:
+    curated_authority = _curated_authority_briefs(result.authority_briefs)
+    if curated_authority:
         print("Authority docs:")
-        for item in result.authority_briefs:
+        for item in curated_authority:
             refs = _authority_link_summary(item)
             print(
-                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}] "
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}/{item.origin}] "
                 f"score={item.score}: {item.title}{refs}"
             )
+    if result.provisional_context:
+        print("Provisional uncurated docs:")
+        for item in result.provisional_context:
+            commands = "; ".join(item.curation_commands)
+            print(
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}/"
+                f"{item.origin}/{item.curation_state}] score={item.score}: {item.title}"
+            )
+            if commands:
+                print(f"  Curate: {commands}")
     if result.planning_items:
         print("Active planning:")
         for item in result.planning_items:
@@ -2303,14 +2314,25 @@ def _print_agent_context(result: ProjectBrief) -> None:
             print(f"- {match.path} [{match.kind}] score={match.score} sources={source_refs}")
             if match.snippet:
                 print(f"  {match.snippet}")
-    if result.authority_briefs:
+    curated_authority = _curated_authority_briefs(result.authority_briefs)
+    if curated_authority:
         print("Authority docs:")
-        for item in result.authority_briefs[:5]:
+        for item in curated_authority[:5]:
             refs = _authority_link_summary(item)
             print(
-                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}] "
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}/{item.origin}] "
                 f"score={item.score} {item.title}{refs}"
             )
+    if result.provisional_context:
+        print("Provisional uncurated docs:")
+        for item in result.provisional_context[:5]:
+            commands = "; ".join(item.curation_commands)
+            print(
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}/"
+                f"{item.origin}/{item.curation_state}] score={item.score} {item.title}"
+            )
+            if commands:
+                print(f"  Curate: {commands}")
     if result.planning_items:
         print("Active planning:")
         for item in result.planning_items:
@@ -2390,6 +2412,24 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
                 f"target={target}{command}{url}"
             )
             print(f"   Reason: {action.reason}")
+    curated_authority = _curated_authority_briefs(result.authority_briefs)
+    if curated_authority:
+        print("Authority docs:")
+        for item in curated_authority[:5]:
+            print(
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}/{item.origin}] "
+                f"score={item.score} {item.title}"
+            )
+    if result.provisional_context:
+        print("Provisional uncurated docs:")
+        for item in result.provisional_context[:5]:
+            commands = "; ".join(item.curation_commands)
+            print(
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}/"
+                f"{item.origin}/{item.curation_state}] score={item.score} {item.title}"
+            )
+            if commands:
+                print(f"  Curate: {commands}")
     print(
         "Splendor maintenance: "
         f"changed_sources={result.freshness.changed} "
@@ -2425,6 +2465,10 @@ def _authority_link_summary(item) -> str:
     if item.supersedes:
         refs.append("supersedes=" + ",".join(item.supersedes))
     return "" if not refs else " " + " ".join(refs)
+
+
+def _curated_authority_briefs(items) -> list:
+    return [item for item in items if item.curation_state != "provisional-uncurated"]
 
 
 def handle_serve(args: argparse.Namespace) -> int:
