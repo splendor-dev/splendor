@@ -812,6 +812,13 @@ Current implementation:
   derived artifacts, and source-owned materialized artifacts. Maintained wiki/planning references,
   malformed generated pages, mixed historical records, and unsafe artifact paths are reported for
   operator review rather than rewritten.
+- `splendor queue clean --orphaned|--superseded|--completed` is the CLI-first closure path for
+  stale ingest queue records that no longer represent work. The command previews by default,
+  requires `--apply` before deleting queue JSON, and emits the same additive `mutation` object as
+  other preview/apply surfaces. It deletes only valid source-owned ingest queue records that are
+  not actively leased. Missing source-manifest payloads are orphaned, queues for superseded source
+  versions are superseded, and `done` queues are completed. Invalid payload refs, unsupported job
+  types, active leases, and source/job mismatches are skipped with explicit reasons.
 - `splendor source reconcile <source-id|logical-id|title|path>` is the CLI-first repair path for
   duplicate active versions of the same canonical source ref. The command previews by default,
   selects the latest active version unless an exact source ID or `--current` selector names the
@@ -887,9 +894,10 @@ Current implementation:
   agents can distinguish preview-only proposals, apply no-ops, and applied writes without parsing
   prose.
 - Preview/apply and direct-write CLI surfaces expose consistent mutation signals where natural:
-  `source forget`, `source reconcile`, `source refresh`, and `workspace refresh` JSON include
-  `mutation.mode`, `mutation.mutates`, `mutation.planned`, and `mutation.written`; human output
-  labels preview mode as non-mutating and apply/direct mode as writing workspace state.
+  `source forget`, `source reconcile`, `source refresh`, `workspace refresh`, and `queue clean`
+  JSON include `mutation.mode`, `mutation.mutates`, `mutation.planned`, and `mutation.written`;
+  human output labels preview mode as non-mutating and apply/direct mode as writing workspace
+  state.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
   pages themselves.
@@ -1357,6 +1365,7 @@ splendor lint
 splendor health
 splendor queue inspect [job-id]
 splendor queue retry job-id
+splendor queue clean --orphaned|--superseded|--completed
 splendor repair ingest source-id
 splendor task create
 splendor milestone create

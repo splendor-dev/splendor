@@ -50,8 +50,10 @@ from splendor.commands.pr_summary import (
 from splendor.commands.query import run_query
 from splendor.commands.queue import (
     QueueItemSnapshot,
+    clean_queue,
     inspect_queue,
     inspect_queue_job,
+    render_queue_clean_json,
     render_queue_inspect_json,
     render_queue_item_json,
     render_queue_retry_json,
@@ -377,6 +379,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON output.",
     )
     queue_inspect_parser.set_defaults(handler=handle_queue_inspect)
+    queue_clean_parser = queue_subparsers.add_parser(
+        "clean", help="Preview or apply stale ingest queue cleanup"
+    )
+    queue_clean_parser.add_argument(
+        "--orphaned",
+        action="store_true",
+        help="Select ingest queue records whose source manifest payload is missing.",
+    )
+    queue_clean_parser.add_argument(
+        "--superseded",
+        action="store_true",
+        help="Select ingest queue records for superseded source versions.",
+    )
+    queue_clean_parser.add_argument(
+        "--completed",
+        action="store_true",
+        help="Select completed ingest queue records.",
+    )
+    queue_clean_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Delete selected queue records. Without this flag, queue clean only previews.",
+    )
+    queue_clean_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit machine-readable JSON output.",
+    )
+    queue_clean_parser.set_defaults(handler=handle_queue_clean)
     queue_retry_parser = queue_subparsers.add_parser(
         "retry", help="Reset a failed queue job for another ingest attempt"
     )
@@ -1462,9 +1494,11 @@ def handle_queue_inspect(args: argparse.Namespace) -> int:
     for item in result.items:
         print(
             f"- {item.job_id} [{item.status}/{item.operator_state}] type={item.job_type} "
-            f"attempts={item.attempt_count}/{item.max_attempts} payload={item.payload_ref}"
+            f"attempts={item.attempt_count}/{item.max_attempts} "
+            f"cleanup={item.cleanup_state} payload={item.payload_ref}"
         )
     operator_states = {item.operator_state for item in result.items}
+    cleanup_states = {item.cleanup_state for item in result.items}
     if operator_states.intersection({"pending", "failed_due", "expired_leased"}):
         print("Next: splendor ingest --pending")
     elif "dead_letter" in operator_states:
@@ -1473,6 +1507,60 @@ def handle_queue_inspect(args: argparse.Namespace) -> int:
         print("Next: wait for retry backoff or run splendor queue retry <job-id>")
     elif result.status_counts.get("failed", 0):
         print("Next: splendor queue retry <job-id>")
+    elif "orphaned" in cleanup_states:
+        print("Next: splendor queue clean --orphaned --apply")
+    elif "superseded" in cleanup_states:
+        print("Next: splendor queue clean --superseded --apply")
+    elif "completed" in cleanup_states:
+        print("Next: splendor queue clean --completed --apply")
+    return 0
+
+
+def handle_queue_clean(args: argparse.Namespace) -> int:
+    root = args.root.resolve()
+    try:
+        result = clean_queue(
+            root,
+            orphaned=args.orphaned,
+            superseded=args.superseded,
+            completed=args.completed,
+            apply=args.apply,
+        )
+    except ValueError as exc:
+        return _print_error(exc)
+
+    if args.json_output:
+        print(render_queue_clean_json(root, result))
+        return 0
+
+    print("Applied queue cleanup" if result.applied else "Queue cleanup preview")
+    print(f"Mutation mode: {'apply' if result.applied else 'preview'}")
+    if not result.applied:
+        print("Preview only: no queue records deleted.")
+    print(f"Selectors: {', '.join(result.selectors)}")
+    output_actions = result.written if result.applied else result.actions
+    if output_actions:
+        print("Deleted queue records:" if result.applied else "Planned queue deletions:")
+        for action in output_actions:
+            print(
+                f"- {action.path} [{action.cleanup_state}] "
+                f"job_id={action.job_id} source_id={action.source_id or '-'}"
+            )
+    else:
+        print("Planned queue deletions: none")
+    if result.skipped:
+        print("Skipped queue records:")
+        for action in result.skipped:
+            print(
+                f"- {action.path} [{action.cleanup_state}] "
+                f"job_id={action.job_id} source_id={action.source_id or '-'} "
+                f"reason={action.reason or '-'}"
+            )
+    if not result.applied and result.actions:
+        selector_flags = " ".join(f"--{selector}" for selector in result.selectors)
+        print(f"Next: splendor queue clean {selector_flags} --apply")
+    else:
+        print("Next: splendor queue inspect")
     return 0
 
 
@@ -1531,12 +1619,19 @@ def _print_queue_item_detail(item: QueueItemSnapshot) -> None:
     print(f"Payload: {item.payload_ref}")
     print(f"Source ID: {item.source_id or '-'}")
     print(f"Operator state: {item.operator_state}")
+    print(f"Cleanup state: {item.cleanup_state}")
     print(f"Lease owner: {item.lease_owner or '-'}")
     print(f"Lease expires: {item.lease_expires_at or '-'}")
     print(f"Next attempt: {item.next_attempt_at or '-'}")
     print(f"Last error: {item.last_error or '-'}")
     print(f"Record: {item.record_path}")
-    if item.status == "dead_letter":
+    if item.cleanup_state == "orphaned":
+        print("Next: splendor queue clean --orphaned --apply")
+    elif item.cleanup_state == "superseded":
+        print("Next: splendor queue clean --superseded --apply")
+    elif item.cleanup_state == "completed":
+        print("Next: splendor queue clean --completed --apply")
+    elif item.status == "dead_letter":
         print(
             f"Next: splendor queue retry {item.job_id} or splendor repair ingest {item.source_id}"
         )

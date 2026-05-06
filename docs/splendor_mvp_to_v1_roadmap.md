@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P1.1`
+- Previous completed PR sub-slice: `M19-P2.1`
 - Current planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Current PR sub-slice: `M19-P2.1`
+- Current PR sub-slice: `M19-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Next planned PR sub-slice: `M19-P3.1`
+- Next planned slice: `M20 post-v1 product bets`
+- Next planned PR sub-slice: `M20-P1.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1283,6 +1283,12 @@ surfaces without introducing a transaction framework. Reviewed `wiki compile`, `
 `mutation.mode`, `mutation.mutates`, `mutation.planned`, and `mutation.written` fields, and human
 output labels preview-only versus apply/direct write modes so agents can tell what is safe to run
 and what changed.
+
+`M19-P3.1` closes registry and queue cleanup gaps by adding preview/apply `splendor queue clean`
+paths for orphaned queue payloads, superseded source-version queues, and completed ingest jobs.
+Queue inspection now exposes additive cleanup state, and agent handoff keeps these closure commands
+discoverable under maintenance context without promoting generated queue cleanup above work-first
+handoff.
 
 ## Milestone 20 — post-v1 product bets
 

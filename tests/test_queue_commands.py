@@ -4,11 +4,12 @@ from pathlib import Path
 
 import pytest
 
+import splendor.commands.queue as queue_module
 from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import enqueue_ingest_job
 from splendor.commands.init import initialize_workspace
-from splendor.commands.queue import inspect_queue, inspect_queue_job, retry_queue_job
+from splendor.commands.queue import clean_queue, inspect_queue, inspect_queue_job, retry_queue_job
 from splendor.schemas import QueueItemRecord
 from splendor.state.runtime import load_queue_item, write_queue_item
 from splendor.state.source_registry import load_source_record
@@ -179,6 +180,7 @@ def test_cli_queue_inspect_human_and_json_output(tmp_path: Path, capsys) -> None
     assert payload["status_counts"] == {"pending": 1}
     assert payload["items"][0]["job_id"] == f"ingest-{source_id}"
     assert payload["items"][0]["operator_state"] == "pending"
+    assert payload["items"][0]["cleanup_state"] == "not_cleanup_candidate"
     assert payload["items"][0]["next_attempt_at"] is None
 
 
@@ -204,6 +206,334 @@ def test_cli_queue_inspect_single_job_outputs_detail_and_json(tmp_path: Path, ca
     payload = json.loads(capsys.readouterr().out)
     assert payload["job_id"] == job_id
     assert payload["record_path"] == f"state/queue/{job_id}.json"
+    assert payload["cleanup_state"] == "not_cleanup_candidate"
+
+
+def test_queue_clean_previews_and_applies_orphaned_queue_records(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    added.manifest_path.unlink()
+
+    preview = clean_queue(tmp_path, orphaned=True)
+
+    assert preview.applied is False
+    assert [(action.cleanup_state, action.path.as_posix()) for action in preview.actions] == [
+        ("orphaned", f"state/queue/ingest-{added.source_id}.json")
+    ]
+    assert queue_path.exists()
+
+    applied = clean_queue(tmp_path, orphaned=True, apply=True)
+
+    assert applied.applied is True
+    assert not queue_path.exists()
+
+
+def test_queue_clean_selects_superseded_and_completed_records(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    old_path = tmp_path / "old.md"
+    done_path = tmp_path / "done.md"
+    old_path.write_text("# Old\n\nOriginal.\n", encoding="utf-8")
+    done_path.write_text("# Done\n\nDone.\n", encoding="utf-8")
+    old = add_source(tmp_path, old_path)
+    done = add_source(tmp_path, done_path)
+    old_queue_path = enqueue_ingest_job(tmp_path, old.source_id)
+    done_queue_path = enqueue_ingest_job(tmp_path, done.source_id)
+    old_path.write_text("# Old\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "source", "refresh", old.source_id])
+    write_queue_item(
+        done_queue_path,
+        load_queue_item(done_queue_path).model_copy(update={"status": "done"}),
+    )
+
+    result = clean_queue(tmp_path, superseded=True, completed=True)
+
+    action_states = {
+        (action.source_id, action.cleanup_state, action.path.as_posix())
+        for action in result.actions
+    }
+    assert action_states == {
+        (old.source_id, "superseded", old_queue_path.relative_to(tmp_path).as_posix()),
+        (done.source_id, "completed", done_queue_path.relative_to(tmp_path).as_posix()),
+    }
+
+
+def test_queue_clean_completed_selector_matches_done_orphaned_and_superseded_records(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    orphan_path = tmp_path / "orphan.md"
+    superseded_path = tmp_path / "superseded.md"
+    orphan_path.write_text("# Orphan\n\nOriginal.\n", encoding="utf-8")
+    superseded_path.write_text("# Superseded\n\nOriginal.\n", encoding="utf-8")
+    orphan = add_source(tmp_path, orphan_path)
+    superseded = add_source(tmp_path, superseded_path)
+    orphan_queue_path = enqueue_ingest_job(tmp_path, orphan.source_id)
+    superseded_queue_path = enqueue_ingest_job(tmp_path, superseded.source_id)
+    orphan.manifest_path.unlink()
+    superseded_path.write_text("# Superseded\n\nUpdated.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "source", "refresh", superseded.source_id])
+    for queue_path in [orphan_queue_path, superseded_queue_path]:
+        write_queue_item(
+            queue_path,
+            load_queue_item(queue_path).model_copy(update={"status": "done"}),
+        )
+
+    result = clean_queue(tmp_path, completed=True)
+
+    assert {
+        (action.source_id, action.cleanup_state, action.path.as_posix())
+        for action in result.actions
+    } == {
+        (orphan.source_id, "completed", orphan_queue_path.relative_to(tmp_path).as_posix()),
+        (
+            superseded.source_id,
+            "completed",
+            superseded_queue_path.relative_to(tmp_path).as_posix(),
+        ),
+    }
+
+
+def test_queue_clean_skips_active_leases_invalid_payloads_and_unsupported_jobs(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    active_source = tmp_path / "active.md"
+    invalid_source = tmp_path / "invalid.md"
+    mismatch_source = tmp_path / "mismatch.md"
+    payload_source = tmp_path / "payload.md"
+    active_source.write_text("# Active\n\nhello\n", encoding="utf-8")
+    invalid_source.write_text("# Invalid\n\nhello\n", encoding="utf-8")
+    mismatch_source.write_text("# Mismatch\n\nhello\n", encoding="utf-8")
+    payload_source.write_text("# Payload\n\nhello\n", encoding="utf-8")
+    active = add_source(tmp_path, active_source)
+    invalid = add_source(tmp_path, invalid_source)
+    mismatch = add_source(tmp_path, mismatch_source)
+    payload = add_source(tmp_path, payload_source)
+    active_queue_path = enqueue_ingest_job(tmp_path, active.source_id)
+    invalid_queue_path = enqueue_ingest_job(tmp_path, invalid.source_id)
+    mismatch_queue_path = enqueue_ingest_job(tmp_path, mismatch.source_id)
+    active.manifest_path.unlink()
+    invalid.manifest_path.unlink()
+    write_queue_item(
+        active_queue_path,
+        load_queue_item(active_queue_path).model_copy(
+            update={
+                "status": "leased",
+                "lease_owner": "local-cli:123",
+                "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            }
+        ),
+    )
+    write_queue_item(
+        invalid_queue_path,
+        load_queue_item(invalid_queue_path).model_copy(update={"payload_ref": "/tmp/outside.json"}),
+    )
+    write_queue_item(
+        mismatch_queue_path,
+        load_queue_item(mismatch_queue_path).model_copy(
+            update={
+                "job_id": f"ingest-{mismatch.source_id}",
+                "payload_ref": payload.manifest_path.relative_to(tmp_path).as_posix(),
+            }
+        ),
+    )
+    unsupported_path = tmp_path / "state" / "queue" / "refresh-page.json"
+    write_queue_item(
+        unsupported_path,
+        QueueItemRecord(
+            job_id="refresh-page",
+            job_type="refresh_page",
+            status="done",
+            created_at="2026-04-10T12:00:00+00:00",
+            updated_at="2026-04-10T12:00:00+00:00",
+            payload_ref="wiki/index.md",
+        ),
+    )
+
+    result = clean_queue(tmp_path, orphaned=True, completed=True)
+
+    assert result.actions == []
+    skipped = {action.cleanup_state for action in result.skipped}
+    assert skipped >= {
+        "active_leased",
+        "invalid_payload",
+        "source_mismatch",
+        "unsupported_job_type",
+    }
+
+
+def test_queue_clean_skips_record_when_filename_and_job_id_disagree(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    queue_item = load_queue_item(queue_path)
+    mismatch_path = tmp_path / "state" / "queue" / "ingest-corrupt-filename.json"
+    queue_path.unlink()
+    added.manifest_path.unlink()
+    write_queue_item(mismatch_path, queue_item)
+
+    result = clean_queue(tmp_path, orphaned=True)
+
+    assert result.actions == []
+    assert [(action.cleanup_state, action.path.as_posix()) for action in result.skipped] == [
+        ("job_id_mismatch", "state/queue/ingest-corrupt-filename.json")
+    ]
+    assert "does not match filename" in (result.skipped[0].reason or "")
+
+
+def test_cli_queue_clean_json_reports_preview_and_apply_mutation_contract(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    manifest_path.unlink()
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "clean", "--orphaned", "--json"])
+
+    assert exit_code == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["applied"] is False
+    assert preview["actions"][0]["cleanup_state"] == "orphaned"
+    assert preview["mutation"] == {
+        "mode": "preview",
+        "mutates": False,
+        "planned": [
+            {
+                "action": "delete",
+                "path": f"state/queue/ingest-{source_id}.json",
+                "kind": "queue_record",
+                "source_id": source_id,
+            }
+        ],
+        "written": [],
+    }
+    assert queue_path.exists()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "clean", "--orphaned", "--apply", "--json"])
+
+    assert exit_code == 0
+    applied = json.loads(capsys.readouterr().out)
+    assert applied["applied"] is True
+    assert applied["summary"]["written"] == 1
+    assert applied["written"][0]["path"] == f"state/queue/ingest-{source_id}.json"
+    assert applied["mutation"]["mode"] == "apply"
+    assert applied["mutation"]["mutates"] is True
+    assert applied["mutation"]["planned"] == []
+    assert applied["mutation"]["written"][0]["path"] == f"state/queue/ingest-{source_id}.json"
+    assert not queue_path.exists()
+
+
+def test_queue_clean_apply_reports_only_actual_deleted_records_when_target_disappears(
+    tmp_path: Path, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    added.manifest_path.unlink()
+    original_preflight = queue_module._preflight_queue_clean_targets
+
+    def disappear_after_preflight(root: Path, actions) -> None:
+        original_preflight(root, actions)
+        queue_path.unlink()
+
+    monkeypatch.setattr(
+        queue_module,
+        "_preflight_queue_clean_targets",
+        disappear_after_preflight,
+    )
+
+    result = clean_queue(tmp_path, orphaned=True, apply=True)
+
+    assert result.actions
+    assert result.written == []
+    assert [(action.status, action.reason) for action in result.skipped] == [
+        ("skipped", "queue record disappeared before apply")
+    ]
+
+
+def test_cli_queue_clean_human_output_reports_preview_and_next_action(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    (tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json").unlink()
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "clean", "--orphaned"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Queue cleanup preview" in out
+    assert "Mutation mode: preview" in out
+    assert "Preview only: no queue records deleted." in out
+    assert f"- state/queue/ingest-{source_id}.json [orphaned]" in out
+    assert "Next: splendor queue clean --orphaned --apply" in out
+
+
+def test_cli_queue_inspect_prioritizes_runnable_work_over_cleanup(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    pending_source = tmp_path / "pending.md"
+    orphan_source = tmp_path / "orphan.md"
+    pending_source.write_text("# Pending\n\nNeeds ingest.\n", encoding="utf-8")
+    orphan_source.write_text("# Orphan\n\nManifest will disappear.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(pending_source)])
+    main(["--root", str(tmp_path), "add-source", str(orphan_source)])
+    orphan_id = next(
+        load_source_record(path).source_id
+        for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
+        if load_source_record(path).source_ref == "orphan.md"
+    )
+    (tmp_path / "state" / "manifests" / "sources" / f"{orphan_id}.json").unlink()
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "queue", "inspect"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "cleanup=orphaned" in out
+    assert "Next: splendor ingest --pending" in out
+    assert "Next: splendor queue clean --orphaned --apply" not in out
+
+
+def test_cli_queue_inspect_reports_completed_cleanup_next_actions(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "done.md"
+    source.write_text("# Done\n\nAlready ingested.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    job_id = f"ingest-{source_id}"
+    queue_path = tmp_path / "state" / "queue" / f"{job_id}.json"
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(update={"status": "done"}),
+    )
+    capsys.readouterr()
+
+    assert main(["--root", str(tmp_path), "queue", "inspect"]) == 0
+    out = capsys.readouterr().out
+    assert "cleanup=completed" in out
+    assert "Next: splendor queue clean --completed --apply" in out
+
+    assert main(["--root", str(tmp_path), "queue", "inspect", job_id]) == 0
+    out = capsys.readouterr().out
+    assert "Cleanup state: completed" in out
+    assert "Next: splendor queue clean --completed --apply" in out
 
 
 def test_cli_queue_retry_resets_failed_job(tmp_path: Path, capsys) -> None:

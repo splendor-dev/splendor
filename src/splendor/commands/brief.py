@@ -1835,6 +1835,19 @@ def _maintenance_guidance(
             "splendor source freshness",
             "Inspect the full changed or missing curated source set.",
         )
+    queue_cleanup_states = {item.cleanup_state for item in snapshot.queue.items}
+    if "orphaned" in queue_cleanup_states:
+        add(
+            "queue",
+            "splendor queue clean --orphaned",
+            "Preview stale ingest queue records whose source manifests are gone.",
+        )
+    if "superseded" in queue_cleanup_states:
+        add(
+            "queue",
+            "splendor queue clean --superseded",
+            "Preview stale ingest queue records for superseded source versions.",
+        )
     if any(
         item.operator_state
         in {"pending", "failed_due", "expired_leased", "dead_letter", "failed_backoff"}
@@ -1983,7 +1996,29 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
     for item in snapshot.queue.items:
         source = snapshot.sources_by_id.get(item.source_id or "")
         source_ref = canonical_source_ref(source) if source is not None else None
-        if item.operator_state in {"pending", "failed_due", "expired_leased"}:
+        if item.cleanup_state == "orphaned":
+            add(
+                "medium",
+                "queue",
+                f"Close orphaned queue job {item.job_id}",
+                "The ingest queue payload source manifest no longer exists.",
+                "splendor queue clean --orphaned",
+                path=item.record_path.as_posix(),
+                source_id=item.source_id,
+                source_ref=source_ref,
+            )
+        elif item.cleanup_state == "superseded":
+            add(
+                "medium",
+                "queue",
+                f"Close superseded queue job {item.job_id}",
+                "The ingest queue record belongs to a superseded source version.",
+                "splendor queue clean --superseded",
+                path=item.record_path.as_posix(),
+                source_id=item.source_id,
+                source_ref=source_ref,
+            )
+        elif item.operator_state in {"pending", "failed_due", "expired_leased"}:
             add(
                 "high",
                 "queue",

@@ -3413,6 +3413,74 @@ def test_maintenance_guidance_preserves_dead_letter_repair_command(tmp_path: Pat
     assert f"splendor repair ingest {added.source_id}" in commands
 
 
+def test_agent_handoff_reports_orphan_queue_cleanup_without_displacing_work(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Implement",
+            "handoff",
+            "cleanup",
+            "--id",
+            "task-handoff-cleanup",
+            "--status",
+            "in_progress",
+        ]
+    )
+    source = tmp_path / "orphan.md"
+    source.write_text("# Orphan\n\nQueue payload will be removed.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    enqueue_ingest_job(tmp_path, added.source_id)
+    added.manifest_path.unlink()
+    capsys.readouterr()
+
+    brief_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "implement",
+            "handoff",
+            "cleanup",
+            "--json",
+        ]
+    )
+    brief_payload = json.loads(capsys.readouterr().out)
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "implement",
+            "handoff",
+            "cleanup",
+            "--json",
+        ]
+    )
+    suggest_payload = json.loads(capsys.readouterr().out)
+
+    assert brief_exit == 0
+    assert suggest_exit == 0
+    for payload in [brief_payload, suggest_payload]:
+        commands = {command["command"] for command in payload["maintenance_context"]["commands"]}
+        assert "splendor queue clean --orphaned" in commands
+        assert "splendor queue inspect" in commands
+        assert any(
+            action["category"] == "queue" and action["command"] == "splendor queue clean --orphaned"
+            for action in payload["maintenance_context"]["actions"]
+        )
+        assert payload["work_context"]["actions"]
+        assert all(action["category"] != "queue" for action in payload["work_context"]["actions"])
+
+
 def test_brief_skips_invalid_query_matches_without_failing(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     bad_page = tmp_path / "wiki" / "topics" / "bad.md"

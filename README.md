@@ -134,7 +134,8 @@ Implemented today:
 - `splendor workspace refresh --changed` with optional `--ingest`, plus standalone or combined
   `--rebuild-index`, `--prune-superseded`, and `--update-topic-refs`
 - `splendor ingest <source-id>`, `splendor ingest --pending`, and `splendor ingest --changed`
-- `splendor queue inspect [job-id]` and `splendor queue retry <job-id>`
+- `splendor queue inspect [job-id]`, `splendor queue retry <job-id>`, and
+  `splendor queue clean --orphaned|--superseded|--completed`
 - `splendor repair ingest <source-id>`
 - `splendor materialize-source <source-id>`
 - `splendor query "<question>"`, `splendor query --tag <tag>`,
@@ -207,6 +208,13 @@ source-owned generated summaries, queue records, ingest run records, and safe ge
 maintained wiki/planning references and unsafe mixed historical state are reported as residual
 references for review instead of rewritten.
 
+`splendor queue clean --orphaned|--superseded|--completed` is the preview-first closure path for
+stale ingest queue records after registry maintenance. It reports planned queue JSON deletions by
+default and requires `--apply` before deleting anything. Orphan cleanup covers queue payloads whose
+source manifests are gone, superseded cleanup covers historical source versions, and completed
+cleanup covers `done` ingest jobs. Active leases, invalid payloads, unsupported job types, and
+source/job mismatches are skipped with explicit reasons.
+
 `splendor source reconcile <source-id|logical-id|title|path>` is the preview-first repair path for
 duplicate active canonical source versions. It resolves one canonical source-ref group, chooses the
 latest active source version as current unless an exact source ID or `--current` selector is
@@ -231,7 +239,8 @@ outcomes, and the summary.
 exists. JSON, human stdout, and Markdown reports surface missing active workspace source paths with
 `source update-path` / `source freshness` guidance, checksum drift with `source refresh`,
 `ingest --pending`, or `ingest --changed`, and queue repair diagnostics with `queue retry` or
-`repair ingest`. Unknown source provenance refs remain diagnostic-only rather than suggesting
+`repair ingest`. Stale queue closure diagnostics point to `queue clean` when queue records are
+orphaned, superseded, or completed. Unknown source provenance refs remain diagnostic-only rather than suggesting
 unsafe broad rewrites. Run source IDs are validated against the manifest store separately from
 source content freshness, so checksum drift does not become an unknown-source provenance failure.
 
@@ -308,12 +317,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P1.1`
+- Previous completed PR sub-slice: `M19-P2.1`
 - Current planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Current PR sub-slice: `M19-P2.1`
+- Current PR sub-slice: `M19-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Next planned PR sub-slice: `M19-P3.1`
+- Next planned slice: `M20 post-v1 product bets`
+- Next planned PR sub-slice: `M20-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -612,3 +621,5 @@ maintenance context when a branch has Splendor-specific review groups or attenti
 outputs for reviewed compile, source cleanup/reconciliation, source refresh, and workspace refresh
 now expose a deterministic `mutation` object with `mode`, `mutates`, `planned`, and `written`
 fields, while human output labels preview-only invocations and apply/direct write modes clearly.
+`M19-P3.1` adds preview/apply queue cleanup closure paths for orphaned, superseded, and completed
+ingest queue records, with additive cleanup state in queue inspection and maintenance handoff.

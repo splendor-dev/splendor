@@ -9,9 +9,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
+from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.config import load_config
 from splendor.layout import resolve_layout
-from splendor.schemas import QueueItemRecord
+from splendor.schemas import QueueItemRecord, SourceRecord
+from splendor.state.paths import resolve_workspace_path
 from splendor.state.runtime import (
     ingest_job_id,
     load_queue_item,
@@ -39,6 +41,7 @@ class QueueItemSnapshot:
     last_error: str | None
     source_id: str | None
     operator_state: str
+    cleanup_state: str
     record_path: Path
 
 
@@ -52,6 +55,25 @@ class QueueInspectResult:
 @dataclass(frozen=True)
 class QueueRetryResult:
     item: QueueItemSnapshot
+
+
+@dataclass(frozen=True)
+class QueueCleanAction:
+    job_id: str
+    path: Path
+    source_id: str | None
+    cleanup_state: str
+    status: str
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class QueueCleanResult:
+    applied: bool
+    selectors: list[str]
+    actions: list[QueueCleanAction]
+    written: list[QueueCleanAction]
+    skipped: list[QueueCleanAction]
 
 
 @dataclass(frozen=True)
@@ -99,6 +121,71 @@ def retry_queue_job(root: Path, job_id: str) -> QueueRetryResult:
     reset = _reset_failed_ingest_queue_item(queue_item)
     write_queue_item(queue_path, reset)
     return QueueRetryResult(item=_snapshot_queue_item(root, queue_path, reset))
+
+
+def clean_queue(
+    root: Path,
+    *,
+    orphaned: bool = False,
+    superseded: bool = False,
+    completed: bool = False,
+    apply: bool = False,
+) -> QueueCleanResult:
+    selectors = [
+        label
+        for label, enabled in [
+            ("orphaned", orphaned),
+            ("superseded", superseded),
+            ("completed", completed),
+        ]
+        if enabled
+    ]
+    if not selectors:
+        msg = "queue clean requires at least one cleanup selector"
+        raise ValueError(msg)
+
+    layout = resolve_layout(root, load_config(root))
+    actions: list[QueueCleanAction] = []
+    skipped: list[QueueCleanAction] = []
+    written: list[QueueCleanAction] = []
+    for queue_path in sorted(layout.queue_dir.glob("*.json")):
+        planned, skip = _queue_clean_action(
+            root,
+            queue_path,
+            selectors=set(selectors),
+        )
+        if skip is not None:
+            skipped.append(skip)
+        if planned is None:
+            continue
+        actions.append(planned)
+
+    if apply and actions:
+        _preflight_queue_clean_targets(root, actions)
+        for action in actions:
+            target = root / action.path
+            if target.is_file() or target.is_symlink():
+                target.unlink()
+                written.append(action)
+            else:
+                skipped.append(
+                    QueueCleanAction(
+                        job_id=action.job_id,
+                        path=action.path,
+                        source_id=action.source_id,
+                        cleanup_state=action.cleanup_state,
+                        status="skipped",
+                        reason="queue record disappeared before apply",
+                    )
+                )
+
+    return QueueCleanResult(
+        applied=apply,
+        selectors=selectors,
+        actions=actions,
+        written=written,
+        skipped=skipped,
+    )
 
 
 def repair_ingest_source(root: Path, source_id: str) -> RepairIngestResult:
@@ -178,6 +265,31 @@ def render_queue_retry_json(result: QueueRetryResult) -> str:
     return json.dumps({"item": _snapshot_payload(result.item)}, indent=2)
 
 
+def render_queue_clean_json(root: Path, result: QueueCleanResult) -> str:
+    mutation_records = _queue_clean_mutation_records(root, result.actions)
+    written_records = _queue_clean_mutation_records(root, result.written)
+    return json.dumps(
+        {
+            "applied": result.applied,
+            "selectors": result.selectors,
+            "summary": {
+                "planned": len(result.actions),
+                "written": len(result.written),
+                "skipped": len(result.skipped),
+            },
+            "actions": [_queue_clean_action_payload(action) for action in result.actions],
+            "written": [_queue_clean_action_payload(action) for action in result.written],
+            "skipped": [_queue_clean_action_payload(action) for action in result.skipped],
+            "mutation": mutation_contract(
+                mode="apply" if result.applied else "preview",
+                planned=[] if result.applied else mutation_records,
+                written=written_records if result.applied else [],
+            ),
+        },
+        indent=2,
+    )
+
+
 def render_repair_ingest_json(root: Path, result: RepairIngestResult) -> str:
     return json.dumps(
         {
@@ -235,6 +347,7 @@ def _next_attempt_budget(queue_item: QueueItemRecord) -> int:
 def _snapshot_queue_item(
     root: Path, queue_path: Path, queue_item: QueueItemRecord
 ) -> QueueItemSnapshot:
+    operator_state = _operator_state(queue_item)
     return QueueItemSnapshot(
         job_id=queue_item.job_id,
         job_type=queue_item.job_type,
@@ -249,7 +362,8 @@ def _snapshot_queue_item(
         next_attempt_at=queue_item.next_attempt_at,
         last_error=queue_item.last_error,
         source_id=source_id_from_ingest_job_id(queue_item.job_id),
-        operator_state=_operator_state(queue_item),
+        operator_state=operator_state,
+        cleanup_state=_queue_cleanup_state(root, queue_item, operator_state=operator_state),
         record_path=queue_path.relative_to(root),
     )
 
@@ -270,6 +384,7 @@ def _snapshot_payload(item: QueueItemSnapshot) -> dict[str, object]:
         "last_error": item.last_error,
         "source_id": item.source_id,
         "operator_state": item.operator_state,
+        "cleanup_state": item.cleanup_state,
         "record_path": item.record_path.as_posix(),
     }
 
@@ -297,3 +412,235 @@ def _operator_state(queue_item: QueueItemRecord) -> str:
             return "failed_due"
         return "failed_backoff"
     return queue_item.status
+
+
+def _queue_clean_action(
+    root: Path, queue_path: Path, *, selectors: set[str]
+) -> tuple[QueueCleanAction | None, QueueCleanAction | None]:
+    queue_ref = queue_path.relative_to(root)
+    job_id = queue_path.stem
+    source_id = source_id_from_ingest_job_id(job_id)
+    try:
+        queue_item = load_queue_item(queue_path)
+    except (OSError, ValueError) as exc:
+        return None, QueueCleanAction(
+            job_id=job_id,
+            path=queue_ref,
+            source_id=source_id,
+            cleanup_state="invalid_record",
+            status="skipped",
+            reason=f"queue record is invalid: {exc}",
+        )
+
+    if queue_item.job_id != job_id:
+        return None, QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=source_id_from_ingest_job_id(queue_item.job_id),
+            cleanup_state="job_id_mismatch",
+            status="skipped",
+            reason=(
+                f"queue record job_id {queue_item.job_id!r} does not match filename {job_id!r}"
+            ),
+        )
+
+    source_id = source_id_from_ingest_job_id(queue_item.job_id)
+    skip = _queue_clean_skip(root, queue_item, source_id=source_id, queue_ref=queue_ref)
+    if skip is not None:
+        return None, skip
+
+    cleanup_states = _queue_cleanup_states(
+        root, queue_item, operator_state=_operator_state(queue_item)
+    )
+    selected_states = [state for state in _QUEUE_CLEANUP_SELECTOR_ORDER if state in selectors]
+    cleanup_state = next(
+        (state for state in selected_states if state in cleanup_states),
+        None,
+    )
+    if cleanup_state is None:
+        return None, None
+
+    return QueueCleanAction(
+        job_id=queue_item.job_id,
+        path=queue_ref,
+        source_id=source_id,
+        cleanup_state=cleanup_state,
+        status="planned",
+    ), None
+
+
+def _queue_clean_skip(
+    root: Path, queue_item: QueueItemRecord, *, source_id: str | None, queue_ref: Path
+) -> QueueCleanAction | None:
+    if queue_item.job_type != "ingest_source":
+        return QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=source_id,
+            cleanup_state="unsupported_job_type",
+            status="skipped",
+            reason=f"unsupported queue job type: {queue_item.job_type}",
+        )
+    if source_id is None:
+        return QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=None,
+            cleanup_state="unsupported_job_id",
+            status="skipped",
+            reason="queue job is not a source-owned ingest job",
+        )
+    if _operator_state(queue_item) == "active_leased":
+        return QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=source_id,
+            cleanup_state="active_leased",
+            status="skipped",
+            reason="queue record has an active lease",
+        )
+    manifest_path, source, reason = _queue_payload_source(root, queue_item, source_id=source_id)
+    if source is not None and source.source_id != source_id:
+        return QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=source_id,
+            cleanup_state="source_mismatch",
+            status="skipped",
+            reason=(
+                f"queue payload resolves to source_id={source.source_id!r}, "
+                f"but job_id expects {source_id!r}"
+            ),
+        )
+    if reason is not None and not reason.startswith("missing source manifest:"):
+        return QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=source_id,
+            cleanup_state="invalid_payload",
+            status="skipped",
+            reason=reason,
+        )
+    if manifest_path is not None and source is None and reason is None:
+        return QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=source_id,
+            cleanup_state="invalid_payload",
+            status="skipped",
+            reason="queue payload source manifest is invalid",
+        )
+    return None
+
+
+def _queue_cleanup_state(
+    root: Path, queue_item: QueueItemRecord, *, operator_state: str | None = None
+) -> str:
+    states = _queue_cleanup_states(root, queue_item, operator_state=operator_state)
+    for state in ["orphaned", "superseded", "completed"]:
+        if state in states:
+            return state
+    for state in ["active_leased", "invalid_payload", "source_mismatch"]:
+        if state in states:
+            return state
+    return "not_cleanup_candidate"
+
+
+_QUEUE_CLEANUP_SELECTOR_ORDER = ["orphaned", "superseded", "completed"]
+
+
+def _queue_cleanup_states(
+    root: Path, queue_item: QueueItemRecord, *, operator_state: str | None = None
+) -> set[str]:
+    source_id = source_id_from_ingest_job_id(queue_item.job_id)
+    operator_state = operator_state or _operator_state(queue_item)
+    if queue_item.job_type != "ingest_source" or source_id is None:
+        return {"not_cleanup_candidate"}
+    if operator_state == "active_leased":
+        return {"active_leased"}
+    _manifest_path, source, reason = _queue_payload_source(root, queue_item, source_id=source_id)
+    states: set[str] = set()
+    if queue_item.status == "done":
+        states.add("completed")
+    if reason is not None:
+        if reason.startswith("missing source manifest:"):
+            states.add("orphaned")
+            return states
+        states.add("invalid_payload")
+        return states
+    if source is None:
+        states.add("invalid_payload")
+        return states
+    if source.source_id != source_id:
+        states.add("source_mismatch")
+        return states
+    if source.superseded_by is not None:
+        states.add("superseded")
+    if states:
+        return states
+    return {"not_cleanup_candidate"}
+
+
+def _queue_payload_source(
+    root: Path, queue_item: QueueItemRecord, *, source_id: str
+) -> tuple[Path | None, SourceRecord | None, str | None]:
+    try:
+        manifest_path = resolve_workspace_path(
+            root,
+            queue_item.payload_ref,
+            context="Queue payload",
+        )
+    except ValueError as exc:
+        return None, None, str(exc)
+    if not manifest_path.exists():
+        return manifest_path, None, f"missing source manifest: {queue_item.payload_ref}"
+    expected_manifest_path = manifest_path_for(root, source_id)
+    try:
+        source = load_source_record(manifest_path)
+    except ValueError as exc:
+        return manifest_path, None, str(exc)
+    if manifest_path.resolve() != expected_manifest_path.resolve():
+        return (
+            manifest_path,
+            source,
+            (
+                f"queue payload points to {queue_item.payload_ref!r}, but the canonical "
+                "manifest path for this source is "
+                f"{expected_manifest_path.relative_to(root).as_posix()!r}"
+            ),
+        )
+    return manifest_path, source, None
+
+
+def _queue_clean_mutation_records(
+    root: Path, actions: list[QueueCleanAction]
+) -> list[dict[str, str]]:
+    del root
+    return [
+        mutation_record(
+            action="delete",
+            path=action.path.as_posix(),
+            kind="queue_record",
+            source_id=action.source_id,
+        )
+        for action in sorted(actions, key=lambda item: item.path.as_posix())
+    ]
+
+
+def _preflight_queue_clean_targets(root: Path, actions: list[QueueCleanAction]) -> None:
+    for action in actions:
+        target = root / action.path
+        if target.is_dir() and not target.is_symlink():
+            msg = f"Queue cleanup target is not a removable file: {action.path.as_posix()}"
+            raise ValueError(msg)
+
+
+def _queue_clean_action_payload(action: QueueCleanAction) -> dict[str, object]:
+    return {
+        "job_id": action.job_id,
+        "path": action.path.as_posix(),
+        "source_id": action.source_id,
+        "cleanup_state": action.cleanup_state,
+        "status": action.status,
+        "reason": action.reason,
+    }

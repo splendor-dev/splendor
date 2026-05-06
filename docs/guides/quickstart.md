@@ -175,7 +175,10 @@ This creates:
 Generated source-summary pages are reviewer-significant when they help explain a curated source,
 its provenance, or synthesis follow-up. Queue and run records are deterministic operational state;
 review them for broken references or surprising failures, but do not treat every timestamp-only
-record as hand-authored knowledge. Explicit reports under `reports/` should be committed only when
+record as hand-authored knowledge. Use `splendor queue clean --orphaned`,
+`splendor queue clean --superseded`, or `splendor queue clean --completed` to preview stale queue
+closure, then add `--apply` after reviewing the planned queue JSON deletions. Explicit reports
+under `reports/` should be committed only when
 they support the reviewed workspace update; failed or exploratory local reports can stay local.
 Readable in-repo markdown/text/code summaries default to concise excerpts, while external, copied,
 parsed PDF, and OCR-derived sources keep fuller extracts because the generated artifact may be the
