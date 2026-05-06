@@ -295,7 +295,9 @@ Implemented fields:
   deterministic `relevance_score` when available. Runtime authority entries also expose `origin`,
   `curation_state`, and `curation_commands`; provisional uncurated authority is repeated under
   `provisional_context` so agents can use it without confusing it for configured or curated source
-  authority.
+  authority. Maintenance context also exposes runtime-only command guidance and explanatory notes
+  so review-needed wiki state, missing synthesis, queue drift, source freshness, and generated
+  contradiction-review tasks stay discoverable without becoming default human planning records.
 - Suggested actions are derived from local git commits, best-effort read-only GitHub issue/PR
   context through `gh` when available, source freshness, queue operator state, invalid/stale/
   contested/review-needed wiki pages, ingested sources missing maintained synthesis follow-up,
@@ -512,6 +514,10 @@ Task records now also reserve:
 prioritize human-authored planning records while preserving explicit links back to the affected
 wiki pages and the ingest run that surfaced the conflict.
 
+Review-needed wiki pages and sources missing maintained synthesis are not represented as ordinary
+task records by default. Operators review them through `splendor wiki status`, `splendor wiki
+suggest <source-id>`, and the maintenance context in `brief --agent-context` / `suggest-next`.
+
 ## Query snapshots
 
 The latest saved query snapshot lives at `state/queries/last-query.json`.
@@ -657,8 +663,9 @@ Current runtime behavior:
   in `docs/releases/v1_release_handoff.md` treats schema version `1`, legacy manifest compatibility,
   and deferred source-lifecycle fields as release checklist items rather than implicit assumptions.
 - The v0.4 handoff direction should remain schema-version-1-compatible: git context, inferred
-  authority labels, provisional uncurated-doc context, and maintenance-section ranking are runtime
-  briefing signals unless a later PR explicitly defines persisted fields.
+  authority labels, provisional uncurated-doc context, maintenance-section ranking, and
+  maintenance command guidance are runtime briefing signals unless a later PR explicitly defines
+  persisted fields.
 
 ## Review config
 

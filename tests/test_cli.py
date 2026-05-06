@@ -4471,6 +4471,34 @@ def test_cli_task_list_command_supports_filters(tmp_path: Path, capsys) -> None:
     assert lines == ["task-write-cli-docs  todo  high  Write CLI docs"]
 
 
+def test_cli_task_list_empty_default_explains_generated_maintenance_state(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "task", "list"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "No active human task records matched." in out
+    assert "splendor task list --generated-review --review-task-state active" in out
+    assert "splendor wiki status" in out
+
+
+def test_cli_task_list_empty_filtered_output_stays_filter_specific(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "task", "list", "--status", "blocked"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "No human task records matched the supplied filters." in out
+    assert "generated-review" not in out
+    assert "wiki status" not in out
+
+
 def test_cli_task_list_hides_generated_review_tasks_by_default(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     main(["--root", str(tmp_path), "task", "create", "Write", "CLI", "docs"])

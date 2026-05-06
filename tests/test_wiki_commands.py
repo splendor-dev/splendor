@@ -8,10 +8,12 @@ import yaml
 from splendor.cli import main
 from splendor.commands import brief as brief_module
 from splendor.commands.add_source import add_source
+from splendor.commands.ingest import enqueue_ingest_job
 from splendor.commands.init import initialize_workspace
 from splendor.commands.wiki import add_topic_page, rebuild_wiki_index
 from splendor.config import AuthorityDocumentConfig, load_config, write_config
 from splendor.schemas import KnowledgePageFrontmatter, MaintenanceReport, TaskRecord
+from splendor.state.runtime import load_queue_item, write_queue_item
 from splendor.state.source_registry import load_source_record
 from splendor.utils.planning import render_planning_markdown
 from splendor.utils.wiki import parse_wiki_markdown
@@ -399,7 +401,11 @@ def test_wiki_status_text_output_reports_stable_counts(tmp_path: Path, capsys) -
     assert "Wiki status" in out
     assert "Sources: total=1 registered=0 ingested=1 failed=0" in out
     assert "Machine-generated pages: 1" in out
+    assert "Review-needed pages: 1" in out
     assert "Review-needed synthesis pages: 0" in out
+    assert "Sources missing synthesis follow-up: 1" in out
+    assert "review-needed wiki state is maintenance state" in out
+    assert "splendor wiki suggest <source-id>" in out
 
 
 def test_wiki_status_uninitialized_workspace_reports_empty_state(tmp_path: Path, capsys) -> None:
@@ -1574,7 +1580,7 @@ def test_brief_agent_context_text_output_is_compact(tmp_path: Path, capsys) -> N
     out = capsys.readouterr().out
     assert "Agent context" in out
     assert "Suggested next:" in out
-    assert "Wiki status:" in out
+    assert "Splendor maintenance:" in out
     assert "Next actions:" in out
 
 
@@ -3045,6 +3051,190 @@ def test_suggest_next_exposes_generated_review_tasks_for_contradiction_goal(
     assert contradiction_actions[0]["command"] == (
         "splendor task list --generated-review --review-task-state active"
     )
+
+
+def test_maintenance_focused_handoff_exposes_review_and_generated_state_commands(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    reviewed_source = tmp_path / "reviewed.md"
+    reviewed_source.write_text("# Reviewed\n\nInitial maintenance source.\n", encoding="utf-8")
+    added_reviewed = add_source(tmp_path, reviewed_source)
+    main(["--root", str(tmp_path), "ingest", added_reviewed.source_id])
+    reviewed_source.write_text("# Reviewed\n\nChanged maintenance source.\n", encoding="utf-8")
+    queued_source = tmp_path / "queued.md"
+    queued_source.write_text("# Queued\n\nPending ingest source.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "queued.md"])
+    review_task = TaskRecord(
+        task_id="task-review-src-a-src-b-1234567890",
+        title="Review contradiction: A vs B",
+        status="todo",
+        priority="high",
+        record_origin="generated",
+        generated_kind="contradiction-review",
+        review_task_state="active",
+        created_at="2026-05-06T00:00:00Z",
+        updated_at="2026-05-06T00:00:00Z",
+    )
+    task_path = tmp_path / "planning" / "tasks" / f"{review_task.task_id}.md"
+    task_path.write_text(
+        render_planning_markdown(review_task, title=review_task.title),
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "wiki",
+            "maintenance",
+            "review",
+            "--json",
+        ]
+    )
+    suggest_payload = json.loads(capsys.readouterr().out)
+    brief_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "wiki",
+            "maintenance",
+            "review",
+            "--json",
+        ]
+    )
+    brief_payload = json.loads(capsys.readouterr().out)
+
+    assert suggest_exit == 0
+    assert brief_exit == 0
+    suggest_commands = {
+        command["command"] for command in suggest_payload["maintenance_context"]["commands"]
+    }
+    brief_commands = {
+        command["command"] for command in brief_payload["maintenance_context"]["commands"]
+    }
+    expected_commands = {
+        "splendor wiki status",
+        f"splendor wiki suggest {added_reviewed.source_id}",
+        "splendor source freshness",
+        "splendor source refresh reviewed.md",
+        "splendor queue inspect",
+        "splendor ingest --pending",
+        "splendor task list --generated-review --review-task-state active",
+    }
+    assert expected_commands <= suggest_commands
+    assert expected_commands <= brief_commands
+    assert "contradiction-review" in {
+        action["category"] for action in suggest_payload["maintenance_context"]["actions"]
+    }
+    assert any(
+        "not default active human tasks" in note
+        for note in brief_payload["maintenance_context"]["notes"]
+    )
+    assert brief_payload["active_planning"] == []
+
+
+def test_implementation_handoff_keeps_maintenance_commands_below_work_context(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Implement",
+            "handoff",
+            "polish",
+            "--id",
+            "task-handoff-polish",
+            "--status",
+            "in_progress",
+        ]
+    )
+    source = tmp_path / "review-needed.md"
+    source.write_text("# Review needed\n\nGenerated maintenance state.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    capsys.readouterr()
+
+    json_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "implement",
+            "handoff",
+            "polish",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "implement",
+            "handoff",
+            "polish",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert json_exit == 0
+    assert text_exit == 0
+    assert payload["work_context"]["actions"]
+    assert payload["maintenance_context"]["actions"]
+    assert payload["maintenance_context"]["commands"]
+    assert all(
+        action["category"] not in {"synthesis", "wiki-review", "source-freshness", "queue"}
+        for action in payload["work_context"]["actions"]
+    )
+    assert out.index("Work context:") < out.index("Splendor maintenance:")
+    assert out.index("Splendor maintenance:") < out.index("Maintenance commands:")
+    assert "Wiki status:" not in out
+
+
+def test_maintenance_guidance_preserves_dead_letter_repair_command(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "dead-letter.md"
+    source.write_text("# Dead letter\n\nNeeds repair.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    queue_record = load_queue_item(queue_path).model_copy(
+        update={"status": "dead_letter", "last_error": "broken ingest"}
+    )
+    write_queue_item(queue_path, queue_record)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "wiki",
+            "maintenance",
+            "review",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    commands = {command["command"] for command in payload["maintenance_context"]["commands"]}
+    assert "splendor queue inspect" in commands
+    assert f"splendor repair ingest {added.source_id}" in commands
 
 
 def test_brief_skips_invalid_query_matches_without_failing(tmp_path: Path, capsys) -> None:
