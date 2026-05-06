@@ -2309,6 +2309,72 @@ def test_agent_context_hocrgen_retry_bar_uses_provisional_uncurated_authority(
     assert out.index("Provisional uncurated docs:") < out.index("Splendor maintenance:")
 
 
+def test_agent_context_inferred_authority_stays_goal_relevant_and_below_configured(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/current_reference.md",
+            role="reference",
+            freshness="current",
+            applies_to=["hocrgen F3b"],
+        )
+    ]
+    write_config(tmp_path, config)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\nCurrent critical path: F3a complete; next implementation step is F3b.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrgen\n\nF3b adds typed repo-tracked operator intake manifests.\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "current_reference.md").write_text(
+        "# Current Reference\n\nConfigured hocrgen F3b reference.\n",
+        encoding="utf-8",
+    )
+    (docs / "some_other_plan.md").write_text(
+        "# Billing Migration Plan\n\nUnrelated rollout plan for billing imports.\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "Resume",
+            "hocrgen",
+            "planning",
+            "after",
+            "F3a",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority_paths = [item["path"] for item in payload["authority_briefs"]]
+    assert authority_paths.index("docs/current_reference.md") < authority_paths.index(
+        ".agent-plan.md"
+    )
+    assert "docs/some_other_plan.md" not in authority_paths
+    assert "docs/some_other_plan.md" not in {
+        item["path"] for item in payload["provisional_context"]["authority"]
+    }
+    configured = payload["authority_briefs"][authority_paths.index("docs/current_reference.md")]
+    assert configured["origin"] == "configured-authority"
+    assert configured["curation_state"] == "configured"
+
+
 def test_brief_plain_text_does_not_call_gh_by_default(tmp_path: Path, capsys, monkeypatch) -> None:
     initialize_workspace(tmp_path)
     _init_git_repo(tmp_path, repo="example/project")

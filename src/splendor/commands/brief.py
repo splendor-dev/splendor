@@ -117,6 +117,12 @@ _AUTHORITY_SOURCE_SCORE = {
     "planning-decision": 14,
     "inferred-authority": 0,
 }
+_AUTHORITY_ORIGIN_ORDER = {
+    "configured-authority": 0,
+    "wiki-authority": 0,
+    "planning-decision": 0,
+    "inferred-authority": 1,
+}
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
 _AUTHORITY_ROLE_ORDER = {
     "current-authority": 0,
@@ -233,6 +239,26 @@ _MAINTENANCE_GOAL_FILLER_TOKENS = {
     "with",
     "would",
     "you",
+}
+_INFERRED_CONTEXT_FILLER_TOKENS = _MAINTENANCE_GOAL_FILLER_TOKENS | {
+    "agent",
+    "critical",
+    "current",
+    "doc",
+    "docs",
+    "file",
+    "implementation",
+    "next",
+    "path",
+    "plan",
+    "planning",
+    "project",
+    "read",
+    "repo",
+    "roadmap",
+    "step",
+    "test",
+    "tests",
 }
 
 
@@ -851,6 +877,7 @@ def _authority_briefs(
         key=lambda item: (
             _AUTHORITY_LIFECYCLE_TIER.get(item[1].lifecycle, 99),
             _AUTHORITY_FRESHNESS_ORDER.get(item[1].freshness, 99),
+            _AUTHORITY_ORIGIN_ORDER.get(item[1].origin, 99),
             -item[1].score,
             _AUTHORITY_ROLE_ORDER.get(item[1].role, 99),
             _AUTHORITY_LIFECYCLE_ORDER.get(item[1].lifecycle, 99),
@@ -1012,6 +1039,7 @@ def _inferred_authority_briefs(
     configured_paths = {doc.path for doc in config.briefing.authority_documents}
     existing_paths = {item.path for item in existing_items}
     excluded_paths = configured_paths | existing_paths
+    fallback_context_tokens = _inferred_root_context_tokens(root)
     candidates: list[AuthorityBrief] = []
     for path in _inferred_authority_candidate_paths(root):
         if path.as_posix() in excluded_paths:
@@ -1027,6 +1055,15 @@ def _inferred_authority_briefs(
         freshness = "current"
         lifecycle = "current"
         reason = _inferred_authority_reason(path)
+        gating_tokens = goal_tokens | fallback_context_tokens
+        relevance_score = _goal_relevance_score(
+            gating_tokens,
+            goal_phrase=goal_phrase,
+            high_text=" ".join([title, path_text]),
+            low_text=body,
+        )
+        if _inferred_authority_requires_goal_match(path) and relevance_score <= 0:
+            continue
         curated_source = _curated_source_for_path(sources, path_text)
         if curated_source is None:
             curation_state = "provisional-uncurated"
@@ -1091,6 +1128,30 @@ def _inferred_authority_candidate_paths(root: Path) -> list[Path]:
         for path in sorted(tests_dir.rglob("test_planning*.py")):
             candidates.append(path.relative_to(root))
     return sorted(dict.fromkeys(candidates), key=lambda item: item.as_posix())
+
+
+def _inferred_root_context_tokens(root: Path) -> set[str]:
+    tokens: set[str] = set()
+    for name in (".agent-plan.md", "README.md", "CONTRIBUTING.md"):
+        path = root / name
+        if not path.is_file():
+            continue
+        try:
+            body = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        tokens.update(_tokens(body) - _INFERRED_CONTEXT_FILLER_TOKENS)
+    return tokens
+
+
+def _inferred_authority_requires_goal_match(path: Path) -> bool:
+    return path.as_posix() not in {
+        ".agent-plan.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md",
+        "CONTRIBUTING.md",
+    }
 
 
 def _is_inferred_docs_authority_path(path: Path) -> bool:
