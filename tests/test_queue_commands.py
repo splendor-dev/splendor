@@ -365,6 +365,27 @@ def test_queue_clean_skips_active_leases_invalid_payloads_and_unsupported_jobs(
     }
 
 
+def test_queue_clean_skips_record_when_filename_and_job_id_disagree(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    queue_item = load_queue_item(queue_path)
+    mismatch_path = tmp_path / "state" / "queue" / "ingest-corrupt-filename.json"
+    queue_path.unlink()
+    added.manifest_path.unlink()
+    write_queue_item(mismatch_path, queue_item)
+
+    result = clean_queue(tmp_path, orphaned=True)
+
+    assert result.actions == []
+    assert [(action.cleanup_state, action.path.as_posix()) for action in result.skipped] == [
+        ("job_id_mismatch", "state/queue/ingest-corrupt-filename.json")
+    ]
+    assert "does not match filename" in (result.skipped[0].reason or "")
+
+
 def test_cli_queue_clean_json_reports_preview_and_apply_mutation_contract(
     tmp_path: Path, capsys
 ) -> None:
@@ -488,6 +509,31 @@ def test_cli_queue_inspect_prioritizes_runnable_work_over_cleanup(tmp_path: Path
     assert "cleanup=orphaned" in out
     assert "Next: splendor ingest --pending" in out
     assert "Next: splendor queue clean --orphaned --apply" not in out
+
+
+def test_cli_queue_inspect_reports_completed_cleanup_next_actions(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "done.md"
+    source.write_text("# Done\n\nAlready ingested.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    job_id = f"ingest-{source_id}"
+    queue_path = tmp_path / "state" / "queue" / f"{job_id}.json"
+    write_queue_item(
+        queue_path,
+        load_queue_item(queue_path).model_copy(update={"status": "done"}),
+    )
+    capsys.readouterr()
+
+    assert main(["--root", str(tmp_path), "queue", "inspect"]) == 0
+    out = capsys.readouterr().out
+    assert "cleanup=completed" in out
+    assert "Next: splendor queue clean --completed --apply" in out
+
+    assert main(["--root", str(tmp_path), "queue", "inspect", job_id]) == 0
+    out = capsys.readouterr().out
+    assert "Cleanup state: completed" in out
+    assert "Next: splendor queue clean --completed --apply" in out
 
 
 def test_cli_queue_retry_resets_failed_job(tmp_path: Path, capsys) -> None:

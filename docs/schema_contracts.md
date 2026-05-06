@@ -217,7 +217,8 @@ Implemented fields:
   `--superseded` for queue records whose payload source has `superseded_by`, and `--completed` for
   `done` queue records. JSON output includes `mutation.mode`, `mutation.mutates`,
   `mutation.planned`, and `mutation.written`; skipped records report invalid payloads, unsupported
-  job types, active leases, and source/job mismatches without deleting them.
+  job types, active leases, queue filename/job ID mismatches, and source/job mismatches without
+  deleting them.
 - `splendor source reconcile <source-id|logical-id|title|path>` previews duplicate active source
   version repair for one canonical source-ref group. Without `--current`, an exact source ID keeps
   that source active; otherwise the latest active version by `(added_at, source_id)` is selected.

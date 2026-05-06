@@ -1511,6 +1511,8 @@ def handle_queue_inspect(args: argparse.Namespace) -> int:
         print("Next: splendor queue clean --orphaned --apply")
     elif "superseded" in cleanup_states:
         print("Next: splendor queue clean --superseded --apply")
+    elif "completed" in cleanup_states:
+        print("Next: splendor queue clean --completed --apply")
     return 0
 
 
@@ -1627,6 +1629,8 @@ def _print_queue_item_detail(item: QueueItemSnapshot) -> None:
         print("Next: splendor queue clean --orphaned --apply")
     elif item.cleanup_state == "superseded":
         print("Next: splendor queue clean --superseded --apply")
+    elif item.cleanup_state == "completed":
+        print("Next: splendor queue clean --completed --apply")
     elif item.status == "dead_letter":
         print(
             f"Next: splendor queue retry {item.job_id} or splendor repair ingest {item.source_id}"

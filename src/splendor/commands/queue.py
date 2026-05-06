@@ -432,6 +432,18 @@ def _queue_clean_action(
             reason=f"queue record is invalid: {exc}",
         )
 
+    if queue_item.job_id != job_id:
+        return None, QueueCleanAction(
+            job_id=queue_item.job_id,
+            path=queue_ref,
+            source_id=source_id_from_ingest_job_id(queue_item.job_id),
+            cleanup_state="job_id_mismatch",
+            status="skipped",
+            reason=(
+                f"queue record job_id {queue_item.job_id!r} does not match filename {job_id!r}"
+            ),
+        )
+
     source_id = source_id_from_ingest_job_id(queue_item.job_id)
     skip = _queue_clean_skip(root, queue_item, source_id=source_id, queue_ref=queue_ref)
     if skip is not None:
