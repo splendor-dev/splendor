@@ -945,8 +945,9 @@ Release-readiness boundary:
   or a canonical source-ID migration.
 - issue #79 tracked the reviewed mutating compile/update workflow from #41; `M15-P1.1`,
   `M15-P1.2`, and `M15-P1.3` now represent and disposition the one-page proposal/apply path.
-- `docs/v1_release_handoff.md` remains the historical v1-style handoff checklist for validation
-  and GitHub metadata expectations, but the immediate evaluation release target is `v0.2.0`.
+- `docs/releases/v1_release_handoff.md` remains the historical v1-style handoff checklist for
+  validation and GitHub metadata expectations, while current v0.4 planning is driven by the external
+  retry bar in `docs/evaluations/v0_4_external_retry_bar.md`.
 
 Later optional support:
 - additional OCR providers
@@ -1130,6 +1131,24 @@ Current implementation:
   `1` through optional fields only.
 - Briefing is read-only and does not replace `splendor query`; query finds records, while briefing
   packages the surrounding project state needed to resume work.
+
+v0.4 direction from external trials:
+
+- `brief --agent-context` and `suggest-next` should be work-first. They should lead with open
+  work, current authority, files to read, recent git/PR context, and relevant tests before source
+  drift, queue state, or other Splendor maintenance.
+- Git context should be included by default inside git repositories. The default scope should be
+  recent work since the merge base with the configured main branch, with `--since <ref>` override
+  and `--no-git` escape hatch.
+- Handoff output should be structurally separated into work context and Splendor maintenance, not
+  just a single ranked list. Maintenance signals stay visible but should not crowd out task
+  authority unless the goal is explicitly about maintenance, recovery, refresh, ingest, or
+  validation.
+- Configured authority wins, but repos without explicit authority config should get labeled
+  inferred-authority fallback for conventional files such as `.agent-plan.md`, `AGENTS.md`,
+  `CLAUDE.md`, `README.md`, roadmap-like docs, and planning tests.
+- Important uncurated documentation may be used as provisional context only when clearly labeled
+  as uncurated and paired with an exact curation command.
 
 ## 18. Search Model
 

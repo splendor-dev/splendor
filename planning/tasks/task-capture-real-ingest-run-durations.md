@@ -17,7 +17,7 @@ source_refs:
 - src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4
 - src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b
 page_refs:
-- docs/dogfood_knowledge_work_report.md
+- docs/evaluations/dogfood_knowledge_work_report.md
 run_refs:
 - state/runs/run-src-6be68f3b5ee70bf209d78171363cbd857c72f331dbdd13ddc79fd2f7d8c188a6-20260430T092101207478Z.json
 - state/runs/run-src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4-20260430T092129520858Z.json

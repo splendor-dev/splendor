@@ -52,6 +52,14 @@ briefing:
     applies_to:
     - roadmap
     - milestone planning
+  - path: docs/evaluations/v0_4_external_retry_bar.md
+    role: current-authority
+    freshness: current
+    purpose: Accepted v0.4 retry requirements synthesized from the raw external evaluation reports.
+    applies_to:
+    - v0.4
+    - agent handoff
+    - external evaluation
   - path: docs/splendor_product_spec.md
     role: current-authority
     freshness: current
@@ -66,21 +74,21 @@ briefing:
     applies_to:
     - schemas
     - CLI contracts
-  - path: docs/ci_and_repo_automation.md
+  - path: docs/operations/ci_and_repo_automation.md
     role: current-authority
     freshness: current
     purpose: Automation and GitHub workflow behavior reference.
     applies_to:
     - CI
     - repository automation
-  - path: docs/v1_release_handoff.md
+  - path: docs/releases/v1_release_handoff.md
     role: reference
     freshness: watch
     purpose: v1 release handoff and known post-v1 follow-up queue.
     applies_to:
     - release handoff
     - post-v1 planning
-  - path: docs/m14_synthbanshee_reevaluation.md
+  - path: docs/evaluations/m14_synthbanshee_reevaluation.md
     role: historical-review
     freshness: current
     purpose: M14-P3.1 internal re-evaluation of the #72 source-lifecycle feedback loop.
@@ -88,6 +96,34 @@ briefing:
     - issue 72
     - issue 86
     - agent handoff
+  - path: docs/evaluations/v0_3_synthbanshee_evaluation.md
+    role: historical-review
+    freshness: historical
+    purpose: Raw external SynthBanshee v0.3 evaluation evidence behind the v0.4 retry bar.
+    applies_to:
+    - v0.3 evaluation evidence
+    - SynthBanshee
+  - path: docs/evaluations/v0_3_synthbanshee_followup.md
+    role: historical-review
+    freshness: historical
+    purpose: Raw SynthBanshee follow-up evidence behind the v0.4 retry bar.
+    applies_to:
+    - v0.3 evaluation evidence
+    - SynthBanshee
+  - path: docs/evaluations/v0_3_hocrgen_evaluation.md
+    role: historical-review
+    freshness: historical
+    purpose: Raw external hocrgen v0.3 evaluation evidence behind the v0.4 retry bar.
+    applies_to:
+    - v0.3 evaluation evidence
+    - hocrgen
+  - path: docs/evaluations/v0_3_hocrgen_followup.md
+    role: historical-review
+    freshness: historical
+    purpose: Raw hocrgen follow-up evidence behind the v0.4 retry bar.
+    applies_to:
+    - v0.3 evaluation evidence
+    - hocrgen
   - path: docs/issue_70_design_response.md
     role: historical-review
     freshness: watch

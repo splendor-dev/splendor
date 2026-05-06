@@ -48,8 +48,9 @@
 │   ├── splendor_mvp_to_v1_roadmap.md
 │   ├── source_resolution_refactor_plan.md
 │   ├── schema_contracts.md
-│   ├── ci_and_repo_automation.md
-│   └── github_automation_architecture.md
+│   └── operations/
+│       ├── ci_and_repo_automation.md
+│       └── github_automation_architecture.md
 └── .github/workflows/
     ├── ci.yml
     ├── pr-agent-context-refresh.yml
@@ -91,7 +92,7 @@
 - Packaging and tool config: `pyproject.toml`
 - Repo root instructions: `AGENTS.md`
 - Dynamic agent state: `.agent-plan.md`
-- CI and automation docs: `docs/ci_and_repo_automation.md`
+- CI and automation docs: `docs/operations/ci_and_repo_automation.md`
 - Workflow files: `.github/workflows/`
 
 ## Product and Planning Docs

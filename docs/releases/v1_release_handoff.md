@@ -10,7 +10,7 @@ The immediate tag target after the post-M15 issue-disposition pass is `v0.2.0`, 
 This document remains the historical v1-style handoff and validation checklist, but the current
 release-prep PR uses it only to avoid stale release-state claims. The `v0.2.0` tag should be
 created only after the release-prep PR merges, `main` is green, and the version metadata plus
-`docs/v0_2_0_release_notes.md` are present on `main`.
+`docs/releases/v0_2_0_release_notes.md` are present on `main`.
 
 ## Release Validation
 
@@ -42,10 +42,10 @@ Before publishing release notes, verify that:
   `docs/splendor_mvp_to_v1_roadmap.md` planning-state lines match
 - `docs/splendor_product_spec.md` acceptance criteria still match shipped behavior
 - `docs/schema_contracts.md` still names schema version `1` and legacy manifest compatibility
-- `docs/quickstart.md` demonstrates the current safe source workflow
-- `docs/ci_and_repo_automation.md` and `docs/github_automation_architecture.md` still describe
+- `docs/guides/quickstart.md` demonstrates the current safe source workflow
+- `docs/operations/ci_and_repo_automation.md` and `docs/operations/github_automation_architecture.md` still describe
   GitHub automation as optional around the local CLI
-- `docs/release_artifacts.md` names the GitHub Release wheel as the canonical trial-install path
+- `docs/operations/release_artifacts.md` names the GitHub Release wheel as the canonical trial-install path
   for external v0.3 evaluators
 
 ## GitHub Handoff
@@ -58,7 +58,7 @@ Release PRs should be non-draft and should carry:
   milestone unless maintainers create a dedicated evaluation-release milestone
 - explicit issue linkage for issues that are closed or intentionally kept open
 
-For the current `v0.2.0` evaluation-release handoff:
+For the historical `v0.2.0` evaluation-release handoff:
 
 - GitHub has no open issues as of the release-prep handoff.
 - #70 remains the completed parent feedback loop for the `M13-P2` redesign.
@@ -108,7 +108,7 @@ bundle is:
    including a controlled changed-source exercise, and record the close-or-split recommendation for
    #72.
 
-The retry result is captured in `docs/m14_synthbanshee_reevaluation.md`. The subsequent
+The retry result is captured in `docs/evaluations/m14_synthbanshee_reevaluation.md`. The subsequent
 `M14-P4.1`, `M15-P1.1`, `M15-P1.2`, and `M15-P1.3` work is also complete: planning-authority
 briefs landed, the reviewed one-page compile/apply loop landed, compile-target discovery landed,
 and #79 was dispositioned. Future work should now come from the post-`v0.2.0`
@@ -120,7 +120,7 @@ After the release-prep PR merges, `v0.2.0` tagging is ready when `main` has:
 
 - package version metadata updated to `0.2.0` in both `pyproject.toml` and
   `src/splendor/__init__.py`
-- `docs/v0_2_0_release_notes.md` or a GitHub release draft that names completed stabilization,
+- `docs/releases/v0_2_0_release_notes.md` or a GitHub release draft that names completed stabilization,
   validation, current no-open-issues state, and the post-release SynthBanshee/Claude Code
   evaluation step
 - green CI for formatting, linting, tests, and coverage
