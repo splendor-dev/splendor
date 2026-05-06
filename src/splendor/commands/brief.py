@@ -16,7 +16,6 @@ from splendor.schemas import (
     MaintenanceReport,
     QuerySnapshot,
     SourceRecord,
-    TaskRecord,
 )
 from splendor.state.query_snapshot import last_query_path_for
 from splendor.state.source_compat import canonical_source_ref
@@ -352,7 +351,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
             brief_matches = [
                 _brief_match(match)
                 for match in query_result.matches
-                if not _is_generated_review_task_match(root, match)
+                if not _is_generated_review_task_match(match)
             ]
             matches = _rank_brief_matches(
                 brief_matches,
@@ -415,14 +414,13 @@ def _brief_match(match: QueryMatch) -> BriefMatch:
     )
 
 
-def _is_generated_review_task_match(root: Path, match: QueryMatch) -> bool:
-    if match.document_class != "planning" or match.kind != "task":
-        return False
-    try:
-        parsed = parse_planning_document(root / match.path, TaskRecord)
-    except (OSError, ValueError):
-        return False
-    return is_generated_contradiction_review_task(parsed.record)
+def _is_generated_review_task_match(match: QueryMatch) -> bool:
+    return (
+        match.document_class == "planning"
+        and match.kind == "task"
+        and match.record_origin == "generated"
+        and match.generated_kind == "contradiction-review"
+    )
 
 
 def _rank_brief_matches(

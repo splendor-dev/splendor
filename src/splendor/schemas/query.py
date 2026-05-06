@@ -23,6 +23,9 @@ class QueryMatchSnapshot(StrictRecord):
     title: str
     path: str
     status: str | None = None
+    record_origin: str | None = None
+    generated_kind: str | None = None
+    review_task_state: str | None = None
     review_state: str | None = None
     last_generated_at: str | None = None
     snippet: str

@@ -31,6 +31,16 @@ class TaskRecord(StrictRecord):
     run_refs: list[str] = Field(default_factory=list)
 
 
+def status_for_review_task_state(
+    current_status: str, review_task_state: Literal["active", "resolved", "muted"]
+) -> str:
+    if review_task_state == "resolved":
+        return "done"
+    if current_status == "done":
+        return "todo"
+    return current_status
+
+
 class MilestoneRecord(StrictRecord):
     kind: Literal["milestone"] = "milestone"
     milestone_id: str

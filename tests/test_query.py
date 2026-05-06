@@ -10,8 +10,9 @@ from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_question, create_task
 from splendor.commands.query import run_query
 from splendor.config import load_config, write_config
-from splendor.schemas import KnowledgePageFrontmatter
+from splendor.schemas import KnowledgePageFrontmatter, TaskRecord
 from splendor.state.query_snapshot import load_query_snapshot
+from splendor.utils.planning import render_planning_markdown
 
 
 def enable_sidecar_ocr(root: Path) -> None:
@@ -86,6 +87,35 @@ def test_run_query_returns_ranked_matches_from_wiki_and_planning(tmp_path: Path)
     assert wiki_match.provenance_links == []
     assert wiki_match.contradiction_count == 0
     assert wiki_match.review_task_ids == []
+
+
+def test_run_query_carries_planning_task_generation_metadata(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    review_task = TaskRecord(
+        task_id="task-review-src-a-src-b-1234567890",
+        title="Review contradiction: A vs B",
+        status="todo",
+        priority="high",
+        record_origin="generated",
+        generated_kind="contradiction-review",
+        review_task_state="muted",
+        created_at="2026-05-06T00:00:00Z",
+        updated_at="2026-05-06T00:00:00Z",
+        source_refs=["src-a", "src-b"],
+    )
+    task_path = tmp_path / "planning" / "tasks" / f"{review_task.task_id}.md"
+    task_path.write_text(
+        render_planning_markdown(review_task, title=review_task.title),
+        encoding="utf-8",
+    )
+
+    result = run_query(tmp_path, "contradiction")
+
+    assert result.match_count == 1
+    match = result.matches[0]
+    assert match.record_origin == "generated"
+    assert match.generated_kind == "contradiction-review"
+    assert match.review_task_state == "muted"
 
 
 def test_run_query_filters_by_wiki_tag(tmp_path: Path) -> None:

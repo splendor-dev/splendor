@@ -20,6 +20,7 @@ from splendor.schemas import (
     ProvenanceLink,
     TaskRecord,
 )
+from splendor.schemas.planning import status_for_review_task_state
 from splendor.utils.planning import parse_planning_document, planning_path, render_planning_document
 from splendor.utils.time import utc_now_iso
 from splendor.utils.wiki import parse_wiki_markdown
@@ -496,7 +497,7 @@ def _upsert_review_task(
         parsed = parse_planning_document(task_path, TaskRecord)
         assert isinstance(parsed.record, TaskRecord)
         review_task_state = parsed.record.review_task_state
-        status = _review_task_status_for_state(parsed.record.status, review_task_state)
+        status = status_for_review_task_state(parsed.record.status, review_task_state)
         record = parsed.record.model_copy(
             update={
                 "title": title,
@@ -571,14 +572,6 @@ def _render_review_task_body(
         f"(`{candidate.frontmatter.page_id}`)\n\n"
         "## Notes\n\n"
     )
-
-
-def _review_task_status_for_state(current_status: str, review_task_state: str) -> str:
-    if review_task_state == "resolved":
-        return "done"
-    if current_status == "done":
-        return "todo"
-    return current_status
 
 
 def _render_provenance_lines(links: list[ProvenanceLink]) -> list[str]:
