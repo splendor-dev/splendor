@@ -5,8 +5,8 @@ publishing separate from Splendor runtime behavior.
 
 ## Canonical Trial Install
 
-For external v0.3 trial users, prefer the wheel attached to the matching GitHub Release. Start from
-the release page so the evaluator sees the release notes, validation status, and known limitations
+For external trial users, prefer the wheel attached to the matching GitHub Release. Start from the
+release page so the evaluator sees the release notes, validation status, and known limitations
 before installing:
 
 ```text

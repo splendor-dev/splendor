@@ -334,9 +334,9 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P2.1`
-- Current planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Current PR sub-slice: `M19-P3.1`
+- Previous completed PR sub-slice: `M19-P3.1`
+- Current planned slice: `v0.4.0 release preparation`
+- Current PR sub-slice: `v0.4.0-release-prep`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M20 post-v1 product bets`
 - Next planned PR sub-slice: `M20-P1.1`

@@ -39,4 +39,5 @@ workflow.
 
 - [v0.2.0 release notes](releases/v0_2_0_release_notes.md)
 - [v0.3.0 release notes](releases/v0_3_0_release_notes.md)
+- [v0.4.0 release notes](releases/v0_4_0_release_notes.md)
 - [v1 release handoff](releases/v1_release_handoff.md)
