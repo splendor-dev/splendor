@@ -140,6 +140,10 @@ def pending_ingest_next_actions(result: DrainResult) -> list[str]:
     if result.failed:
         return ["splendor queue inspect"]
 
+    planned_source_ids = [item.source_id for item in result.items if item.outcome == "planned"]
+    if planned_source_ids:
+        return ["splendor ingest --pending --apply"]
+
     succeeded_source_ids = [item.source_id for item in result.items if item.outcome == "succeeded"]
     if len(succeeded_source_ids) == 1:
         return [f"splendor wiki suggest {succeeded_source_ids[0]}"]
@@ -165,35 +169,13 @@ def pending_ingest_planned_records(root: Path, result: DrainResult) -> list[dict
             continue
         queue_ref = _relative_to_root(root, item.queue_path)
         source_id = item.source_id
-        records.extend(
-            [
-                mutation_record(
-                    action="write",
-                    path=queue_ref,
-                    kind="queue_record",
-                    source_id=source_id,
-                ),
-                mutation_record(
-                    action="write",
-                    path=f"state/runs/<new-run-for-{source_id}>.json",
-                    kind="run_record",
-                    source_id=source_id,
-                ),
-                mutation_record(
-                    action="write",
-                    path=f"state/manifests/sources/{source_id}.json",
-                    kind="source_manifest",
-                    source_id=source_id,
-                ),
-                mutation_record(
-                    action="write",
-                    path=f"wiki/sources/{source_id}.md",
-                    kind="source_summary_page",
-                    source_id=source_id,
-                ),
-                mutation_record(action="write", path="wiki/index.md", kind="wiki_index"),
-                mutation_record(action="write", path="wiki/log.md", kind="wiki_log"),
-            ]
+        records.append(
+            mutation_record(
+                action="write",
+                path=queue_ref,
+                kind="queue_record",
+                source_id=source_id,
+            )
         )
     return records
 
@@ -952,19 +934,22 @@ def _extra_write_is_source_scoped(root: Path, path: Path) -> bool:
     return relpath.startswith(("derived/", "wiki/sources/"))
 
 
-def enqueue_ingest_job(root: Path, source_id: str) -> Path:
+def preflight_enqueue_ingest_job(
+    root: Path, source_id: str, *, require_manifest: bool = True
+) -> Path:
     config = load_config(root)
     layout = resolve_layout(root, config)
     _validate_workspace_files(layout)
     manifest_path = manifest_path_for(root, source_id)
-    if not manifest_path.exists():
+    if require_manifest and not manifest_path.exists():
         msg = f"Unknown source ID: {source_id}"
         raise FileNotFoundError(msg)
 
-    source = load_source_record(manifest_path)
-    if source.source_id != source_id:
-        msg = f"Source manifest ID does not match requested source: {source_id}"
-        raise ValueError(msg)
+    if manifest_path.exists():
+        source = load_source_record(manifest_path)
+        if source.source_id != source_id:
+            msg = f"Source manifest ID does not match requested source: {source_id}"
+            raise ValueError(msg)
 
     now = _utc_now()
     queue_path = queue_item_path_for(layout, ingest_job_id(source_id))
@@ -980,6 +965,15 @@ def enqueue_ingest_job(root: Path, source_id: str) -> Path:
         msg = f"Queue item is already leased: {existing_queue.job_id}"
         raise RuntimeError(msg)
 
+    return queue_path
+
+
+def enqueue_ingest_job(root: Path, source_id: str) -> Path:
+    config = load_config(root)
+    manifest_path = manifest_path_for(root, source_id)
+    queue_path = preflight_enqueue_ingest_job(root, source_id)
+    existing_queue = load_queue_item(queue_path) if queue_path.exists() else None
+    now = _utc_now()
     created_at = now.isoformat()
     if existing_queue is not None and existing_queue.status in {"pending", "leased"}:
         created_at = existing_queue.created_at
@@ -1523,6 +1517,7 @@ def preview_pending_ingest_jobs(root: Path) -> DrainResult:
     ordered_items = sorted(queue_items, key=lambda item: (item[1].created_at, item[1].job_id))
 
     skipped = 0
+    failed = 0
     item_results: list[DrainItemResult] = []
     for queue_path, queue_item in ordered_items:
         source_id = source_id_from_ingest_job_id(queue_item.job_id) or queue_item.job_id
@@ -1538,23 +1533,58 @@ def preview_pending_ingest_jobs(root: Path) -> DrainResult:
                 )
             )
             continue
-        item_results.append(
-            DrainItemResult(
-                source_id=source_id,
-                queue_path=queue_path,
-                outcome="planned",
-                message="would run ingest job with --apply",
-                written_records=[],
+        try:
+            preview = _preview_ingest_job(root, layout, queue_path, queue_item)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            failed += 1
+            item_results.append(
+                DrainItemResult(
+                    source_id=source_id,
+                    queue_path=queue_path,
+                    outcome="failed",
+                    message=str(exc),
+                    written_records=[],
+                )
             )
-        )
+            continue
+        if preview.outcome == "skipped":
+            skipped += 1
+        item_results.append(preview)
+
+    planned = sum(1 for item in item_results if item.outcome == "planned")
 
     return DrainResult(
         total=len(ordered_items),
-        processed=0,
+        processed=planned + failed,
         succeeded=0,
-        failed=0,
+        failed=failed,
         skipped=skipped,
         items=item_results,
+    )
+
+
+def _preview_ingest_job(
+    root: Path, layout, queue_path: Path, queue_item: QueueItemRecord
+) -> DrainItemResult:
+    if queue_item.job_type != "ingest_source":
+        msg = f"Unsupported queue job type for ingest worker: {queue_item.job_type}"
+        raise ValueError(msg)
+    _validate_workspace_files(layout)
+    _manifest_path, source = _load_source_for_queue(root, queue_item)
+    if _is_no_op(root, layout, source):
+        return DrainItemResult(
+            source_id=source.source_id,
+            queue_path=queue_path,
+            outcome="skipped",
+            message="already ingested for the current pipeline version",
+            written_records=[],
+        )
+    return DrainItemResult(
+        source_id=source.source_id,
+        queue_path=queue_path,
+        outcome="planned",
+        message="would run ingest job with --apply",
+        written_records=[],
     )
 
 

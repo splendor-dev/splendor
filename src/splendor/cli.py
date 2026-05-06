@@ -1213,7 +1213,7 @@ def handle_source_refresh(args: argparse.Namespace) -> int:
         label = "Queued ingest" if result.applied else "Planned queue ingest"
         print(f"{label}: {result.queue_path}")
         if result.applied:
-            print("Next: splendor ingest --pending")
+            print("Next: splendor ingest --pending --apply")
         else:
             print(f"Next: splendor source refresh {shlex.quote(args.query)} --apply")
     else:
@@ -2118,9 +2118,9 @@ def handle_workspace_refresh(args: argparse.Namespace) -> int:
         print(f"Next: {command}")
     elif result.ingest is None and result.refreshed:
         if result.index is not None:
-            print("Next: splendor ingest --pending, then splendor wiki rebuild-index")
+            print("Next: splendor ingest --pending --apply, then splendor wiki rebuild-index")
         else:
-            print("Next: splendor ingest --pending")
+            print("Next: splendor ingest --pending --apply")
     elif result.index is None and result.ingest is not None and result.ingest.succeeded:
         print("Next: splendor wiki rebuild-index")
     else:

@@ -8,14 +8,19 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from splendor import __version__
-from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
+from splendor.commands.ingest import (
+    enqueue_ingest_job,
+    is_ingest_current,
+    preflight_enqueue_ingest_job,
+    run_ingest_job,
+)
 from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.config import load_config
 from splendor.ingest_dispatch import SUPPORTED_SOURCE_TYPES
 from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
 from splendor.state.paths import resolve_workspace_path
-from splendor.state.runtime import ingest_job_id, queue_item_path_for
+from splendor.state.runtime import ingest_job_id
 from splendor.state.source_compat import (
     canonical_source_ref,
     effective_aliases,
@@ -322,7 +327,11 @@ def refresh_source(root: Path, source_query: str, *, apply: bool = True) -> Sour
         )
         queued = not is_ingest_current(root, layout, refreshed.record)
         queue_path = (
-            queue_item_path_for(layout, ingest_job_id(refreshed.record.source_id))
+            preflight_enqueue_ingest_job(
+                root,
+                refreshed.record.source_id,
+                require_manifest=refreshed.manifest_path.exists(),
+            )
             if queued
             else None
         )
@@ -564,13 +573,12 @@ def update_source_path(
     if updated and apply:
         write_source_record(source_match.manifest_path, updated_source)
 
-    layout = resolve_layout(root, load_config(root))
     queue_path = None
     if checksum_matches:
         queue_path = (
             enqueue_ingest_job(root, updated_source.source_id)
             if apply
-            else queue_item_path_for(layout, ingest_job_id(updated_source.source_id))
+            else preflight_enqueue_ingest_job(root, updated_source.source_id)
         )
     status = "repaired" if checksum_matches else "partial"
     if not apply:
@@ -584,12 +592,12 @@ def update_source_path(
     elif not checksum_matches:
         next_commands = [
             f"splendor source refresh {shlex.quote(new_ref)}",
-            "splendor ingest --pending",
+            "splendor ingest --pending --apply",
             "splendor source freshness",
         ]
     else:
         next_commands = [
-            "splendor ingest --pending",
+            "splendor ingest --pending --apply",
             "splendor source freshness",
         ]
     return SourcePathUpdateResult(
@@ -1413,7 +1421,8 @@ def _workspace_freshness_items(
                 message="canonical workspace source differs from latest manifest checksum",
                 next_commands=[
                     _source_refresh_command(source_ref),
-                    "splendor ingest --pending",
+                    f"{_source_refresh_command(source_ref)} --apply",
+                    "splendor ingest --pending --apply",
                 ],
             )
         )

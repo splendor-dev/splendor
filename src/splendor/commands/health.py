@@ -149,13 +149,16 @@ def _source_health_remediation_hint(source: SourceRecord | None, message: str) -
             )
         if source_checksum_mismatch:
             return (
-                f"Run splendor source refresh {selector}, then splendor ingest --pending; "
+                f"Run splendor source refresh {selector}, then "
+                f"splendor source refresh {selector} --apply, then "
+                "splendor ingest --pending --apply; "
                 "for all changed curated workspace sources run splendor ingest --changed."
             )
     if storage_mode in {"copy", "pointer", "symlink"} and "checksum mismatch" in message:
         return (
-            f"Run splendor source refresh {selector}, then splendor ingest --pending if a "
-            "new queue job is created."
+            f"Run splendor source refresh {selector}, then "
+            f"splendor source refresh {selector} --apply if the preview plans work, then "
+            "splendor ingest --pending --apply if a new queue job is created."
         )
     return None
 

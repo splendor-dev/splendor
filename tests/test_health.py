@@ -94,8 +94,9 @@ def test_run_health_checks_hints_checksum_mismatch_active_workspace_source(
 
     assert [issue.code for issue in result.issues] == ["source-health-check-failed"]
     assert result.issues[0].remediation_hint == (
-        "Run splendor source refresh brief.md, then splendor ingest --pending; for all changed "
-        "curated workspace sources run splendor ingest --changed."
+        "Run splendor source refresh brief.md, then splendor source refresh brief.md --apply, "
+        "then splendor ingest --pending --apply; for all changed curated workspace sources run "
+        "splendor ingest --changed."
     )
 
 

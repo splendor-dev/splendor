@@ -1758,7 +1758,7 @@ def test_cli_source_update_path_repairs_missing_workspace_source(tmp_path: Path,
     assert "Logical ID: source:docs/brief.md" in out
     assert "Checksum: matches manifest" in out
     assert f"Queued ingest: {tmp_path / 'state' / 'queue' / f'ingest-{source_id}.json'}" in out
-    assert "Next: splendor ingest --pending" in out
+    assert "Next: splendor ingest --pending --apply" in out
     updated = load_source_record(manifest_path)
     assert updated.source_id == source_id
     assert updated.source_ref == "moved/brief.md"
@@ -1828,7 +1828,7 @@ def test_cli_source_update_path_json_reports_deterministic_payload(tmp_path: Pat
         "updated": True,
         "queue_path": f"state/queue/ingest-{manifest.source_id}.json",
         "next_commands": [
-            "splendor ingest --pending",
+            "splendor ingest --pending --apply",
             "splendor source freshness",
         ],
     }
@@ -1886,6 +1886,42 @@ def test_cli_source_update_path_defaults_to_preview_without_mutating(
     }
     assert manifest_path.read_text(encoding="utf-8") == before_manifest
     assert queue_path.read_text(encoding="utf-8") == queue_before
+
+
+def test_cli_source_update_path_preview_preflights_active_queue_lease(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    old_source = tmp_path / "old.md"
+    new_source = tmp_path / "new.md"
+    old_source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "old.md"])
+    manifest_path = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
+    manifest_before = manifest_path.read_text(encoding="utf-8")
+    manifest = load_source_record(manifest_path)
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{manifest.source_id}.json"
+    queue_before = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "lease_owner": "local-cli:test",
+            "lease_expires_at": "2999-01-01T00:00:00+00:00",
+        }
+    )
+    queue_path.write_text(queue_before.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    old_source.rename(new_source)
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "source", "update-path", manifest.source_id, "new.md"]
+    )
+
+    assert exit_code == 1
+    assert (
+        f"Error: Queue item is already leased: ingest-{manifest.source_id}"
+        in capsys.readouterr().out
+    )
+    assert manifest_path.read_text(encoding="utf-8") == manifest_before
+    assert load_queue_item(queue_path).status == "leased"
 
 
 @pytest.mark.parametrize(
@@ -2045,7 +2081,7 @@ def test_cli_source_update_path_changed_bytes_reports_partial_repair(
     assert payload["queue_path"] is None
     assert payload["next_commands"] == [
         "splendor source refresh new.md",
-        "splendor ingest --pending",
+        "splendor ingest --pending --apply",
         "splendor source freshness",
     ]
     updated = load_source_record(manifest_path)
@@ -2078,7 +2114,8 @@ def test_cli_source_freshness_reports_changed_workspace_sources_without_mutating
     assert "Manifest checksum:" in out
     assert "Current checksum:" in out
     assert "Next: splendor source refresh brief.md" in out
-    assert "Next: splendor ingest --pending" in out
+    assert "Next: splendor source refresh brief.md --apply" in out
+    assert "Next: splendor ingest --pending --apply" in out
     assert "Next: splendor source refresh <path>" not in out
     assert manifest_path.read_text(encoding="utf-8") == before_manifest
     assert len(list((tmp_path / "state" / "manifests" / "sources").glob("*.json"))) == 1
@@ -2103,7 +2140,8 @@ def test_cli_source_freshness_quotes_changed_source_path_next_command(
     assert item["status"] == "changed"
     assert item["next_commands"] == [
         "splendor source refresh 'brief with spaces.md'",
-        "splendor ingest --pending",
+        "splendor source refresh 'brief with spaces.md' --apply",
+        "splendor ingest --pending --apply",
     ]
 
 
@@ -2236,7 +2274,8 @@ def test_cli_source_freshness_targets_latest_manifest_when_file_reverts(
     assert statuses[refreshed_id]["status"] == "changed"
     assert statuses[refreshed_id]["next_commands"] == [
         "splendor source refresh brief.md",
-        "splendor ingest --pending",
+        "splendor source refresh brief.md --apply",
+        "splendor ingest --pending --apply",
     ]
 
 
@@ -2493,13 +2532,10 @@ def test_cli_workspace_refresh_defaults_to_preview_without_mutating(tmp_path: Pa
     } == manifests_before
     assert not (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
     assert (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
-    assert {item["kind"] for item in payload["mutation"]["planned"]} >= {
+    assert {item["kind"] for item in payload["mutation"]["planned"]} == {
         "queue_record",
-        "run_record",
         "source_manifest",
-        "source_summary_page",
         "wiki_index",
-        "wiki_log",
     }
 
 
@@ -2599,7 +2635,7 @@ def test_cli_workspace_refresh_changed_rebuilds_index_without_ingest(
     assert exit_code == 0
     out = capsys.readouterr().out
     assert "Rebuilt index: " in out
-    assert "Next: splendor ingest --pending, then splendor wiki rebuild-index" in out
+    assert "Next: splendor ingest --pending --apply, then splendor wiki rebuild-index" in out
     assert list((tmp_path / "state" / "queue").glob("ingest-*.json"))
 
 
@@ -3074,7 +3110,7 @@ def test_cli_workspace_refresh_human_output_is_path_first(tmp_path: Path, capsys
     assert "changed=0" in out
     assert re.search(r"- brief\.md: refreshed source_id=src-[a-f0-9]{16}", out)
     assert f"Previous source ID: {original_id}" in out
-    assert "Next: splendor ingest --pending" in out
+    assert "Next: splendor ingest --pending --apply" in out
 
 
 def test_cli_pr_summary_reports_generated_state_without_mutating(tmp_path: Path, capsys) -> None:
@@ -3373,6 +3409,31 @@ def test_cli_source_refresh_preserves_active_lease_protection(tmp_path: Path, ca
     assert f"Error: Queue item is already leased: ingest-{source_id}" in capsys.readouterr().out
 
 
+def test_cli_source_refresh_preview_preflights_active_lease_protection(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue = load_queue_item(queue_path).model_copy(
+        update={
+            "status": "leased",
+            "lease_owner": "local-cli:test",
+            "lease_expires_at": "2999-01-01T00:00:00+00:00",
+        }
+    )
+    queue_path.write_text(queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
+
+    assert exit_code == 1
+    assert f"Error: Queue item is already leased: ingest-{source_id}" in capsys.readouterr().out
+
+
 def test_cli_source_refresh_preserves_dead_letter_protection(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -3387,6 +3448,29 @@ def test_cli_source_refresh_preserves_dead_letter_protection(tmp_path: Path, cap
     capsys.readouterr()
 
     exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply"])
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "dead-lettered" in out
+    assert "splendor queue retry" in out
+
+
+def test_cli_source_refresh_preview_preflights_dead_letter_protection(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue = load_queue_item(queue_path).model_copy(
+        update={"status": "dead_letter", "last_error": "too many failures"}
+    )
+    queue_path.write_text(queue.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md"])
 
     assert exit_code == 1
     out = capsys.readouterr().out
@@ -3921,16 +4005,40 @@ def test_cli_ingest_pending_defaults_to_preview_without_mutating(tmp_path: Path,
     assert payload["mutation"]["mode"] == "preview"
     assert payload["mutation"]["mutates"] is False
     assert payload["mutation"]["written"] == []
-    assert {item["kind"] for item in payload["mutation"]["planned"]} >= {
-        "queue_record",
-        "run_record",
-        "source_manifest",
-        "source_summary_page",
-        "wiki_index",
-        "wiki_log",
-    }
+    assert {item["kind"] for item in payload["mutation"]["planned"]} == {"queue_record"}
     assert queue_path.read_text(encoding="utf-8") == queue_before
     assert not (tmp_path / "wiki" / "sources" / f"{source_id}.md").exists()
+    assert not list((tmp_path / "state" / "runs").glob("*.json"))
+
+
+def test_cli_ingest_pending_preview_reports_invalid_payload_without_mutating(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("hello\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    source_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    manifest_path = tmp_path / "state" / "manifests" / "sources" / f"{source_id}.json"
+    queue_path = tmp_path / "state" / "queue" / f"ingest-{source_id}.json"
+    queue_before = queue_path.read_text(encoding="utf-8")
+    manifest_path.unlink()
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--json"])
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {"processed": 1, "succeeded": 0, "failed": 1, "skipped": 0}
+    assert payload["items"][0]["outcome"] == "failed"
+    assert "Queue payload is missing source manifest" in payload["items"][0]["message"]
+    assert payload["mutation"] == {
+        "mode": "preview",
+        "mutates": False,
+        "planned": [],
+        "written": [],
+    }
+    assert queue_path.read_text(encoding="utf-8") == queue_before
     assert not list((tmp_path / "state" / "runs").glob("*.json"))
 
 
