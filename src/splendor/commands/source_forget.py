@@ -114,15 +114,7 @@ def forget_sources(
 
 
 def render_source_forget_json(root: Path, result: SourceForgetResult) -> str:
-    mutation_records = [
-        mutation_record(
-            action="delete",
-            path=action.path,
-            kind=action.kind,
-            source_id=action.source_id,
-        )
-        for action in result.actions
-    ]
+    mutation_records = _source_forget_mutation_records(result.actions)
     return json.dumps(
         {
             "applied": result.applied,
@@ -149,6 +141,30 @@ def render_source_forget_json(root: Path, result: SourceForgetResult) -> str:
         },
         indent=2,
     )
+
+
+def _source_forget_mutation_records(
+    actions: list[SourceForgetAction],
+) -> list[dict[str, str]]:
+    records: dict[tuple[str, str, str, str], dict[str, str]] = {}
+    for action in actions:
+        if action.kind == "wiki_index_entry":
+            record = mutation_record(action="write", path=action.path, kind="wiki_index")
+        else:
+            record = mutation_record(
+                action="delete",
+                path=action.path,
+                kind=action.kind,
+                source_id=action.source_id,
+            )
+        key = (
+            record["kind"],
+            record["path"],
+            record["action"],
+            record.get("source_id", ""),
+        )
+        records[key] = record
+    return [records[key] for key in sorted(records)]
 
 
 def forget_next_commands(result: SourceForgetResult) -> list[str]:

@@ -522,6 +522,7 @@ def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult
                     queue_path=queue_path,
                     outcome="failed",
                     message=str(exc),
+                    written_records=[],
                 )
             )
             continue
@@ -534,6 +535,7 @@ def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult
                     queue_path=queue_path,
                     outcome="skipped",
                     message="already ingested for the current pipeline version",
+                    written_records=result.written_records,
                 )
             )
             continue
@@ -546,6 +548,7 @@ def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult
                 queue_path=queue_path,
                 outcome="succeeded",
                 message=f"run {result.run_id}",
+                written_records=result.written_records,
             )
         )
 
@@ -618,6 +621,7 @@ def _ingest_payload(root: Path, result: DrainResult) -> dict[str, object]:
                 "queue_path": item.queue_path.relative_to(root).as_posix(),
                 "outcome": item.outcome,
                 "message": item.message,
+                "written_records": item.written_records,
             }
             for item in result.items
         ],
@@ -653,31 +657,10 @@ def workspace_refresh_written_records(
 
 
 def _ingest_written_records(root: Path, result: DrainResult) -> list[dict[str, str]]:
+    del root
     records: list[dict[str, str]] = []
     for item in result.items:
-        if item.outcome != "succeeded" or not item.message.startswith("run "):
+        if item.outcome not in {"succeeded", "skipped"}:
             continue
-        run_id = item.message.removeprefix("run ")
-        records.extend(
-            [
-                mutation_record(
-                    action="write",
-                    path=item.queue_path.relative_to(root).as_posix(),
-                    kind="queue_record",
-                    source_id=item.source_id,
-                ),
-                mutation_record(
-                    action="write",
-                    path=f"state/runs/{run_id}.json",
-                    kind="run_record",
-                    source_id=item.source_id,
-                ),
-                mutation_record(
-                    action="write",
-                    path=f"wiki/sources/{item.source_id}.md",
-                    kind="source_summary_page",
-                    source_id=item.source_id,
-                ),
-            ]
-        )
+        records.extend(item.written_records)
     return records

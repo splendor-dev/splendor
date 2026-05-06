@@ -399,6 +399,9 @@ def test_cli_source_forget_preview_is_non_mutating(tmp_path: Path, capsys) -> No
         f"wiki/sources/{source_id}.md",
         f"state/queue/ingest-{source_id}.json",
     }
+    assert {
+        (item["action"], item["kind"], item["path"]) for item in payload["mutation"]["planned"]
+    } >= {("write", "wiki_index", "wiki/index.md")}
     assert manifest_path.exists()
     assert summary_path.exists()
     assert queue_path.exists()
@@ -442,6 +445,9 @@ def test_cli_source_forget_apply_removes_source_owned_state(tmp_path: Path, caps
         f"wiki/sources/{source_id}.md",
         f"state/queue/ingest-{source_id}.json",
     }
+    assert {
+        (item["action"], item["kind"], item["path"]) for item in payload["mutation"]["written"]
+    } >= {("write", "wiki_index", "wiki/index.md")}
     assert not manifest_path.exists()
     assert not summary_path.exists()
     assert not queue_path.exists()
@@ -805,6 +811,12 @@ def test_cli_source_forget_removes_materialized_copy_artifacts(tmp_path: Path, c
     assert {(item["kind"], item["path"]) for item in payload["actions"]} >= {
         ("materialized_artifact", f"raw/sources/{source_id}/external.md"),
         ("source_manifest", f"state/manifests/sources/{source_id}.json"),
+    }
+    assert {
+        (item["action"], item["kind"], item["path"]) for item in payload["mutation"]["written"]
+    } >= {
+        ("delete", "materialized_artifact", f"raw/sources/{source_id}/external.md"),
+        ("delete", "source_manifest", f"state/manifests/sources/{source_id}.json"),
     }
     assert not materialized_path.exists()
     assert not materialized_path.parent.exists()
@@ -1384,6 +1396,36 @@ def test_source_refresh_noop_returns_existing_materialized_path(tmp_path: Path, 
         tmp_path / "raw" / "sources" / result.refreshed.record.source_id / "brief.md"
     )
     assert result.refreshed.stored_path.exists()
+
+
+def test_cli_source_refresh_json_reports_materialized_artifact_write(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "--storage-mode", "copy", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    refreshed_id = payload["source_id"]
+    assert refreshed_id != original_id
+    assert {
+        (item["action"], item["kind"], item["path"], item["source_id"])
+        for item in payload["mutation"]["written"]
+    } >= {
+        (
+            "write",
+            "source_artifact",
+            f"raw/sources/{refreshed_id}/brief.md",
+            refreshed_id,
+        )
+    }
 
 
 def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -> None:
@@ -2215,13 +2257,6 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
     assert payload["mutation"]["mode"] == "apply"
     assert payload["mutation"]["mutates"] is True
     assert payload["mutation"]["planned"] == []
-    assert {item["kind"] for item in payload["mutation"]["written"]} >= {
-        "queue_record",
-        "run_record",
-        "source_manifest",
-        "source_summary_page",
-        "wiki_index",
-    }
     refreshed = payload["refreshed"][0]
     assert refreshed["path"] == "brief.md"
     assert refreshed["requested_source_id"] == original_id
@@ -2229,6 +2264,37 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
     refreshed_id = refreshed["source_id"]
     assert refreshed_id != original_id
     assert refreshed["supersedes"] == [original_id]
+    written = {
+        (item["action"], item["kind"], item["path"], item.get("source_id"))
+        for item in payload["mutation"]["written"]
+    }
+    run_records = [item for item in payload["mutation"]["written"] if item["kind"] == "run_record"]
+    assert len({item["path"] for item in run_records}) == 1
+    run_path = run_records[0]["path"]
+    assert written == {
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{original_id}.json",
+            original_id,
+        ),
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{refreshed_id}.json",
+            refreshed_id,
+        ),
+        (
+            "write",
+            "queue_record",
+            f"state/queue/ingest-{refreshed_id}.json",
+            refreshed_id,
+        ),
+        ("write", "run_record", run_path, refreshed_id),
+        ("write", "source_summary_page", f"wiki/sources/{refreshed_id}.md", refreshed_id),
+        ("write", "wiki_index", "wiki/index.md", None),
+        ("write", "wiki_log", "wiki/log.md", None),
+    }
     assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
     index_text = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
     assert f"sources/{refreshed_id}.md" in index_text

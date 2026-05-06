@@ -941,6 +941,15 @@ def source_reconcile_next_commands(result: SourceReconcileResult) -> list[str]:
 def source_refresh_written_records(root: Path, result: SourceRefreshResult) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     if result.changed:
+        if result.refreshed.copied and result.refreshed.stored_path is not None:
+            records.append(
+                mutation_record(
+                    action="write",
+                    path=result.refreshed.stored_path.relative_to(root).as_posix(),
+                    kind="source_artifact",
+                    source_id=result.refreshed.record.source_id,
+                )
+            )
         records.append(
             mutation_record(
                 action="write",
