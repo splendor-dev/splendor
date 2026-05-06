@@ -150,9 +150,10 @@ Implemented today:
   `splendor wiki compile <source-id> --page <page>` for diff-backed proposals and
   `--apply --proposal-hash <hash>` for explicit reviewed synthesis-page updates
 - `splendor wiki rebuild-index`
-- `splendor brief [goal]` and `splendor brief --agent-context [goal]`
+- `splendor brief [goal]` and
+  `splendor brief --agent-context [--since <ref>] [--no-git] [goal]`
 - config-backed authority briefs for maintained planning/docs context through
-  `brief --agent-context` and `suggest-next`
+- `brief --agent-context` and `suggest-next [--since <ref>] [--no-git]`
 - `splendor serve` for a read-only local browse/search/status/planning/runtime UI
 - read-only web `/status`, `/sources/<source-id>`, `/planning`, `/runs`, and `/queue` views
 - `splendor lint` and `splendor health`
@@ -250,6 +251,14 @@ historical review, proposal, reference, and generated-summary context, with fres
 current, watch, stale, or historical. Generated `source-summary` pages remain ingestion artifacts
 and are excluded from maintained authority ranking.
 
+`M18-P1.1` makes those handoff surfaces git-aware and work-first for normal implementation goals.
+Inside a git worktree they include local branch/head/base context, recent relevant commits,
+best-effort read-only GitHub issue/PR context through `gh` when available, and read-first file
+paths before Splendor maintenance state. Use `--since <ref>` to override the git base and
+`--no-git` to suppress git/GitHub context. JSON output includes separate `work_context`,
+`maintenance_context`, and `git_context` sections while preserving the flattened
+`suggested_actions` list.
+
 `M17-P2.1` expands that authority model for issue #116 without changing schema version `1`.
 Configured authority docs, maintained wiki authority pages, and goal-relevant decision records can
 now expose lifecycle state (`current`, `reviewed`, `pr-linked`, `historical`, `superseded`, or
@@ -293,12 +302,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M17-P4.1`
+- Previous completed PR sub-slice: `M18-P0.1`
 - Current planned slice: `M18 v0.4 work-first agent handoff`
-- Current PR sub-slice: `M18-P0.1`
+- Current PR sub-slice: `M18-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M18 v0.4 work-first agent handoff`
-- Next planned PR sub-slice: `M18-P1.1`
+- Next planned PR sub-slice: `M18-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -374,6 +383,11 @@ stale/contested/review-needed pages, missing synthesis follow-up, active plannin
 maintenance reports, and query matches for the optional goal. `brief --agent-context` now leads
 with the same suggested work before the lower-level metadata lists. Use `--json` on either command
 for machine handoff.
+
+`M18-P1.1` adds runtime-only git-aware handoff context to those same surfaces. For non-maintenance
+goals, open work threads, relevant commits, configured authority, active planning, changed/read-first
+files, and goal matches rank ahead of source freshness, queue, wiki review, synthesis, lint, and
+health maintenance. Maintenance-focused goals can still keep maintenance actions first.
 
 `M13-P2.5` is implemented: source-summary pages now keep readable in-repo source summaries compact
 and claim-bearing by default, while external, copied, parsed PDF, and OCR-derived sources keep
@@ -565,6 +579,10 @@ rewritten.
 The external `v0.3.0` SynthBanshee and hocrgen trials are now captured under
 `docs/evaluations/`. They agree that v0.3 materially fixed source lifecycle safety, registry
 recovery, lint/health trust, release artifacts, queue JSON, and contradiction-review task noise.
-They also agree that `brief --agent-context` and `suggest-next` are not yet the first tool an agent
-reaches for when resuming real work. The v0.4 path therefore prioritizes git-aware, work-first
-handoff before vector search or mutating web review workflows.
+They also showed that `brief --agent-context` and `suggest-next` were not yet the first tool an
+agent reached for when resuming real work. The v0.4 path therefore prioritizes git-aware,
+work-first handoff before vector search or mutating web review workflows.
+
+`M18-P1.1` implements the first v0.4 handoff step: git-aware work context and structural
+work/maintenance separation. Broader inferred-authority fallback and provisional uncurated-doc
+context remain planned for `M18-P2.1`.

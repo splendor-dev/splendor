@@ -286,16 +286,20 @@ Implemented fields:
   changed source manifests are reported as invalid curated-source changes instead of aborting the
   whole summary. `--json` emits the same structure for agents. The command does not create
   manifests, queue jobs, wiki pages, run records, reports, or GitHub state.
-- `splendor suggest-next [goal]` is a read-only handoff view over existing deterministic state. It
-  does not create planning records, queue jobs, manifests, wiki pages, run records, or reports.
-  Human output is path-first where possible; `--json` emits ranked action objects with category,
-  priority, title, reason, command, path, source ID/source ref, planning/page record IDs, and a
+- `splendor brief --agent-context [--since <ref>] [--no-git] [goal]` and
+  `splendor suggest-next [--since <ref>] [--no-git] [goal]` are read-only handoff views over
+  existing deterministic state plus runtime-only git/GitHub signals. They do not create planning
+  records, queue jobs, manifests, wiki pages, run records, reports, or GitHub state. Human output
+  is path-first where possible; `--json` emits ranked action objects with category, priority,
+  title, reason, command, path, optional URL, source ID/source ref, planning/page record IDs, and a
   deterministic `relevance_score` when available.
-- Suggested actions are derived from source freshness, queue operator state, invalid/stale/
+- Suggested actions are derived from local git commits, best-effort read-only GitHub issue/PR
+  context through `gh` when available, source freshness, queue operator state, invalid/stale/
   contested/review-needed wiki pages, ingested sources missing maintained synthesis follow-up,
-  active planning records, recent lint/health reports, and optional goal query matches. Goal
-  relevance is scored deterministically from weighted title/path/record/scope matches, supporting
-  refs, snippets, and review/authority lifecycle signals before category caps are applied.
+  active planning records, recent lint/health reports, and optional goal query matches. Non-
+  maintenance goals rank work context before Splendor maintenance. Goal relevance is scored
+  deterministically from weighted title/path/record/scope matches, supporting refs, snippets,
+  git/GitHub text, and review/authority lifecycle signals before category caps are applied.
 - Text-bearing PDF sources are routed through source-type dispatch during ingest. The source
   manifest keeps the same `source_ref`, `source_ref_kind`, and `storage_mode` contract as
   text-native sources, while extracted text artifacts are recorded in `derived_artifacts`.

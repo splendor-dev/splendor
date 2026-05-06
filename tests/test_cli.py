@@ -814,22 +814,49 @@ def test_cli_query_parser_accepts_filters_and_no_question() -> None:
 def test_cli_brief_parser_accepts_agent_context() -> None:
     parser = build_parser()
 
-    args = parser.parse_args(["brief", "--agent-context", "query", "handoff", "--json"])
+    args = parser.parse_args(
+        ["brief", "--agent-context", "--since", "origin/main", "query", "handoff", "--json"]
+    )
 
     assert args.command == "brief"
     assert args.agent_context is True
+    assert args.since == "origin/main"
+    assert args.no_git is False
     assert args.goal == ["query", "handoff"]
     assert args.json_output is True
+
+
+def test_cli_brief_parser_accepts_no_git() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["brief", "--agent-context", "--no-git", "query", "handoff"])
+
+    assert args.command == "brief"
+    assert args.agent_context is True
+    assert args.no_git is True
+    assert args.goal == ["query", "handoff"]
 
 
 def test_cli_suggest_next_parser_accepts_goal_and_json() -> None:
     parser = build_parser()
 
-    args = parser.parse_args(["suggest-next", "agent", "handoff", "--json"])
+    args = parser.parse_args(["suggest-next", "--since", "main", "agent", "handoff", "--json"])
 
     assert args.command == "suggest-next"
+    assert args.since == "main"
+    assert args.no_git is False
     assert args.goal == ["agent", "handoff"]
     assert args.json_output is True
+
+
+def test_cli_suggest_next_parser_accepts_no_git() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["suggest-next", "--no-git", "agent", "handoff"])
+
+    assert args.command == "suggest-next"
+    assert args.no_git is True
+    assert args.goal == ["agent", "handoff"]
 
 
 def test_cli_repo_scan_parser_accepts_preview_apply_and_report_flags() -> None:

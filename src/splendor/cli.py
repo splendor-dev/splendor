@@ -596,6 +596,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit a compact coding-agent handoff over brief state.",
     )
+    brief_parser.add_argument(
+        "--since",
+        help="Base git ref for agent handoff context. Defaults to the mainline merge base.",
+    )
+    brief_parser.add_argument(
+        "--no-git",
+        action="store_true",
+        help="Disable git and GitHub handoff context.",
+    )
     brief_parser.set_defaults(handler=handle_brief)
 
     suggest_next_parser = subparsers.add_parser(
@@ -607,6 +616,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="json_output",
         help="Emit machine-readable JSON output.",
+    )
+    suggest_next_parser.add_argument(
+        "--since",
+        help="Base git ref for handoff context. Defaults to the mainline merge base.",
+    )
+    suggest_next_parser.add_argument(
+        "--no-git",
+        action="store_true",
+        help="Disable git and GitHub handoff context.",
     )
     suggest_next_parser.set_defaults(handler=handle_suggest_next)
 
@@ -2163,7 +2181,8 @@ def handle_brief(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     goal = " ".join(args.goal).strip() or None
     try:
-        result = build_project_brief(root, goal)
+        include_git = not args.no_git and (args.agent_context or args.since is not None)
+        result = build_project_brief(root, goal, include_git=include_git, since=args.since)
     except (OSError, ValueError) as exc:
         return _print_error(exc)
 
@@ -2239,21 +2258,44 @@ def handle_brief(args: argparse.Namespace) -> int:
 def _print_agent_context(result: ProjectBrief) -> None:
     print("Agent context")
     print(f"Goal: {result.goal or '-'}")
-    if result.suggested_actions:
-        print("Suggested next:")
-        for action in result.suggested_actions[:5]:
+    print("Work context:")
+    print("Suggested next:")
+    if result.work_actions:
+        for action in result.work_actions[:5]:
             subject = _suggested_action_target(action)
             command = f" command={action.command}" if action.command else ""
+            url = f" url={action.url}" if action.url else ""
             print(
-                f"- [{action.priority}/{action.category}] {action.title} target={subject}{command}"
+                f"- [{action.priority}/{action.category}] {action.title} "
+                f"target={subject}{command}{url}"
             )
-    print(
-        "Wiki status: "
-        f"sources={result.status.source_total} "
-        f"pages={result.status.page_total} "
-        f"queue_pending={result.status.queue_status_counts.get('pending', 0)} "
-        f"review_needed={result.status.review_needed_pages}"
-    )
+    else:
+        print("- No work-first actions found.")
+    if result.git_context.enabled and result.git_context.available:
+        base = result.git_context.base_ref or "-"
+        merge_base = result.git_context.merge_base or "-"
+        print(
+            "Git context: "
+            f"branch={result.git_context.branch or '-'} "
+            f"head={result.git_context.head or '-'} "
+            f"base={base} merge_base={merge_base}"
+        )
+        promoted_threads = [thread for thread in result.git_context.threads if thread.promoted]
+        if promoted_threads:
+            print("Recent issues and PRs:")
+            for thread in promoted_threads[:3]:
+                print(
+                    f"- {thread.kind} #{thread.number} [{thread.state}] "
+                    f"score={thread.relevance_score}: {thread.title} ({thread.url})"
+                )
+        if result.git_context.commits:
+            print("Recent commits:")
+            for commit in result.git_context.commits[:3]:
+                print(f"- {commit.short_sha} score={commit.relevance_score}: {commit.subject}")
+        if result.git_context.read_first_paths:
+            print("Files to read first:")
+            for path in result.git_context.read_first_paths[:5]:
+                print(f"- {path}")
     if result.matches:
         print("Relevant matches:")
         for match in result.matches:
@@ -2273,6 +2315,28 @@ def _print_agent_context(result: ProjectBrief) -> None:
         print("Active planning:")
         for item in result.planning_items:
             print(f"- {item.record_id} [{item.kind}/{item.status}] {item.title}")
+    print(
+        "Splendor maintenance: "
+        f"sources={result.status.source_total} "
+        f"pages={result.status.page_total} "
+        f"queue_pending={result.status.queue_status_counts.get('pending', 0)} "
+        f"review_needed={result.status.review_needed_pages}"
+    )
+    if result.maintenance_actions:
+        print("Maintenance actions:")
+        for action in result.maintenance_actions[:5]:
+            subject = _suggested_action_target(action)
+            command = f" command={action.command}" if action.command else ""
+            print(
+                f"- [{action.priority}/{action.category}] {action.title} target={subject}{command}"
+            )
+    print(
+        "Wiki status: "
+        f"sources={result.status.source_total} "
+        f"pages={result.status.page_total} "
+        f"queue_pending={result.status.queue_status_counts.get('pending', 0)} "
+        f"review_needed={result.status.review_needed_pages}"
+    )
     if result.recent_sources:
         print("Recent sources:")
         for source in result.recent_sources:
@@ -2292,6 +2356,10 @@ def _print_agent_context(result: ProjectBrief) -> None:
         for warning in result.warnings:
             subject = warning.path or warning.area
             print(f"- {subject}: {warning.message}")
+    if result.git_context.warnings:
+        print("Git warnings:")
+        for warning in result.git_context.warnings:
+            print(f"- {warning}")
     print("Next actions:")
     for action in result.next_actions:
         print(f"- {action}")
@@ -2301,7 +2369,7 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     goal = " ".join(args.goal).strip() or None
     try:
-        result = build_suggest_next(root, goal)
+        result = build_suggest_next(root, goal, include_git=not args.no_git, since=args.since)
     except (OSError, ValueError) as exc:
         return _print_error(exc)
 
@@ -2311,8 +2379,19 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
 
     print("Suggested next actions")
     print(f"Goal: {result.goal or '-'}")
+    if result.work_actions:
+        print("Work actions:")
+        for action in result.work_actions:
+            target = _suggested_action_target(action)
+            command = f" command={action.command}" if action.command else ""
+            url = f" url={action.url}" if action.url else ""
+            print(
+                f"{action.rank}. [{action.priority}/{action.category}] {action.title} "
+                f"target={target}{command}{url}"
+            )
+            print(f"   Reason: {action.reason}")
     print(
-        "State: "
+        "Splendor maintenance: "
         f"changed_sources={result.freshness.changed} "
         f"missing_sources={result.freshness.missing} "
         f"queue={result.queue.total} "
@@ -2320,7 +2399,7 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
         f"contested={result.status.contested_pages} "
         f"stale={result.status.stale_pages}"
     )
-    for action in result.actions:
+    for action in result.maintenance_actions:
         target = _suggested_action_target(action)
         command = f" command={action.command}" if action.command else ""
         print(
