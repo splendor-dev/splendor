@@ -210,6 +210,14 @@ Implemented fields:
   materialized artifacts under the source-owned raw artifact directory. Maintained wiki/planning
   references, malformed generated pages, mixed run records, and unsafe artifacts are reported as
   residual or skipped references rather than rewritten.
+- `splendor queue clean --orphaned|--superseded|--completed` provides preview-first closure for
+  stale ingest queue records. The command requires at least one selector, previews by default, and
+  requires `--apply` before deleting queue JSON. It selects only valid source-owned `ingest_source`
+  records that are not actively leased: `--orphaned` for missing source-manifest payloads,
+  `--superseded` for queue records whose payload source has `superseded_by`, and `--completed` for
+  `done` queue records. JSON output includes `mutation.mode`, `mutation.mutates`,
+  `mutation.planned`, and `mutation.written`; skipped records report invalid payloads, unsupported
+  job types, active leases, and source/job mismatches without deleting them.
 - `splendor source reconcile <source-id|logical-id|title|path>` previews duplicate active source
   version repair for one canonical source-ref group. Without `--current`, an exact source ID keeps
   that source active; otherwise the latest active version by `(added_at, source_id)` is selected.
@@ -572,7 +580,9 @@ Current persisted locations:
 Queue status values are `pending`, `leased`, `done`, `failed`, and `dead_letter`. Failed records may
 carry `next_attempt_at` to defer the next automatic `splendor ingest --pending` retry. Dead-letter
 records preserve `last_error` and require an explicit `splendor queue retry <job-id>` or
-`splendor repair ingest <source-id>` action.
+`splendor repair ingest <source-id>` action. Queue inspection also reports additive
+`cleanup_state` values so orphaned, superseded, completed, active-leased, invalid-payload, and
+non-candidate records can be distinguished without parsing payload paths by hand.
 
 Run records now reserve explicit provenance fields beside the original generic refs so later
 pipeline steps can answer questions like "which page did this run generate?" without parsing
