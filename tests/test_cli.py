@@ -4570,6 +4570,33 @@ def test_cli_task_resolve_and_mute_generated_review_tasks(tmp_path: Path, capsys
     assert "task-review-src-c-src-d-1234567890" not in out
 
 
+def test_cli_task_mute_normalizes_resolved_task_status(tmp_path: Path, capsys) -> None:
+    main(["--root", str(tmp_path), "init"])
+    review_task = TaskRecord(
+        task_id="task-review-src-a-src-b-1234567890",
+        title="Review contradiction: A vs B",
+        status="todo",
+        priority="high",
+        record_origin="generated",
+        generated_kind="contradiction-review",
+        review_task_state="active",
+        created_at="2026-05-06T00:00:00Z",
+        updated_at="2026-05-06T00:00:00Z",
+    )
+    task_path = tmp_path / "planning" / "tasks" / f"{review_task.task_id}.md"
+    task_path.write_text(
+        render_planning_markdown(review_task, title=review_task.title),
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    assert main(["--root", str(tmp_path), "task", "resolve", review_task.task_id]) == 0
+    assert main(["--root", str(tmp_path), "task", "mute", review_task.task_id]) == 0
+
+    out = capsys.readouterr().out
+    assert "status=todo review_task_state=muted" in out
+
+
 def test_cli_milestone_create_and_list_commands(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     main(

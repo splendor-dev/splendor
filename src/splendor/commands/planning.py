@@ -283,7 +283,7 @@ def update_task_review_state(
     if not is_generated_contradiction_review_task(record):
         raise ValueError(f"Task is not a generated contradiction-review task: {task_id}")
 
-    status = "done" if review_task_state == "resolved" else record.status
+    status = _status_for_review_task_state(record.status, review_task_state)
     updated = record.model_copy(
         update={
             "status": status,
@@ -302,6 +302,14 @@ def update_task_review_state(
         review_task_state=updated.review_task_state,
         title=updated.title,
     )
+
+
+def _status_for_review_task_state(current_status: str, review_task_state: str) -> str:
+    if review_task_state == "resolved":
+        return "done"
+    if current_status == "done":
+        return "todo"
+    return current_status
 
 
 def list_milestones(root: Path, *, status: str | None) -> list[MilestoneListRow]:

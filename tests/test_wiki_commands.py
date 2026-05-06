@@ -2306,7 +2306,7 @@ def test_suggest_next_exposes_generated_review_tasks_for_contradiction_goal(
     )
     capsys.readouterr()
 
-    default_exit = main(["--root", str(tmp_path), "suggest-next", "handoff", "--json"])
+    default_exit = main(["--root", str(tmp_path), "suggest-next", "review", "tasks", "--json"])
     default_payload = json.loads(capsys.readouterr().out)
     focused_exit = main(["--root", str(tmp_path), "suggest-next", "contradiction", "--json"])
     focused_payload = json.loads(capsys.readouterr().out)

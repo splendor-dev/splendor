@@ -129,15 +129,13 @@ _PLANNING_STATUSES = {
     "question": {"open", "deferred"},
 }
 _CONTRADICTION_GOAL_TOKENS = {
+    "conflict",
+    "conflicts",
+    "conflicting",
     "contradiction",
     "contradictions",
     "contradicting",
     "contested",
-    "evidence",
-    "review",
-    "reviews",
-    "task",
-    "tasks",
 }
 
 
@@ -362,7 +360,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
                 goal_phrase,
             )[:_BRIEF_MATCH_LIMIT]
 
-    planning_items, warnings = _active_planning_items(
+    planning_items, warnings, generated_review_task_count = _active_planning_items(
         root, layout, normalized_goal or None, goal_phrase
     )
     if query_warning is not None:
@@ -397,7 +395,7 @@ def _collect_brief_state(root: Path, goal: str | None) -> BriefStateSnapshot:
         sources_by_id=sources_by_id,
         wiki_pages=wiki_pages,
         invalid_wiki_pages=invalid_wiki_pages,
-        generated_review_task_count=_generated_review_task_count(layout),
+        generated_review_task_count=generated_review_task_count,
     )
 
 
@@ -478,9 +476,10 @@ def _brief_error(exc: Exception) -> str:
 
 def _active_planning_items(
     root: Path, layout, goal: str | None, goal_phrase: str
-) -> tuple[list[BriefPlanningItem], list[BriefWarning]]:
+) -> tuple[list[BriefPlanningItem], list[BriefWarning], int]:
     items: list[BriefPlanningItem] = []
     warnings: list[BriefWarning] = []
+    generated_review_task_count = 0
     goal_tokens = _tokens(goal or "")
     for kind, statuses in _PLANNING_STATUSES.items():
         model = model_for_planning_kind(kind)
@@ -499,6 +498,8 @@ def _active_planning_items(
                 continue
             record = parsed.record
             if kind == "task" and is_generated_contradiction_review_task(record):
+                if record.review_task_state == "active":
+                    generated_review_task_count += 1
                 continue
             status = record.status
             if status not in statuses:
@@ -537,7 +538,7 @@ def _active_planning_items(
         )
     else:
         items.sort(key=lambda item: (item.kind, item.status, item.record_id))
-    return items[:_BRIEF_PLANNING_LIMIT], warnings
+    return items[:_BRIEF_PLANNING_LIMIT], warnings, generated_review_task_count
 
 
 def _authority_briefs(root: Path, layout, config, pages: list[WikiPageSnapshot], goal: str | None):
@@ -1315,21 +1316,6 @@ def _sources_missing_synthesis(
             continue
         source_ids.append(source_id)
     return sorted(source_ids, key=lambda source_id: canonical_source_ref(sources_by_id[source_id]))
-
-
-def _generated_review_task_count(layout) -> int:
-    count = 0
-    for path in iter_planning_paths(planning_directory(layout, "task")):
-        try:
-            parsed = parse_planning_document(path, model_for_planning_kind("task"))
-        except (OSError, ValueError):
-            continue
-        if (
-            is_generated_contradiction_review_task(parsed.record)
-            and parsed.record.review_task_state == "active"
-        ):
-            count += 1
-    return count
 
 
 def render_suggest_next_json(result: SuggestNextResult) -> str:
