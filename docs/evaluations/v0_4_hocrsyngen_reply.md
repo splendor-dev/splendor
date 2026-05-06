@@ -69,7 +69,7 @@ But it still suggested “Review PR #37” as the top next action and pulled in 
 | `.agent-plan.md` as dynamic current state | Yes, but checked against git/PR | Not enough; over-trusted stale state |
 
 **First-Use Friction**
-`splendor` was not on `PATH`; I found `/Users/shaypalachy/.local/bin/splendor`. PyPI had no `splendor` package. `npm`, `uv`, `pipx`, and `brew` were unavailable on PATH.
+`splendor` was not on `PATH`; I found `~/.local/bin/splendor`. PyPI had no `splendor` package. `npm`, `uv`, `pipx`, and `brew` were unavailable on PATH.
 
 `add-source --capture-source-commit` initially crashed with:
 
@@ -98,5 +98,3 @@ I removed the Splendor trial files I created and switched back to `main`; final 
 - Fix lint false positives: it reported README links like `docs/roadmap.md` as missing even though they exist.
 - Make scan ranking more opinionated: core handoff files should outrank licenses, fixture corpora, and broad docs.
 - Mark generated contradiction tasks as secondary unless they block the user’s stated goal.
-
-::git-create-branch{cwd="/Users/shaypalachy/clones/hocrsyngen" branch="trial/splendor-v0.4-first-pass"}

@@ -101,6 +101,6 @@ The combined sequence accepted for the remaining M19 durability track is:
 
 ## Out Of Scope For This PR
 
-This intake PR intentionally does not update `.agent-plan.md`, roadmap planning state, product
-specs, command behavior, or tests. Those changes should land in follow-up implementation/design PRs
-with their own scoped validation.
+This intake PR intentionally does not change runtime command behavior or add implementation tests.
+It records the external review materials, synthesizes findings, and updates planning/spec/guide
+documents so the follow-up implementation slices have an explicit target and validation frame.

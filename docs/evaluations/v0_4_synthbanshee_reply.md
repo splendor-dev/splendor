@@ -124,7 +124,7 @@ Notes: `queue clean --orphaned --json` returns `{applied: false, selectors: [...
 
 gh issue list --state open --search "ASR OR Whisper OR WER OR sp_it"
 # Output: #87, #91, #88, #92 (four open ASR issues)
-````
+```
 
 Missing items displaced by: nothing — there's just one slot under Recent issues and PRs. Parent issue #87 is the most defensible miss (it's the anchor #91 references).
 

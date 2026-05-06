@@ -1,5 +1,5 @@
 **1. Verdict**
-I would still start hocrgen work with direct `rg`, git, and docs. Splendor v0.4.0 is better as a context pack than v0.3, but it did not cross the line: for the actual resume task it failed the core test. It surfaced F3b/F3a history and some right authority docs, but it did not identify `F4c` as the next implementation task even though that is explicit in [.agent-plan.md](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:20) and the roadmap.
+I would still start hocrgen work with direct `rg`, git, and docs. Splendor v0.4.0 is better as a context pack than v0.3, but it did not cross the line: for the actual resume task it failed the core test. It surfaced F3b/F3a history and some right authority docs, but it did not identify `F4c` as the next implementation task even though that is explicit in hocrgen `.agent-plan.md` line 20 and the roadmap.
 
 Verified install: `/tmp/splendor-v040/bin/splendor --version` returned `splendor 0.4.0` from the GitHub release wheel.
 
@@ -32,10 +32,10 @@ Neither command explicitly identified `F4c` as the next implementation task.
 Ideal top 5 should have been:
 
 1. `F4c`: add deeper Hebrew rendering/provider metadata gates for hocrsyngen batches.
-2. [.agent-plan.md](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:20) and roadmap current critical path as primary authority.
-3. [docs/HeOCR_hocrgen_long_term_roadmap.md](/Users/shaypalachy/clones/hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:190) / [line 203](/Users/shaypalachy/clones/hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:203) for F4c sequence.
-4. README hocrsyngen/provider sections and [docs/synthetic_asset_contribution_guide.md](/Users/shaypalachy/clones/hocrgen/docs/synthetic_asset_contribution_guide.md:39).
-5. Implementation surface: [src/hocrgen/fetchers/hocrsyngen_manifest.py](/Users/shaypalachy/clones/hocrgen/src/hocrgen/fetchers/hocrsyngen_manifest.py:29), [tests/test_hocrsyngen_manifest.py](/Users/shaypalachy/clones/hocrgen/tests/test_hocrsyngen_manifest.py:44), fixture manifest, source-health tests.
+2. hocrgen `.agent-plan.md` line 20 and roadmap current critical path as primary authority.
+3. hocrgen `docs/HeOCR_hocrgen_long_term_roadmap.md` lines 190 and 203 for the F4c sequence.
+4. README hocrsyngen/provider sections and hocrgen `docs/synthetic_asset_contribution_guide.md` line 39.
+5. Implementation surface: hocrgen `src/hocrgen/fetchers/hocrsyngen_manifest.py` line 29, hocrgen `tests/test_hocrsyngen_manifest.py` line 44, fixture manifest, source-health tests.
 
 What it got right: F3b/F3a were recent and relevant; roadmap and README were high; maintenance state was labeled as maintenance; external spinout reviews are now more relevant than before.
 

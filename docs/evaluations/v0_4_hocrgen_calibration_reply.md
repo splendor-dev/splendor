@@ -6,10 +6,10 @@ Goal string: `Resume hocrgen planning after F3b`
 Expected top work item: `F4c: Add deeper Hebrew rendering/provider metadata gates for hocrsyngen batches`
 
 Expected current-state authority:
-- [.agent-plan.md](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:8): last completed action is `F3b`
-- [.agent-plan.md](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:20): next critical-path implementation moves to `F4c`
-- [docs/HeOCR_hocrgen_long_term_roadmap.md](/Users/shaypalachy/clones/hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:197): current critical path after `F3b`
-- [docs/HeOCR_hocrgen_long_term_roadmap.md](/Users/shaypalachy/clones/hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:203): move next to `F4c`
+- hocrgen `.agent-plan.md` line 8: last completed action is `F3b`
+- hocrgen `.agent-plan.md` line 20: next critical-path implementation moves to `F4c`
+- hocrgen `docs/HeOCR_hocrgen_long_term_roadmap.md` line 197: current critical path after `F3b`
+- hocrgen `docs/HeOCR_hocrgen_long_term_roadmap.md` line 203: move next to `F4c`
 
 Expected recent PR/git context placement: PR #64 / commit `da1a1b6` F3b should be background context under “recently completed / read for predecessor context,” not a work action.
 
