@@ -1215,6 +1215,7 @@ The v0.3 evaluation and follow-up inputs live in:
 - `docs/evaluations/v0_3_synthbanshee_followup.md`
 - `docs/evaluations/v0_3_hocrgen_evaluation.md`
 - `docs/evaluations/v0_3_hocrgen_followup.md`
+- `docs/evaluations/v0_4_external_retry_bar.md`
 
 ### Planned PR slices
 - `M18-P0` v0.3 evaluation intake and roadmap realignment.
@@ -1223,10 +1224,10 @@ The v0.3 evaluation and follow-up inputs live in:
 - `M18-P3` Handoff reviewability and maintenance discoverability polish.
 
 ### Planned PR sub-slices
-- `M18-P0.1` Record v0.3 evaluation intake and v0.4 roadmap realignment.
-- `M18-P1.1` Add git-aware, work-first `brief --agent-context` and `suggest-next`.
-- `M18-P2.1` Add inferred authority fallback and clearly labeled uncurated-doc context.
-- `M18-P3.1` Improve wiki review-needed discoverability and low-noise maintenance handoff.
+- `M18-P0.1` Record v0.3 evaluation intake and v0.4 roadmap realignment (#138).
+- `M18-P1.1` Add git-aware, work-first `brief --agent-context` and `suggest-next` (#139).
+- `M18-P2.1` Add inferred authority fallback and clearly labeled uncurated-doc context (#140).
+- `M18-P3.1` Improve wiki review-needed discoverability and low-noise maintenance handoff (#141).
 
 ### Minimum v0.4 retry bar
 - SynthBanshee: `splendor brief --agent-context "pick up M17 ASR work"` should surface the next
@@ -1260,8 +1261,8 @@ Keep larger product bets visible without treating them as the next blocker. Curr
 feedback points to handoff shape and workflow safety before search infrastructure.
 
 ### Candidate PR slices
-- Add advanced semantic search or a vector index (#118).
-- Explore mutating web review workflows (#119).
+- `M20-P1.1` Add advanced semantic search or a vector index (#118).
+- `M20-P2.1` Explore mutating web review workflows (#119).
 - Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
 
 ---

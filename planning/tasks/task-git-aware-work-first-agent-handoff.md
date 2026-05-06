@@ -14,6 +14,7 @@ updated_at: '2026-05-06T08:30:00+00:00'
 depends_on: []
 source_refs: []
 page_refs:
+- docs/evaluations/v0_4_external_retry_bar.md
 - docs/evaluations/v0_3_synthbanshee_evaluation.md
 - docs/evaluations/v0_3_synthbanshee_followup.md
 - docs/evaluations/v0_3_hocrgen_evaluation.md

@@ -285,24 +285,11 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## Documentation
 
-- [docs/guides/quickstart.md](docs/guides/quickstart.md)
-- [docs/guides/companion_repo_setup.md](docs/guides/companion_repo_setup.md)
-- [docs/guides/dogfooding.md](docs/guides/dogfooding.md)
-- [docs/issue_70_design_response.md](docs/issue_70_design_response.md)
-- [docs/splendor_product_spec.md](docs/splendor_product_spec.md)
-- [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md)
-- [docs/schema_contracts.md](docs/schema_contracts.md)
-- [docs/operations/ci_and_repo_automation.md](docs/operations/ci_and_repo_automation.md)
-- [docs/operations/release_artifacts.md](docs/operations/release_artifacts.md)
-- [docs/evaluations/public_mock_client_acceptance.md](docs/evaluations/public_mock_client_acceptance.md)
-- [docs/releases/v0_3_0_release_notes.md](docs/releases/v0_3_0_release_notes.md)
-- [docs/releases/v1_release_handoff.md](docs/releases/v1_release_handoff.md)
-- [docs/evaluations/m14_synthbanshee_reevaluation.md](docs/evaluations/m14_synthbanshee_reevaluation.md)
-- [docs/evaluations/v0_2_synthbanshee_evaluation.md](docs/evaluations/v0_2_synthbanshee_evaluation.md)
-- [docs/evaluations/v0_3_synthbanshee_evaluation.md](docs/evaluations/v0_3_synthbanshee_evaluation.md)
-- [docs/evaluations/v0_3_synthbanshee_followup.md](docs/evaluations/v0_3_synthbanshee_followup.md)
-- [docs/evaluations/v0_3_hocrgen_evaluation.md](docs/evaluations/v0_3_hocrgen_evaluation.md)
-- [docs/evaluations/v0_3_hocrgen_followup.md](docs/evaluations/v0_3_hocrgen_followup.md)
+- [Documentation index](docs/README.md)
+- [Quickstart](docs/guides/quickstart.md)
+- [Product spec](docs/splendor_product_spec.md)
+- [Roadmap](docs/splendor_mvp_to_v1_roadmap.md)
+- [v0.4 external retry bar](docs/evaluations/v0_4_external_retry_bar.md)
 
 ## What Comes Next
 

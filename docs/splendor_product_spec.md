@@ -945,8 +945,9 @@ Release-readiness boundary:
   or a canonical source-ID migration.
 - issue #79 tracked the reviewed mutating compile/update workflow from #41; `M15-P1.1`,
   `M15-P1.2`, and `M15-P1.3` now represent and disposition the one-page proposal/apply path.
-- `docs/releases/v1_release_handoff.md` remains the historical v1-style handoff checklist for validation
-  and GitHub metadata expectations, but the immediate evaluation release target is `v0.2.0`.
+- `docs/releases/v1_release_handoff.md` remains the historical v1-style handoff checklist for
+  validation and GitHub metadata expectations, while current v0.4 planning is driven by the external
+  retry bar in `docs/evaluations/v0_4_external_retry_bar.md`.
 
 Later optional support:
 - additional OCR providers

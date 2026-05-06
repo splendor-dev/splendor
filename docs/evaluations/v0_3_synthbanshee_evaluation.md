@@ -44,8 +44,8 @@ PATH trap caught: `which splendor` resolves to `/Users/shaypalachy/clones/SynthB
 ~/.local/bin/splendor source freshness    # missing=1 → 0
 ~/.local/bin/splendor workspace refresh --help
 git checkout -- state/                    # revert mutations
-~/.local/bin/splendor lint                # → back to 2 (clean)
-````
+~/.local/bin/splendor lint                # -> back to 2 (clean)
+```
 
 ## 4. repo scan safety — yes, fixed
 

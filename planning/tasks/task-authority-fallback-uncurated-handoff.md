@@ -15,6 +15,7 @@ depends_on:
 - task-git-aware-work-first-agent-handoff
 source_refs: []
 page_refs:
+- docs/evaluations/v0_4_external_retry_bar.md
 - docs/evaluations/v0_3_hocrgen_evaluation.md
 - docs/evaluations/v0_3_hocrgen_followup.md
 run_refs: []

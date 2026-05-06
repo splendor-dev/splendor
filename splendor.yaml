@@ -52,6 +52,14 @@ briefing:
     applies_to:
     - roadmap
     - milestone planning
+  - path: docs/evaluations/v0_4_external_retry_bar.md
+    role: current-authority
+    freshness: current
+    purpose: Accepted v0.4 retry requirements synthesized from the raw external evaluation reports.
+    applies_to:
+    - v0.4
+    - agent handoff
+    - external evaluation
   - path: docs/splendor_product_spec.md
     role: current-authority
     freshness: current
@@ -90,36 +98,32 @@ briefing:
     - agent handoff
   - path: docs/evaluations/v0_3_synthbanshee_evaluation.md
     role: historical-review
-    freshness: current
-    purpose: External SynthBanshee v0.3 evaluation that defines the v0.4 work-first handoff bar.
+    freshness: historical
+    purpose: Raw external SynthBanshee v0.3 evaluation evidence behind the v0.4 retry bar.
     applies_to:
-    - v0.4
-    - agent handoff
-    - evaluation
+    - v0.3 evaluation evidence
+    - SynthBanshee
   - path: docs/evaluations/v0_3_synthbanshee_followup.md
     role: historical-review
-    freshness: current
-    purpose: Follow-up acceptance details for SynthBanshee git-aware handoff behavior.
+    freshness: historical
+    purpose: Raw SynthBanshee follow-up evidence behind the v0.4 retry bar.
     applies_to:
-    - v0.4
-    - agent handoff
-    - evaluation
+    - v0.3 evaluation evidence
+    - SynthBanshee
   - path: docs/evaluations/v0_3_hocrgen_evaluation.md
     role: historical-review
-    freshness: current
-    purpose: External hocrgen v0.3 evaluation that defines planning-authority handoff gaps.
+    freshness: historical
+    purpose: Raw external hocrgen v0.3 evaluation evidence behind the v0.4 retry bar.
     applies_to:
-    - v0.4
-    - agent handoff
-    - evaluation
+    - v0.3 evaluation evidence
+    - hocrgen
   - path: docs/evaluations/v0_3_hocrgen_followup.md
     role: historical-review
-    freshness: current
-    purpose: Follow-up acceptance details for hocrgen authority ranking and uncurated docs.
+    freshness: historical
+    purpose: Raw hocrgen follow-up evidence behind the v0.4 retry bar.
     applies_to:
-    - v0.4
-    - agent handoff
-    - evaluation
+    - v0.3 evaluation evidence
+    - hocrgen
   - path: docs/issue_70_design_response.md
     role: historical-review
     freshness: watch

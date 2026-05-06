@@ -65,9 +65,6 @@ splendor health
 splendor brief --agent-context "Resume hocrgen planning after F3a and decide the next implementation task"
 splendor suggest-next "Resume hocrgen planning after F3a and decide the next implementation task"
 rg -n "F3b|Current critical path|next planned" .agent-plan.md docs/HeOCR_hocrgen_long_term_roadmap.md README.md docs/modern_handwritten_acquisition_policy.md
-````
+```
 
 Bluntly: v0.3.0 fixes the sharpest lifecycle breakage. It is now a maintained source-state system I can use without immediately fighting stale refs. It is not yet a reliable Codex companion for hocrgen planning, because the agent-critical answer still comes faster and more accurately from direct files and recent PR history.
-
-```
-```

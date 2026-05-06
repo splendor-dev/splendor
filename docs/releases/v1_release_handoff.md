@@ -58,7 +58,7 @@ Release PRs should be non-draft and should carry:
   milestone unless maintainers create a dedicated evaluation-release milestone
 - explicit issue linkage for issues that are closed or intentionally kept open
 
-For the current `v0.2.0` evaluation-release handoff:
+For the historical `v0.2.0` evaluation-release handoff:
 
 - GitHub has no open issues as of the release-prep handoff.
 - #70 remains the completed parent feedback loop for the `M13-P2` redesign.

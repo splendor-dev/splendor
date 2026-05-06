@@ -28,7 +28,7 @@ Suggested next:
 - [medium/goal-match] Open goal match wiki/sources/src-e41e11ee9c19a651f285b6ec36b0652f853bf66e730eb221c0f7afd315681103.md
 - [medium/goal-match] Open goal match wiki/sources/src-2c57b11eadfa441b2c3498778253f09afe86d42de25c257398774b97983a7abb.md
 - [medium/goal-match] Open goal match wiki/sources/src-2a426a9848b5f52dbe77701d7ee18f5c515f3d6093ed8f18c0b02c8cb8ce8e13.md
-````
+```
 
 Those were:
 

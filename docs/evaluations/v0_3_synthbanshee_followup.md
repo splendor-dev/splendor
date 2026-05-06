@@ -140,7 +140,7 @@ are real but cleanup-tier improvements.
 
 ```bash
 splendor brief --agent-context "pick up M17 ASR work"
-````
+```
 
 returns, in this order:
 
