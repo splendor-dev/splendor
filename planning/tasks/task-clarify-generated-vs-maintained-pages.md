@@ -18,7 +18,7 @@ source_refs:
 - src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4
 - src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b
 page_refs:
-- docs/dogfood_knowledge_work_report.md
+- docs/evaluations/dogfood_knowledge_work_report.md
 - docs/splendor_product_spec.md
 run_refs: []
 ---

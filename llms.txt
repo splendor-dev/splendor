@@ -91,7 +91,7 @@
 - Packaging and tool config: `pyproject.toml`
 - Repo root instructions: `AGENTS.md`
 - Dynamic agent state: `.agent-plan.md`
-- CI and automation docs: `docs/ci_and_repo_automation.md`
+- CI and automation docs: `docs/operations/ci_and_repo_automation.md`
 - Workflow files: `.github/workflows/`
 
 ## Product and Planning Docs

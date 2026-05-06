@@ -230,8 +230,8 @@ directory.
 Refresh does not override active ingest leases or dead-letter protections; use `queue retry` or
 `repair ingest` for those recovery cases.
 
-For release verification, use `docs/v1_release_handoff.md` together with
-`docs/v0_2_0_release_notes.md` and `docs/release_artifacts.md`. The handoff keeps the quickstart
+For release verification, use `docs/releases/v1_release_handoff.md` together with
+`docs/releases/v0_2_0_release_notes.md` and `docs/operations/release_artifacts.md`. The handoff keeps the quickstart
 focused on normal operator workflow while the release notes name the immediate `v0.2.0`
 evaluation tag target and the release artifact guide names the wheel-based trial-install path.
 
@@ -308,7 +308,7 @@ Both commands write timestamped reports under `reports/`.
 ## 8. Inspect the committed example
 
 The repository includes a small committed sample at
-[`examples/in-repo-workspace/`](../examples/in-repo-workspace/) that shows the same flow after one
+[`examples/in-repo-workspace/`](../../examples/in-repo-workspace/) that shows the same flow after one
 source has already been registered and ingested.
 
 It includes:
@@ -326,4 +326,4 @@ Queue retry behavior is configured in `splendor.yaml` under `queue.max_attempts`
 ## Next step
 
 If you want the wiki to live in a separate knowledge repository instead of inside the code repo,
-follow [docs/companion_repo_setup.md](companion_repo_setup.md).
+follow [companion repo setup](companion_repo_setup.md).

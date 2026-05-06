@@ -334,11 +334,11 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M17-P3.1`
-- Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P4.1`
+- Previous completed PR sub-slice: `M17-P4.1`
+- Current planned slice: `M18 v0.4 work-first agent handoff`
+- Current PR sub-slice: `M18-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M18 v2 advanced product track`
+- Next planned slice: `M18 v0.4 work-first agent handoff`
 - Next planned PR sub-slice: `M18-P1.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
@@ -830,7 +830,7 @@ semantics, safe workspace refresh, pruning, topic-ref migration, and PR-summary 
 adding SQLite, vector search, background workers, mutating web UI, or broad refresh discovery.
 
 `M13-P3.2` is the final release checklist and historical post-v1 handoff. It keeps runtime
-behavior stable and adds the concise release handoff in `docs/v1_release_handoff.md`. Its original
+behavior stable and adds the concise release handoff in `docs/releases/v1_release_handoff.md`. Its original
 post-v1 queue was later worked through by the M14/M15 follow-ups: #72 covered source lifecycle and
 agent workflow work, #79 covered the deferred mutating compile/update path from #41, #47 was
 targeted by `M10-P3.1`, and #30/#37 were dispositioned independently.
@@ -953,7 +953,7 @@ layout paths and reports malformed changed source manifests without aborting the
 JSON output is available for agent handoff.
 
 `M14-P3.1` records the internal source-lifecycle re-evaluation gate after the post-#72 lifecycle
-sequence. The comparable workflow in `docs/m14_synthbanshee_reevaluation.md` used source freshness,
+sequence. The comparable workflow in `docs/evaluations/m14_synthbanshee_reevaluation.md` used source freshness,
 the full workspace refresh command, `pr-summary`, `lint`, and `health` against both the clean
 current state and a disposable changed-source exercise. The result: the original source-refresh
 lifecycle pain from #72 is materially addressed, and this PR recommends closing #72 once
@@ -1109,7 +1109,7 @@ SynthBanshee/Claude Code evaluation. The release target is not broader product s
 recoverability, source-registration hygiene, and trustworthy validation.
 
 ### Input signal
-The sanitized evaluation intake lives in `docs/v0_2_synthbanshee_evaluation.md`. A fixture archive
+The sanitized evaluation intake lives in `docs/evaluations/v0_2_synthbanshee_evaluation.md`. A fixture archive
 is preserved outside the repository at
 `/Users/shaypalachy/archive/splendor-fixtures/splendor-fixture-2026-05-05.tar.gz` with SHA-256
 `8b2fea5e3cd04c99d52d79398347ff7a38b41a30c410a3a1ab1985fbe63b162c`.
@@ -1134,7 +1134,7 @@ is preserved outside the repository at
 `M16-P3.3` adds a GitHub Actions release-artifact workflow for `v*` tags, supports manual
 backfill for existing tags, verifies the tag matches package metadata, builds wheel/sdist outputs,
 smoke-installs the wheel, and uploads `dist/*` to the matching GitHub Release. The canonical
-external trial-install path is the GitHub Release wheel documented in `docs/release_artifacts.md`.
+external trial-install path is the GitHub Release wheel documented in `docs/operations/release_artifacts.md`.
 PyPI publishing remains a separate maintainer decision outside the v0.3 recovery loop.
 
 ### Minimum v0.3 retry bar
@@ -1176,7 +1176,7 @@ source-refresh scenario tag, and isolated recovery fixtures for polluted registr
 renamed-source repair. The reviewed external state is pinned by the
 `m17-p1.1-acceptance-main` and `m17-p1.1-source-refresh-scenario` tags, and the operator-facing
 workflow is documented in
-[public mock client acceptance](public_mock_client_acceptance.md).
+[public mock client acceptance](evaluations/public_mock_client_acceptance.md).
 
 ### Planning authority lifecycle
 `M17-P2.1` implements issue #116 by expanding authority metadata without changing schema version
@@ -1200,18 +1200,69 @@ intentional task workflows to list, resolve, or mute them. Contradiction evidenc
 to contested source-summary pages and visible through query/review-task metadata when operators ask
 for it.
 
-## Milestone 18 — v2 advanced product track
+## Milestone 18 — v0.4 work-first agent handoff
 
 ### Goal
-Keep larger product bets visible without pulling them into the v0.3 recovery release or the public
-v1 readiness gate.
+Make both external evaluators want to start a real agent session with Splendor before reaching for
+`git log`, `gh issue list`, `rg`, and direct file reads. The `v0.3.0` SynthBanshee and hocrgen
+trials show that source lifecycle safety is now materially better, but the handoff surfaces still
+report too much Splendor maintenance state before they answer the work question.
+
+### Input signal
+The v0.3 evaluation and follow-up inputs live in:
+
+- `docs/evaluations/v0_3_synthbanshee_evaluation.md`
+- `docs/evaluations/v0_3_synthbanshee_followup.md`
+- `docs/evaluations/v0_3_hocrgen_evaluation.md`
+- `docs/evaluations/v0_3_hocrgen_followup.md`
+
+### Planned PR slices
+- `M18-P0` v0.3 evaluation intake and roadmap realignment.
+- `M18-P1` Git-aware, work-first agent handoff.
+- `M18-P2` Authority fallback and provisional uncurated docs in handoff.
+- `M18-P3` Handoff reviewability and maintenance discoverability polish.
+
+### Planned PR sub-slices
+- `M18-P0.1` Record v0.3 evaluation intake and v0.4 roadmap realignment.
+- `M18-P1.1` Add git-aware, work-first `brief --agent-context` and `suggest-next`.
+- `M18-P2.1` Add inferred authority fallback and clearly labeled uncurated-doc context.
+- `M18-P3.1` Improve wiki review-needed discoverability and low-noise maintenance handoff.
+
+### Minimum v0.4 retry bar
+- SynthBanshee: `splendor brief --agent-context "pick up M17 ASR work"` should surface the next
+  open ASR issue, the recent effective-prosody PR, ASR sanity policy, validation report, and
+  renderer/tests before source-refresh or queue maintenance.
+- hocrgen: `splendor brief --agent-context "Resume hocrgen planning after F3a"` should surface
+  `F3b`, `.agent-plan.md`, the current roadmap critical path, the modern handwritten acquisition
+  policy, README/CONTRIBUTING, planning tests, and the recent F3a PR before historical outside
+  reviews.
+- Git context is included by default with `--no-git` and `--since <ref>` escape hatches.
+- Source freshness, queue drift, review-needed pages, and missing synthesis are structurally
+  separated under a Splendor maintenance section unless the goal is explicitly maintenance-focused.
+
+## Milestone 19 — pre-v1 workflow durability after v0.4
+
+### Goal
+After v0.4 proves that handoff is useful for real agents, make the resulting workflow reviewable
+and consistently safe enough for public v1.
 
 ### Candidate PR slices
-- `M18-P1.1` Add advanced semantic search or a vector index (#118).
-- `M18-P2.1` Explore mutating web review workflows (#119).
+- Generated-state reviewability and compact committed mode.
+- Agent-safe preview/apply consistency for mutating commands.
+- Orphan queue cleanup and closeable provenance-missing acknowledgements.
+- Reverse curated-source classification in `pr-summary`.
+- Public acceptance coverage for the SynthBanshee and hocrgen v0.4 retry bars.
 
-These remain post-v1 unless a later external evaluation shows they are more important than the
-source hygiene, recovery, validation, and public-readiness work above.
+## Milestone 20 — post-v1 product bets
+
+### Goal
+Keep larger product bets visible without treating them as the next blocker. Current external
+feedback points to handoff shape and workflow safety before search infrastructure.
+
+### Candidate PR slices
+- Add advanced semantic search or a vector index (#118).
+- Explore mutating web review workflows (#119).
+- Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
 
 ---
 

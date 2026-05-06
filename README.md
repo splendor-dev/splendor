@@ -51,7 +51,7 @@ splendor --help
 ```
 
 Set `TAG` to the exact published release under evaluation. Maintainer publishing details and the
-release-page fallback live in [docs/release_artifacts.md](docs/release_artifacts.md).
+release-page fallback live in [docs/operations/release_artifacts.md](docs/operations/release_artifacts.md).
 
 ## 5 Minute Quickstart
 
@@ -90,7 +90,7 @@ The repo now contains:
 - `state/` with source manifests plus queue/run/query state
 - `reports/` with timestamped lint and health reports
 
-For a fuller walkthrough, see [docs/quickstart.md](docs/quickstart.md).
+For a fuller walkthrough, see [docs/guides/quickstart.md](docs/guides/quickstart.md).
 
 ## Example Workspace
 
@@ -102,7 +102,7 @@ shows the post-`init` layout plus:
 - queue and run records from the ingest
 
 The companion-repo guidance and sample agent instructions live in
-[docs/companion_repo_setup.md](docs/companion_repo_setup.md) and
+[docs/guides/companion_repo_setup.md](docs/guides/companion_repo_setup.md) and
 [examples/companion-repo/AGENTS.md](examples/companion-repo/AGENTS.md).
 
 ## What Splendor Is
@@ -285,28 +285,32 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## Documentation
 
-- [docs/quickstart.md](docs/quickstart.md)
-- [docs/companion_repo_setup.md](docs/companion_repo_setup.md)
-- [docs/dogfooding.md](docs/dogfooding.md)
+- [docs/guides/quickstart.md](docs/guides/quickstart.md)
+- [docs/guides/companion_repo_setup.md](docs/guides/companion_repo_setup.md)
+- [docs/guides/dogfooding.md](docs/guides/dogfooding.md)
 - [docs/issue_70_design_response.md](docs/issue_70_design_response.md)
 - [docs/splendor_product_spec.md](docs/splendor_product_spec.md)
 - [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md)
 - [docs/schema_contracts.md](docs/schema_contracts.md)
-- [docs/ci_and_repo_automation.md](docs/ci_and_repo_automation.md)
-- [docs/release_artifacts.md](docs/release_artifacts.md)
-- [docs/public_mock_client_acceptance.md](docs/public_mock_client_acceptance.md)
-- [docs/v0_3_0_release_notes.md](docs/v0_3_0_release_notes.md)
-- [docs/v1_release_handoff.md](docs/v1_release_handoff.md)
-- [docs/m14_synthbanshee_reevaluation.md](docs/m14_synthbanshee_reevaluation.md)
-- [docs/v0_2_synthbanshee_evaluation.md](docs/v0_2_synthbanshee_evaluation.md)
+- [docs/operations/ci_and_repo_automation.md](docs/operations/ci_and_repo_automation.md)
+- [docs/operations/release_artifacts.md](docs/operations/release_artifacts.md)
+- [docs/evaluations/public_mock_client_acceptance.md](docs/evaluations/public_mock_client_acceptance.md)
+- [docs/releases/v0_3_0_release_notes.md](docs/releases/v0_3_0_release_notes.md)
+- [docs/releases/v1_release_handoff.md](docs/releases/v1_release_handoff.md)
+- [docs/evaluations/m14_synthbanshee_reevaluation.md](docs/evaluations/m14_synthbanshee_reevaluation.md)
+- [docs/evaluations/v0_2_synthbanshee_evaluation.md](docs/evaluations/v0_2_synthbanshee_evaluation.md)
+- [docs/evaluations/v0_3_synthbanshee_evaluation.md](docs/evaluations/v0_3_synthbanshee_evaluation.md)
+- [docs/evaluations/v0_3_synthbanshee_followup.md](docs/evaluations/v0_3_synthbanshee_followup.md)
+- [docs/evaluations/v0_3_hocrgen_evaluation.md](docs/evaluations/v0_3_hocrgen_evaluation.md)
+- [docs/evaluations/v0_3_hocrgen_followup.md](docs/evaluations/v0_3_hocrgen_followup.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M17-P3.1`
-- Current planned slice: `M17 v1 public readiness`
-- Current PR sub-slice: `M17-P4.1`
+- Previous completed PR sub-slice: `M17-P4.1`
+- Current planned slice: `M18 v0.4 work-first agent handoff`
+- Current PR sub-slice: `M18-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M18 v2 advanced product track`
+- Next planned slice: `M18 v0.4 work-first agent handoff`
 - Next planned PR sub-slice: `M18-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
@@ -356,7 +360,7 @@ candidate reports, curated source manifests, source freshness, and higher-signal
 `M13-P3.1` is implemented: release-facing docs, schema notes, automation guidance, and dogfooding
 guidance are reconciled with current behavior. `M13-P3.2` is the final release handoff slice: it
 records the v1 validation commands, issue state, GitHub metadata expectations, known non-blockers,
-and conservative post-v1 queue in [docs/v1_release_handoff.md](docs/v1_release_handoff.md).
+and conservative post-v1 queue in [docs/releases/v1_release_handoff.md](docs/releases/v1_release_handoff.md).
 
 `M13-P2.1` is a docs/planning-only reset:
 
@@ -412,7 +416,7 @@ the SynthBanshee/Claude Code evaluation has now become the input for `M16`.
 `M16-P0.1` records the post-`v0.2.0` SynthBanshee/Claude Code evaluation intake. The evaluation
 found that the source-refresh model and compact agent handoff are useful, but v0.3 must focus on
 source hygiene, registry recovery, and validation correctness before another trial release. The
-sanitized intake is in [docs/v0_2_synthbanshee_evaluation.md](docs/v0_2_synthbanshee_evaluation.md).
+sanitized intake is in [docs/evaluations/v0_2_synthbanshee_evaluation.md](docs/evaluations/v0_2_synthbanshee_evaluation.md).
 Milestone 16 tracks v0.3 blockers and polish; Milestone 17 tracks public v1 readiness; Milestone
 18 tracks v2 product bets.
 
@@ -446,7 +450,7 @@ wheel-based trial install path for external v0.3 evaluators.
 `M17-P1.1` creates the public
 [`splendor-dev/mock-client-acceptance`](https://github.com/splendor-dev/mock-client-acceptance)
 repository and documents its baseline, source-refresh, polluted-registry, and renamed-source
-acceptance workflows in [docs/public_mock_client_acceptance.md](docs/public_mock_client_acceptance.md).
+acceptance workflows in [docs/evaluations/public_mock_client_acceptance.md](docs/evaluations/public_mock_client_acceptance.md).
 The reviewed external state is pinned by the `m17-p1.1-acceptance-main` and
 `m17-p1.1-source-refresh-scenario` tags, and the mock repository includes merged PR history for
 external evaluator exercises.
@@ -502,7 +506,7 @@ latest local maintenance report status. The human output is path-first and layou
 on GitHub.
 
 `M14-P3.1` records the internal source-lifecycle re-evaluation gate in
-`docs/m14_synthbanshee_reevaluation.md`. The gate covers both the clean current state and a
+`docs/evaluations/m14_synthbanshee_reevaluation.md`. The gate covers both the clean current state and a
 controlled changed-source exercise through freshness, full workspace refresh, PR summary, lint, and
 health. It is not a new external SynthBanshee report; it recommends closing #72 after maintainer
 review and moves the remaining planning-doc authority / task-brief gap to #86.
@@ -568,3 +572,12 @@ rewritten.
 - [x] Agent handoff ranks current authority and task-relevant planning records above stale,
   token-similar, and generated-review noise.
 - [x] `v0.3.0` package metadata and release notes are ready for the SynthBanshee Claude Code retry.
+
+### v0.3 evaluation intake and v0.4 direction
+
+The external `v0.3.0` SynthBanshee and hocrgen trials are now captured under
+`docs/evaluations/`. They agree that v0.3 materially fixed source lifecycle safety, registry
+recovery, lint/health trust, release artifacts, queue JSON, and contradiction-review task noise.
+They also agree that `brief --agent-context` and `suggest-next` are not yet the first tool an agent
+reaches for when resuming real work. The v0.4 path therefore prioritizes git-aware, work-first
+handoff before vector search or mutating web review workflows.

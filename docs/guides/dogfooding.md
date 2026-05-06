@@ -80,6 +80,6 @@ workspace needs ingest, synthesis review, queue repair, or planning follow-up.
 The current workflow now provides stable logical source identities, source supersession, explicit
 workspace refresh, explicit superseded-summary pruning/topic-ref migration, and
 `splendor pr-summary --since main` for local PR handoff. Issue #72 is no longer the active
-source-lifecycle queue. For `v0.2.0` evaluation-release work, use `docs/v1_release_handoff.md`
-together with `docs/v0_2_0_release_notes.md` to separate release-blocking validation from
+source-lifecycle queue. For `v0.2.0` evaluation-release work, use `docs/releases/v1_release_handoff.md`
+together with `docs/releases/v0_2_0_release_notes.md` to separate release-blocking validation from
 post-release dogfood or SynthBanshee/Claude Code evaluation feedback.

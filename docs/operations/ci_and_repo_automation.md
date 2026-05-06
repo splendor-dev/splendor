@@ -353,10 +353,10 @@ refresh, review automation, and optional weekly repo review. Source lifecycle, w
 and `splendor pr-summary --since main` remain local CLI contracts; GitHub workflows can report or
 package their output, but they do not replace the operator-reviewed local validation path.
 
-For the current `v0.2.0` evaluation-release prep, `docs/v1_release_handoff.md` remains the
+For the current `v0.2.0` evaluation-release prep, `docs/releases/v1_release_handoff.md` remains the
 historical v1-style checklist that connects local validation, GitHub PR metadata, issue state, and
-known non-blockers, while `docs/v0_2_0_release_notes.md` names the immediate tag target and
-post-release SynthBanshee/Claude Code evaluation step. `docs/release_artifacts.md` names GitHub
+known non-blockers, while `docs/releases/v0_2_0_release_notes.md` names the immediate tag target and
+post-release SynthBanshee/Claude Code evaluation step. `docs/operations/release_artifacts.md` names GitHub
 Release wheels as the canonical trial-install channel for v0.3 evaluators. GitHub automation
 remains supporting
 infrastructure around the local CLI, not a substitute for the explicit validation commands named in

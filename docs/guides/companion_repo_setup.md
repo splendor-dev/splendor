@@ -79,5 +79,5 @@ repo.
 ## Example agent instructions
 
 A lightweight sample `AGENTS.md` for companion-repo usage lives at
-[`examples/companion-repo/AGENTS.md`](../examples/companion-repo/AGENTS.md). It is intentionally an
+[`examples/companion-repo/AGENTS.md`](../../examples/companion-repo/AGENTS.md). It is intentionally an
 example only, not a governing file for this repository.
