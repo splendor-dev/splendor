@@ -195,11 +195,11 @@ v0.3.0 is materially better than v0.2.0.
 
 The five v0.2 blockers are fixed empirically:
 
-* 1
-* 2-for-registered-sources
-* 3 surface-level
-* 4
-* 5
+* repo-scan ignore safety, including `--all`, class-filtered, and apply paths
+* safe `splendor source forget` cleanup for registered sources
+* source lifecycle refresh and changed-source workflow understandability
+* live-source lint/path repair behavior after refresh and path updates
+* pending-ingest JSON output plus release artifacts for trial installs
 
 #117 is clean. #120, #122 land. The repo-scan pollution mode that started this whole thread is gone — fresh checkouts won't get blanketed in `.mypy_cache/*` manifests anymore.
 
@@ -231,7 +231,3 @@ Open issues to file upstream:
 * (f) post-`update-path` provenance lint nit
 
 Working tree is clean. No code or curated state was committed; one transient state mutation from `ingest --pending --json` was reverted with `git checkout -- state/`.
-
-Findings are private to you per the publication-consent caveat.
-
-Memory saved at `project_splendor_eval_v030_2026_05_06.md`.
