@@ -877,6 +877,10 @@ Current implementation:
 - `splendor ingest --pending` prints the next `wiki suggest` command when exactly one source was
   ingested, or points back to `wiki status` for batch follow-up. `--json` emits queue totals,
   processed/succeeded/failed/skipped counts, per-item outcomes, and deterministic next actions.
+  The v0.4 external review round identified this as legacy mutate-on-call behavior: unlike newer
+  preview-first cleanup commands, `ingest --pending` drains the queue as soon as it runs. The next
+  durability update should either make this flow preview/apply-compatible or split the destructive
+  drain form from inspection so exploratory agent sessions are safe by default.
 - `splendor wiki status` reports source, page, queue, run, review, contested, stale,
   machine-generated, invalid-page, actionable synthesis-review, and missing
   synthesis-follow-up counts, with optional JSON output.
@@ -898,6 +902,11 @@ Current implementation:
   JSON include `mutation.mode`, `mutation.mutates`, `mutation.planned`, and `mutation.written`;
   human output labels preview mode as non-mutating and apply/direct mode as writing workspace
   state.
+- Post-v0.4 external reviews tightened the target: agent-facing maintenance and workflow commands
+  should not require per-command memory to know whether they mutate. Legacy direct-write surfaces
+  such as `ingest --pending`, `source refresh`, `source update-path`, and `workspace refresh`
+  should move toward explicit preview/apply or equally clear direct-write contracts before larger
+  post-v1 product bets such as vector search or mutating web review.
 - `splendor wiki rebuild-index` rewrites `wiki/index.md` from validated wiki page frontmatter,
   including maintained synthesis pages and generated source-summary pages, without mutating the
   pages themselves.
@@ -1142,6 +1151,9 @@ Current implementation:
   Maintenance-focused goals can keep maintenance actions first. Handoff ranking uses deterministic
   relevance scoring over weighted title/path/record/scope fields, supporting refs, snippets,
   git/GitHub text, and review/authority lifecycle signals without introducing vector search.
+  A correct handoff should also reconcile current-state conflicts: when git/GitHub state shows that
+  a PR or slice has merged, and an ordered roadmap names the next slice, stale dynamic planning
+  docs should not send the agent back to already-completed work.
 - Git-aware `brief --agent-context` and `suggest-next` include the `splendor pr-summary --since
   <base>` command under Splendor maintenance context when a branch has Splendor-specific compact
   review groups or attention diagnostics. This keeps compact committed generated-state review
@@ -1173,6 +1185,12 @@ Current implementation:
   records. Accepted decision records are included as goal-relevant reviewed authority; superseded
   decisions are retained below current decisions as historical context. This extends schema version
   `1` through optional fields only.
+- Open work-thread surfacing should be broad enough for agent handoff. The top-ranked issue or PR
+  can remain first, but related open parent/sibling issues and review threads should remain visible
+  when they match the goal, labels, linked references, or recent merged PR context.
+- Files-to-read ranking should treat high-authority path and symbol references as implementation
+  surface hints. If authority docs name a concrete file, test, command, or symbol involved in the
+  requested work, that surface should receive a deterministic boost without needing vector search.
 - Briefing is read-only and does not replace `splendor query`; query finds records, while briefing
   packages the surrounding project state needed to resume work.
 
@@ -1193,6 +1211,15 @@ v0.4 direction from external trials:
   `CLAUDE.md`, `README.md`, roadmap-like docs, and planning tests.
 - Important uncurated documentation may be used as provisional context only when clearly labeled
   as uncurated and paired with an exact curation command.
+- Post-v0.4 hocrgen and hocrsyngen trials add a stronger acceptance target: completed-slice to
+  next-slice inference should work even when `.agent-plan.md` or roadmap status text is stale after
+  a merge. Git/GitHub merge state, PR titles/bodies, recent commit subjects, and roadmap ordering
+  should be considered together before ranking "review recently merged PR" above "start next
+  planned slice."
+- First-run adoption should be explicit about state churn. `splendor init` may create a
+  repository-local workspace, but the CLI and docs should make the state location, review burden,
+  and local/throwaway-worktree strategy clear before a first-time agent creates many visible
+  top-level files.
 
 `M18-P1.1` implements the git-aware work-first ranking and work/maintenance separation while
 keeping all new context runtime-only. `M18-P2.1` implements inferred-authority and provisional

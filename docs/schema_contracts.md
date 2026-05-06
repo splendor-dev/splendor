@@ -272,6 +272,10 @@ Implemented fields:
 - `splendor ingest --pending --json` emits the same pending queue drain contract as human output in
   structured form: queue total, processed/succeeded/failed/skipped summary counts, per-item source
   IDs, workspace-relative queue paths, outcomes, messages, and deterministic next actions.
+  As of the v0.4 external review, this remains a legacy direct-drain command: it mutates queue,
+  source-summary, run, and index/log state when work is available. The planned durability contract
+  is to give this flow the same agent-safe preview/apply clarity as newer cleanup commands, or to
+  expose an explicitly named destructive drain form so inspection and mutation cannot be confused.
 - `splendor wiki compile <source-id|title|path>` remains non-mutating unless a maintained target
   page is selected and `--apply --proposal-hash <hash>` is supplied. Without `--page`, it reports
   the review-gated contract plus ranked maintained-page suggestions and ready-to-run
@@ -293,6 +297,11 @@ Implemented fields:
   deterministic planned write/delete records for preview mode, and `mutation.written` lists
   deterministic write/delete records for apply or direct-write mode. Records include `action`,
   `path`, `kind`, and `source_id` when source-scoped.
+- Post-v0.4 contract debt: legacy mutating commands must not rely on agents remembering bespoke
+  safety semantics. `ingest --pending`, `source refresh`, `source update-path`, and
+  `workspace refresh` should either become preview-first with explicit `--apply`, or expose
+  deterministic mutation objects and human output that make direct writes unmistakable before the
+  command is run from handoff guidance.
 - `splendor pr-summary --since main` is a read-only PR handoff view over local git diff/status and
   existing report files. It diffs from the merge base between `HEAD` and the base ref, respects
   configured workspace layout directories, and groups curated source manifests, generated
@@ -325,6 +334,18 @@ Implemented fields:
   maintenance goals rank work context before Splendor maintenance. Goal relevance is scored
   deterministically from weighted title/path/record/scope matches, supporting refs, snippets,
   git/GitHub text, and review/authority lifecycle signals before category caps are applied.
+- Planned handoff inference contract: when runtime git/GitHub state indicates that a referenced
+  PR, issue thread, or roadmap slice is merged or complete, and an ordered roadmap or current-state
+  authority names a successor slice, handoff should demote the completed work to supporting context
+  and rank the successor as the next work item. Stale `.agent-plan.md` or roadmap "current" text is
+  still useful evidence, but it should be reconciled against merge state and explicit roadmap order
+  before becoming the top suggested action.
+- Work-thread surfacing should preserve breadth. The JSON and human handoff can lead with the best
+  open issue or PR, but should also include a bounded set of related open parent/sibling threads
+  when goal terms, labels, issue references, or recent merged PR bodies connect them.
+- Files-to-read ranking may use high-authority path and symbol references as deterministic hints.
+  Paths and tests named by authority docs should rank above broad historical docs when they are
+  directly tied to the goal.
 - Text-bearing PDF sources are routed through source-type dispatch during ingest. The source
   manifest keeps the same `source_ref`, `source_ref_kind`, and `storage_mode` contract as
   text-native sources, while extracted text artifacts are recorded in `derived_artifacts`.
