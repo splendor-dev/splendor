@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from splendor.cli import main
+from splendor.commands import brief as brief_module
 from splendor.commands.add_source import add_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.wiki import add_topic_page, rebuild_wiki_index
@@ -59,6 +60,26 @@ def _install_fake_gh(
     )
     script.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ.get('PATH', '')}")
+
+
+def _install_marker_gh(tmp_path: Path, monkeypatch, *, sleep_seconds: float = 0) -> Path:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    marker = tmp_path / "gh-called"
+    script = bin_dir / "gh"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib\n"
+        "import sys\n"
+        "import time\n"
+        f"time.sleep({sleep_seconds!r})\n"
+        f"pathlib.Path({str(marker)!r}).write_text('called', encoding='utf-8')\n"
+        "print('[]')\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ.get('PATH', '')}")
+    return marker
 
 
 def write_wiki_page(
@@ -1862,7 +1883,15 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
                 "and tests/unit/test_effective_prosody_cap.py.",
                 "state": "open",
                 "labels": [],
-            }
+            },
+            {
+                "number": 118,
+                "title": "M20-P1.1 Add advanced semantic search or vector index",
+                "url": "https://github.com/SynthBanshee/SynthBanshee/issues/118",
+                "body": "Deferred vector search can wait until work-first handoff is correct.",
+                "state": "open",
+                "labels": [],
+            },
         ],
         prs=[
             {
@@ -1900,7 +1929,15 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
     actions = payload["suggested_actions"]
     assert actions[0]["category"] == "work-thread"
     assert actions[0]["url"] == "https://github.com/SynthBanshee/SynthBanshee/issues/89"
+    assert all(
+        action.get("url") != "https://github.com/SynthBanshee/SynthBanshee/issues/118"
+        for action in actions
+    )
     assert payload["git_context"]["threads"][0]["number"] == 89
+    irrelevant_threads = [
+        thread for thread in payload["git_context"]["threads"] if thread["number"] == 118
+    ]
+    assert irrelevant_threads and irrelevant_threads[0]["promoted"] is False
     assert any("effective-prosody cap" in item["title"] for item in actions)
     read_first = payload["git_context"]["read_first_paths"]
     assert "synthbanshee/tts/renderer.py" in read_first
@@ -1935,6 +1972,10 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
     suggest_payload = json.loads(capsys.readouterr().out)
     suggest_categories = [action["category"] for action in suggest_payload["actions"]]
     assert suggest_categories[0] == "work-thread"
+    assert all(
+        action.get("url") != "https://github.com/SynthBanshee/SynthBanshee/issues/118"
+        for action in suggest_payload["actions"]
+    )
     assert suggest_categories.index("work-thread") < min(
         suggest_categories.index(category)
         for category in suggest_categories
@@ -2007,6 +2048,22 @@ def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(
     (docs / "outside_review.md").write_text(
         "# Outside Review\n\nHistorical hocrgen review mentions F3b repeatedly.\n",
         encoding="utf-8",
+    )
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "task",
+            "create",
+            "Implement",
+            "F3b",
+            "operator",
+            "intake",
+            "--id",
+            "task-f3b-operator-intake",
+            "--status",
+            "in_progress",
+        ]
     )
     planning_test = tmp_path / "tests" / "test_planning_docs.py"
     planning_test.parent.mkdir(exist_ok=True)
@@ -2088,6 +2145,70 @@ def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(
     assert suggest_categories[0] in {"work-thread", "git-context", "authority", "planning"}
     if "goal-match" in suggest_categories:
         assert suggest_categories.index("authority") < suggest_categories.index("goal-match")
+
+    text_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "Resume",
+            "hocrgen",
+            "planning",
+            "after",
+            "F3a",
+        ]
+    )
+    assert text_exit == 0
+    out = capsys.readouterr().out
+    assert out.index("Authority docs:") < out.index("Splendor maintenance:")
+    assert out.index("Active planning:") < out.index("Splendor maintenance:")
+
+
+def test_brief_plain_text_does_not_call_gh_by_default(tmp_path: Path, capsys, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    marker = _install_marker_gh(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "agent", "handoff"])
+
+    assert exit_code == 0
+    assert not marker.exists()
+
+
+def test_agent_context_reports_gh_timeout_as_warning(tmp_path: Path, capsys, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    _install_marker_gh(tmp_path, monkeypatch, sleep_seconds=1)
+    monkeypatch.setattr(brief_module, "_GIT_COMMAND_TIMEOUT_SECONDS", 0.01)
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--agent-context", "agent", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert any("Timed out" in warning for warning in payload["git_context"]["warnings"])
+
+
+def test_agent_context_explicit_since_empty_range_does_not_fallback_to_head(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    _install_fake_gh(tmp_path, monkeypatch, issues=[], prs=[])
+    capsys.readouterr()
+
+    exit_code = main(
+        ["--root", str(tmp_path), "brief", "--agent-context", "--since", "HEAD", "agent", "--json"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["git_context"]["commits"] == []
 
 
 def test_suggest_next_uses_wiki_authority_metadata_but_skips_source_summaries(

@@ -2181,7 +2181,8 @@ def handle_brief(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     goal = " ".join(args.goal).strip() or None
     try:
-        result = build_project_brief(root, goal, include_git=not args.no_git, since=args.since)
+        include_git = not args.no_git and (args.agent_context or args.since is not None)
+        result = build_project_brief(root, goal, include_git=include_git, since=args.since)
     except (OSError, ValueError) as exc:
         return _print_error(exc)
 
@@ -2279,9 +2280,10 @@ def _print_agent_context(result: ProjectBrief) -> None:
             f"head={result.git_context.head or '-'} "
             f"base={base} merge_base={merge_base}"
         )
-        if result.git_context.threads:
+        promoted_threads = [thread for thread in result.git_context.threads if thread.promoted]
+        if promoted_threads:
             print("Recent issues and PRs:")
-            for thread in result.git_context.threads[:3]:
+            for thread in promoted_threads[:3]:
                 print(
                     f"- {thread.kind} #{thread.number} [{thread.state}] "
                     f"score={thread.relevance_score}: {thread.title} ({thread.url})"
@@ -2294,6 +2296,25 @@ def _print_agent_context(result: ProjectBrief) -> None:
             print("Files to read first:")
             for path in result.git_context.read_first_paths[:5]:
                 print(f"- {path}")
+    if result.matches:
+        print("Relevant matches:")
+        for match in result.matches:
+            source_refs = ", ".join(match.source_refs) if match.source_refs else "-"
+            print(f"- {match.path} [{match.kind}] score={match.score} sources={source_refs}")
+            if match.snippet:
+                print(f"  {match.snippet}")
+    if result.authority_briefs:
+        print("Authority docs:")
+        for item in result.authority_briefs[:5]:
+            refs = _authority_link_summary(item)
+            print(
+                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}] "
+                f"score={item.score} {item.title}{refs}"
+            )
+    if result.planning_items:
+        print("Active planning:")
+        for item in result.planning_items:
+            print(f"- {item.record_id} [{item.kind}/{item.status}] {item.title}")
     print(
         "Splendor maintenance: "
         f"sources={result.status.source_total} "
@@ -2316,25 +2337,6 @@ def _print_agent_context(result: ProjectBrief) -> None:
         f"queue_pending={result.status.queue_status_counts.get('pending', 0)} "
         f"review_needed={result.status.review_needed_pages}"
     )
-    if result.matches:
-        print("Relevant matches:")
-        for match in result.matches:
-            source_refs = ", ".join(match.source_refs) if match.source_refs else "-"
-            print(f"- {match.path} [{match.kind}] score={match.score} sources={source_refs}")
-            if match.snippet:
-                print(f"  {match.snippet}")
-    if result.authority_briefs:
-        print("Authority docs:")
-        for item in result.authority_briefs[:5]:
-            refs = _authority_link_summary(item)
-            print(
-                f"- {item.path} [{item.role}/{item.freshness}/{item.lifecycle}] "
-                f"score={item.score} {item.title}{refs}"
-            )
-    if result.planning_items:
-        print("Active planning:")
-        for item in result.planning_items:
-            print(f"- {item.record_id} [{item.kind}/{item.status}] {item.title}")
     if result.recent_sources:
         print("Recent sources:")
         for source in result.recent_sources:

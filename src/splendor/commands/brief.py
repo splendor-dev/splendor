@@ -49,6 +49,8 @@ _BRIEF_REPORT_COMMANDS = ("lint", "health")
 _SUGGESTION_LIMIT = 8
 _GIT_CONTEXT_LIMIT = 5
 _GIT_FILE_LIMIT = 8
+_GIT_COMMAND_TIMEOUT_SECONDS = 5
+_PROMOTED_THREAD_RELEVANCE_FLOOR = 60
 _SUGGESTION_CATEGORY_LIMITS = {
     "work-thread": 4,
     "git-context": 3,
@@ -296,6 +298,7 @@ class GitThreadBrief:
     state: str
     summary: str
     relevance_score: int
+    promoted: bool
 
 
 @dataclass(frozen=True)
@@ -1034,7 +1037,13 @@ def _build_git_context(
     merge_base = _merge_base_for_context(root, base_ref) if base_ref else None
     if since is not None and merge_base is None:
         warnings.append(f"Git base ref could not be resolved: {since}")
-    commits = _git_commits(root, goal, base_ref=base_ref, merge_base=merge_base)
+    commits = _git_commits(
+        root,
+        goal,
+        base_ref=base_ref,
+        merge_base=merge_base,
+        explicit_since=since is not None,
+    )
     repository = _github_repository(root)
     threads: list[GitThreadBrief] = []
     if repository is not None:
@@ -1090,7 +1099,12 @@ def _merge_base_for_context(root: Path, base_ref: str | None) -> str | None:
 
 
 def _git_commits(
-    root: Path, goal: str | None, *, base_ref: str | None, merge_base: str | None
+    root: Path,
+    goal: str | None,
+    *,
+    base_ref: str | None,
+    merge_base: str | None,
+    explicit_since: bool,
 ) -> list[GitCommitBrief]:
     range_ref = None
     if base_ref is not None and merge_base is not None:
@@ -1100,7 +1114,7 @@ def _git_commits(
         args.append(range_ref)
     args.extend(["--pretty=format:%H%x1f%h%x1f%s%x1f%b%x1e", "--name-only"])
     output = _git_output(root, args, required=False)
-    if not output and range_ref is not None:
+    if not output and range_ref is not None and not explicit_since:
         output = _git_output(
             root,
             [
@@ -1197,7 +1211,19 @@ def _github_threads(
     kinds = ["issue", "pr"]
     for kind, command in zip(kinds, commands, strict=True):
         try:
-            result = subprocess.run(command, cwd=root, check=False, capture_output=True, text=True)
+            result = subprocess.run(
+                command,
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=_GIT_COMMAND_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            warnings.append(
+                f"Timed out after {_GIT_COMMAND_TIMEOUT_SECONDS}s running gh {kind} list."
+            )
+            continue
         except OSError as exc:
             warnings.append(f"Could not run gh {kind} list: {exc}")
             continue
@@ -1234,6 +1260,12 @@ def _github_threads(
             medium_text=body,
         )
         summary = _one_line(body) or title
+        promoted = _promote_git_thread(
+            goal_tokens=goal_tokens,
+            relevance_score=relevance_score,
+            kind=kind,
+            text=" ".join([title, body]),
+        )
         threads.append(
             GitThreadBrief(
                 kind=kind,
@@ -1243,6 +1275,7 @@ def _github_threads(
                 state=state,
                 summary=summary,
                 relevance_score=relevance_score,
+                promoted=promoted,
             )
         )
     if goal_tokens:
@@ -1257,6 +1290,21 @@ def _github_threads(
     else:
         threads.sort(key=lambda item: (item.state != "open", item.kind != "issue", item.number))
     return threads[:_GIT_CONTEXT_LIMIT], warnings
+
+
+def _promote_git_thread(
+    *, goal_tokens: set[str], relevance_score: int, kind: str, text: str
+) -> bool:
+    if not goal_tokens:
+        return True
+    if relevance_score >= _PROMOTED_THREAD_RELEVANCE_FLOOR:
+        return True
+    if kind == "pr":
+        code_tokens = {
+            token for token in goal_tokens if any(character.isdigit() for character in token)
+        }
+        return bool(code_tokens & _tokens(text))
+    return False
 
 
 def _one_line(text: str) -> str:
@@ -1286,6 +1334,8 @@ def _read_first_paths(
                 ),
             )
     for thread in threads:
+        if not thread.promoted:
+            continue
         for path in _repo_paths_in_text(" ".join([thread.title, thread.summary])):
             scored[path] = max(scored.get(path, 0), thread.relevance_score + 20)
     ranked = sorted(scored, key=lambda path: (-scored[path], path))
@@ -1427,6 +1477,8 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
 
     if snapshot.git_context.enabled and snapshot.git_context.available:
         for thread in snapshot.git_context.threads:
+            if not thread.promoted:
+                continue
             priority = "high" if thread.state == "open" else "medium"
             add(
                 priority,
