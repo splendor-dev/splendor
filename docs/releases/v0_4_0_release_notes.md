@@ -21,8 +21,8 @@ This release packages the v0.4 work-first handoff and pre-v1 workflow durability
   and maintained artifacts before PR handoff.
 - Reviewed mutating commands expose deterministic JSON mutation contracts with `mode`, `mutates`,
   `planned`, and `written` fields.
-- `splendor queue clean --orphaned|--superseded|--completed` gives stale ingest queue records an
-  explicit preview/apply closure path.
+- `splendor queue clean` with one of `--orphaned`, `--superseded`, or `--completed` gives stale
+  ingest queue records an explicit preview/apply closure path.
 
 ## Trial Focus
 
