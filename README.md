@@ -279,6 +279,12 @@ hidden from default active planning handoff, and managed intentionally through t
 and mute workflows. Contested source-summary annotations and query metadata remain available when
 operators ask for contradiction evidence.
 
+Default `splendor task list` shows human-authored planning tasks. Generated contradiction-review
+tasks are available through `splendor task list --generated-review --review-task-state active` or
+`--include-generated-review`, and wiki review-needed pages or missing synthesis follow-up are
+reported through `splendor wiki status` and maintenance-focused handoff. This keeps generated
+maintenance state discoverable without turning it into normal implementation work by default.
+
 Generated source-summary pages are deterministic ingestion artifacts. For readable in-repo
 markdown/text/code sources, Splendor defaults to concise claim-bearing excerpts and path-first
 display; copied, external, parsed PDF, and OCR-derived sources keep fuller extracts by default
@@ -302,12 +308,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M18-P1.1`
+- Previous completed PR sub-slice: `M18-P2.1`
 - Current planned slice: `M18 v0.4 work-first agent handoff`
-- Current PR sub-slice: `M18-P2.1`
+- Current PR sub-slice: `M18-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M18 v0.4 work-first agent handoff`
-- Next planned PR sub-slice: `M18-P3.1`
+- Next planned slice: `M19 pre-v1 workflow durability after v0.4`
+- Next planned PR sub-slice: `M19-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -588,3 +594,6 @@ work-first handoff before vector search or mutating web review workflows.
 `M18-P1.1` implements the first v0.4 handoff step: git-aware work context and structural
 work/maintenance separation. `M18-P2.1` adds labeled inferred-authority fallback for conventional
 planning and policy paths plus provisional uncurated-doc context with exact curation commands.
+`M18-P3.1` keeps normal implementation and planning handoff work-first while adding explicit
+maintenance command guidance for review-needed wiki pages, missing synthesis, source freshness,
+queue drift, and generated contradiction-review tasks.

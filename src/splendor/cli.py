@@ -1653,6 +1653,7 @@ def handle_wiki_status(args: argparse.Namespace) -> int:
     print(f"Machine-generated pages: {result.machine_generated_pages}")
     print(f"Contested pages: {result.contested_pages}")
     print(f"Stale pages: {result.stale_pages}")
+    print(f"Review-needed pages: {result.review_needed_pages}")
     print(f"Review-needed synthesis pages: {result.review_needed_synthesis_pages}")
     print(f"Sources missing synthesis follow-up: {result.sources_missing_synthesis}")
     print(f"Invalid wiki pages: {result.invalid_pages}")
@@ -1663,6 +1664,16 @@ def handle_wiki_status(args: argparse.Namespace) -> int:
         for run in result.recent_runs:
             finished = run.finished_at or "-"
             print(f"- {run.run_id} {run.status} finished={finished}")
+    if result.review_needed_pages or result.sources_missing_synthesis:
+        print(
+            "Note: review-needed wiki state is maintenance state, not default active human tasks."
+        )
+        print("Next maintenance commands:")
+        if result.review_needed_pages:
+            print("- Review pages reported above before relying on generated synthesis.")
+        if result.sources_missing_synthesis:
+            print("- splendor wiki suggest <source-id>")
+        print('- splendor brief --agent-context "wiki maintenance review"')
     return 0
 
 
@@ -2253,6 +2264,7 @@ def handle_brief(args: argparse.Namespace) -> int:
         print("Latest maintenance:")
         for report in result.latest_reports:
             print(f"- {report.command}: {report.status} issues={report.issue_count}")
+    _print_maintenance_guidance(result)
     if result.last_query is not None:
         print(f"Last query: {result.last_query.query} ({result.last_query.match_count} matches)")
     if result.warnings:
@@ -2352,13 +2364,7 @@ def _print_agent_context(result: ProjectBrief) -> None:
             print(
                 f"- [{action.priority}/{action.category}] {action.title} target={subject}{command}"
             )
-    print(
-        "Wiki status: "
-        f"sources={result.status.source_total} "
-        f"pages={result.status.page_total} "
-        f"queue_pending={result.status.queue_status_counts.get('pending', 0)} "
-        f"review_needed={result.status.review_needed_pages}"
-    )
+    _print_maintenance_guidance(result)
     if result.recent_sources:
         print("Recent sources:")
         for source in result.recent_sources:
@@ -2447,7 +2453,21 @@ def handle_suggest_next(args: argparse.Namespace) -> int:
             f"target={target}{command}"
         )
         print(f"   Reason: {action.reason}")
+    _print_maintenance_guidance(result)
     return 0
+
+
+def _print_maintenance_guidance(result) -> None:
+    if result.maintenance_commands:
+        print("Maintenance commands:")
+        for command in result.maintenance_commands:
+            target = command.source_ref or command.path or command.source_id or "-"
+            print(f"- [{command.category}] {command.command} target={target}")
+            print(f"  Reason: {command.reason}")
+    if result.maintenance_notes:
+        print("Maintenance notes:")
+        for note in result.maintenance_notes:
+            print(f"- {note}")
 
 
 def _suggested_action_target(action) -> str:
@@ -2667,6 +2687,26 @@ def handle_task_list(args: argparse.Namespace) -> int:
         )
     except ValueError as exc:
         return _print_error(exc)
+
+    if not rows:
+        if args.generated_review or args.review_task_state is not None:
+            print("No generated contradiction-review tasks matched.")
+        elif args.include_generated_review:
+            print("No task records matched.")
+        elif args.status is None and args.priority is None and args.milestone_ref is None:
+            print("No active human task records matched.")
+            print(
+                "Generated contradiction-review tasks are hidden by default; use "
+                "`splendor task list --generated-review --review-task-state active` or "
+                "`--include-generated-review` to inspect them."
+            )
+            print(
+                "Wiki review-needed pages and missing synthesis are maintenance state; use "
+                "`splendor wiki status` or maintenance-focused `splendor brief --agent-context`."
+            )
+        else:
+            print("No human task records matched the supplied filters.")
+        return 0
 
     for row in rows:
         if row.record_origin == "generated":

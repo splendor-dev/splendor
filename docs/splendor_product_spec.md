@@ -1112,6 +1112,9 @@ Current implementation:
   GitHub issue/PR context through `gh` when available, read-first file paths, relevant matches,
   source refs, active planning records, ranked authority docs, clearly labeled provisional
   uncurated docs, recent sources/runs, maintenance reports, warnings, and ranked suggested actions.
+  JSON maintenance context also includes deterministic command guidance and notes for review-needed
+  wiki pages, missing synthesis follow-up, source freshness, queue drift, and generated review
+  tasks.
 - `splendor suggest-next [--since <ref>] [--no-git] [goal]` renders the ranked action subset
   directly. It is read-only and deterministic. For non-maintenance goals it ranks open work
   threads, recent git/PR context, task-relevant authority docs, active planning records, read-first
@@ -1124,6 +1127,10 @@ Current implementation:
   tasks. Default `task list`, `brief --agent-context`, and `suggest-next` keep them out of active
   planning handoff; operators can list, resolve, or mute them explicitly with task subcommands, and
   contradiction-focused goals expose an intentional inspection action.
+- Default `task list` intentionally reports human-authored task records. Review-needed wiki pages
+  and missing maintained synthesis follow-up are generated maintenance state surfaced by
+  `splendor wiki status`, `splendor wiki suggest <source-id>`, and maintenance-focused handoff
+  notes rather than being converted into ordinary human planning tasks.
 - Authority docs come from `briefing.authority_documents` in `splendor.yaml` and optional
   maintained wiki page frontmatter (`authority_role`, `authority_freshness`, and
   `authority_lifecycle`, `authority_scope`, issue/PR refs, and supersession links). Generated
@@ -1165,7 +1172,9 @@ v0.4 direction from external trials:
 
 `M18-P1.1` implements the git-aware work-first ranking and work/maintenance separation while
 keeping all new context runtime-only. `M18-P2.1` implements inferred-authority and provisional
-uncurated-doc fallbacks as runtime briefing signals without a schema-version bump.
+uncurated-doc fallbacks as runtime briefing signals without a schema-version bump. `M18-P3.1`
+adds runtime maintenance command guidance for review-needed/generated state while preserving the
+work-first default for implementation and planning goals.
 
 ## 18. Search Model
 

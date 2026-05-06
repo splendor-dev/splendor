@@ -357,6 +357,16 @@ class SuggestedAction:
 
 
 @dataclass(frozen=True)
+class MaintenanceCommand:
+    category: str
+    command: str
+    reason: str
+    path: str | None = None
+    source_id: str | None = None
+    source_ref: str | None = None
+
+
+@dataclass(frozen=True)
 class GitCommitBrief:
     sha: str
     short_sha: str
@@ -409,6 +419,8 @@ class SuggestNextResult:
     git_context: GitContext
     work_actions: list[SuggestedAction]
     maintenance_actions: list[SuggestedAction]
+    maintenance_commands: list[MaintenanceCommand]
+    maintenance_notes: list[str]
     provisional_context: list[AuthorityBrief]
 
 
@@ -453,6 +465,8 @@ class ProjectBrief:
     suggested_actions: list[SuggestedAction]
     work_actions: list[SuggestedAction]
     maintenance_actions: list[SuggestedAction]
+    maintenance_commands: list[MaintenanceCommand]
+    maintenance_notes: list[str]
     provisional_context: list[AuthorityBrief]
     git_context: GitContext
     next_actions: list[str]
@@ -464,6 +478,7 @@ def build_project_brief(
     snapshot = _collect_brief_state(root, goal, include_git=include_git, since=since)
     suggested_actions = _ranked_suggestions(snapshot)
     work_actions, maintenance_actions = _split_actions(suggested_actions)
+    maintenance_commands, maintenance_notes = _maintenance_guidance(snapshot, maintenance_actions)
     next_actions = _next_actions(
         status=snapshot.status,
         matches=snapshot.matches,
@@ -487,6 +502,8 @@ def build_project_brief(
         suggested_actions=suggested_actions,
         work_actions=work_actions,
         maintenance_actions=maintenance_actions,
+        maintenance_commands=maintenance_commands,
+        maintenance_notes=maintenance_notes,
         provisional_context=_provisional_authority_briefs(snapshot.authority_briefs),
         git_context=snapshot.git_context,
         next_actions=next_actions,
@@ -499,6 +516,7 @@ def build_suggest_next(
     snapshot = _collect_brief_state(root, goal, include_git=include_git, since=since)
     actions = _ranked_suggestions(snapshot)
     work_actions, maintenance_actions = _split_actions(actions)
+    maintenance_commands, maintenance_notes = _maintenance_guidance(snapshot, maintenance_actions)
     return SuggestNextResult(
         goal=snapshot.goal,
         actions=actions,
@@ -513,6 +531,8 @@ def build_suggest_next(
         git_context=snapshot.git_context,
         work_actions=work_actions,
         maintenance_actions=maintenance_actions,
+        maintenance_commands=maintenance_commands,
+        maintenance_notes=maintenance_notes,
         provisional_context=_provisional_authority_briefs(snapshot.authority_briefs),
     )
 
@@ -1758,6 +1778,81 @@ def _next_actions(
     return actions
 
 
+def _maintenance_guidance(
+    snapshot: BriefStateSnapshot, maintenance_actions: list[SuggestedAction]
+) -> tuple[list[MaintenanceCommand], list[str]]:
+    commands: list[MaintenanceCommand] = []
+    notes: list[str] = []
+
+    def add(
+        category: str,
+        command: str,
+        reason: str,
+        *,
+        path: str | None = None,
+        source_id: str | None = None,
+        source_ref: str | None = None,
+    ) -> None:
+        candidate = MaintenanceCommand(
+            category=category,
+            command=command,
+            reason=reason,
+            path=path,
+            source_id=source_id,
+            source_ref=source_ref,
+        )
+        if all(existing.command != command for existing in commands):
+            commands.append(candidate)
+
+    if snapshot.status.review_needed_pages or snapshot.status.sources_missing_synthesis:
+        add(
+            "wiki-status",
+            "splendor wiki status",
+            "Review generated wiki maintenance counts before turning them into human work.",
+        )
+        notes.append(
+            "Wiki review-needed pages and missing synthesis are maintenance state, not default "
+            "active human tasks."
+        )
+
+    if snapshot.freshness.changed or snapshot.freshness.missing:
+        add(
+            "source-freshness",
+            "splendor source freshness",
+            "Inspect the full changed or missing curated source set.",
+        )
+    if any(
+        item.operator_state
+        in {"pending", "failed_due", "expired_leased", "dead_letter", "failed_backoff"}
+        for item in snapshot.queue.items
+    ):
+        add(
+            "queue",
+            "splendor queue inspect",
+            "Inspect generated ingest queue records and operator states.",
+        )
+
+    for action in maintenance_actions:
+        if action.command is None:
+            continue
+        add(
+            action.category,
+            action.command,
+            action.reason,
+            path=action.path,
+            source_id=action.source_id,
+            source_ref=action.source_ref,
+        )
+
+    if snapshot.generated_review_task_count:
+        notes.append(
+            "Default task list hides generated contradiction-review tasks; use "
+            "`--generated-review` or `--include-generated-review` when reviewing them."
+        )
+
+    return commands, list(dict.fromkeys(notes))
+
+
 def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
     actions: list[SuggestedAction] = []
     goal_tokens = _tokens(snapshot.goal or "")
@@ -1998,7 +2093,9 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             relevance_score=item.relevance_score,
         )
 
-    if snapshot.generated_review_task_count and goal_tokens & _CONTRADICTION_GOAL_TOKENS:
+    if snapshot.generated_review_task_count and (
+        snapshot.maintenance_goal or goal_tokens & _CONTRADICTION_GOAL_TOKENS
+    ):
         add(
             "low",
             "contradiction-review",
@@ -2127,7 +2224,7 @@ def _review_page_actions(
                     f"Page `{page.frontmatter.title}` is {state}; verify current source-backed "
                     "synthesis before relying on it."
                 ),
-                "command": None,
+                "command": "splendor wiki status",
                 "path": page.path,
                 "record_id": page.frontmatter.page_id,
                 "relevance_score": _goal_relevance_score(
@@ -2182,6 +2279,8 @@ def render_suggest_next_json(result: SuggestNextResult) -> str:
             "work_context": {"actions": [asdict(action) for action in result.work_actions]},
             "maintenance_context": {
                 "actions": [asdict(action) for action in result.maintenance_actions],
+                "commands": [asdict(command) for command in result.maintenance_commands],
+                "notes": result.maintenance_notes,
                 "status": {
                     "changed_sources": result.freshness.changed,
                     "missing_sources": result.freshness.missing,
@@ -2247,7 +2346,9 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
             "work_context": {"actions": [asdict(action) for action in brief.work_actions]},
             "maintenance_context": {
-                "actions": [asdict(action) for action in brief.maintenance_actions]
+                "actions": [asdict(action) for action in brief.maintenance_actions],
+                "commands": [asdict(command) for command in brief.maintenance_commands],
+                "notes": brief.maintenance_notes,
             },
             "next_actions": brief.next_actions,
         },
@@ -2282,6 +2383,8 @@ def render_agent_context_json(brief: ProjectBrief) -> str:
             "work_context": {"actions": [asdict(action) for action in brief.work_actions]},
             "maintenance_context": {
                 "actions": [asdict(action) for action in brief.maintenance_actions],
+                "commands": [asdict(command) for command in brief.maintenance_commands],
+                "notes": brief.maintenance_notes,
                 "wiki_status": {
                     "source_total": brief.status.source_total,
                     "page_total": brief.status.page_total,
