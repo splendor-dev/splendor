@@ -72,6 +72,7 @@ class QueueCleanResult:
     applied: bool
     selectors: list[str]
     actions: list[QueueCleanAction]
+    written: list[QueueCleanAction]
     skipped: list[QueueCleanAction]
 
 
@@ -146,6 +147,7 @@ def clean_queue(
     layout = resolve_layout(root, load_config(root))
     actions: list[QueueCleanAction] = []
     skipped: list[QueueCleanAction] = []
+    written: list[QueueCleanAction] = []
     for queue_path in sorted(layout.queue_dir.glob("*.json")):
         planned, skip = _queue_clean_action(
             root,
@@ -158,16 +160,30 @@ def clean_queue(
             continue
         actions.append(planned)
 
-    if apply:
+    if apply and actions:
+        _preflight_queue_clean_targets(root, actions)
         for action in actions:
             target = root / action.path
-            if target.exists() or target.is_symlink():
+            if target.is_file() or target.is_symlink():
                 target.unlink()
+                written.append(action)
+            else:
+                skipped.append(
+                    QueueCleanAction(
+                        job_id=action.job_id,
+                        path=action.path,
+                        source_id=action.source_id,
+                        cleanup_state=action.cleanup_state,
+                        status="skipped",
+                        reason="queue record disappeared before apply",
+                    )
+                )
 
     return QueueCleanResult(
         applied=apply,
         selectors=selectors,
         actions=actions,
+        written=written,
         skipped=skipped,
     )
 
@@ -251,20 +267,23 @@ def render_queue_retry_json(result: QueueRetryResult) -> str:
 
 def render_queue_clean_json(root: Path, result: QueueCleanResult) -> str:
     mutation_records = _queue_clean_mutation_records(root, result.actions)
+    written_records = _queue_clean_mutation_records(root, result.written)
     return json.dumps(
         {
             "applied": result.applied,
             "selectors": result.selectors,
             "summary": {
                 "planned": len(result.actions),
+                "written": len(result.written),
                 "skipped": len(result.skipped),
             },
             "actions": [_queue_clean_action_payload(action) for action in result.actions],
+            "written": [_queue_clean_action_payload(action) for action in result.written],
             "skipped": [_queue_clean_action_payload(action) for action in result.skipped],
             "mutation": mutation_contract(
                 mode="apply" if result.applied else "preview",
                 planned=[] if result.applied else mutation_records,
-                written=mutation_records if result.applied else [],
+                written=written_records if result.applied else [],
             ),
         },
         indent=2,
@@ -403,7 +422,7 @@ def _queue_clean_action(
     source_id = source_id_from_ingest_job_id(job_id)
     try:
         queue_item = load_queue_item(queue_path)
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         return None, QueueCleanAction(
             job_id=job_id,
             path=queue_ref,
@@ -418,10 +437,15 @@ def _queue_clean_action(
     if skip is not None:
         return None, skip
 
-    cleanup_state = _queue_cleanup_state(
+    cleanup_states = _queue_cleanup_states(
         root, queue_item, operator_state=_operator_state(queue_item)
     )
-    if cleanup_state not in selectors:
+    selected_states = [state for state in _QUEUE_CLEANUP_SELECTOR_ORDER if state in selectors]
+    cleanup_state = next(
+        (state for state in selected_states if state in cleanup_states),
+        None,
+    )
+    if cleanup_state is None:
         return None, None
 
     return QueueCleanAction(
@@ -500,26 +524,49 @@ def _queue_clean_skip(
 def _queue_cleanup_state(
     root: Path, queue_item: QueueItemRecord, *, operator_state: str | None = None
 ) -> str:
+    states = _queue_cleanup_states(root, queue_item, operator_state=operator_state)
+    for state in ["orphaned", "superseded", "completed"]:
+        if state in states:
+            return state
+    for state in ["active_leased", "invalid_payload", "source_mismatch"]:
+        if state in states:
+            return state
+    return "not_cleanup_candidate"
+
+
+_QUEUE_CLEANUP_SELECTOR_ORDER = ["orphaned", "superseded", "completed"]
+
+
+def _queue_cleanup_states(
+    root: Path, queue_item: QueueItemRecord, *, operator_state: str | None = None
+) -> set[str]:
     source_id = source_id_from_ingest_job_id(queue_item.job_id)
     operator_state = operator_state or _operator_state(queue_item)
     if queue_item.job_type != "ingest_source" or source_id is None:
-        return "not_cleanup_candidate"
+        return {"not_cleanup_candidate"}
     if operator_state == "active_leased":
-        return "active_leased"
+        return {"active_leased"}
     _manifest_path, source, reason = _queue_payload_source(root, queue_item, source_id=source_id)
+    states: set[str] = set()
+    if queue_item.status == "done":
+        states.add("completed")
     if reason is not None:
         if reason.startswith("missing source manifest:"):
-            return "orphaned"
-        return "invalid_payload"
+            states.add("orphaned")
+            return states
+        states.add("invalid_payload")
+        return states
     if source is None:
-        return "invalid_payload"
+        states.add("invalid_payload")
+        return states
     if source.source_id != source_id:
-        return "source_mismatch"
+        states.add("source_mismatch")
+        return states
     if source.superseded_by is not None:
-        return "superseded"
-    if queue_item.status == "done":
-        return "completed"
-    return "not_cleanup_candidate"
+        states.add("superseded")
+    if states:
+        return states
+    return {"not_cleanup_candidate"}
 
 
 def _queue_payload_source(
@@ -566,6 +613,14 @@ def _queue_clean_mutation_records(
         )
         for action in sorted(actions, key=lambda item: item.path.as_posix())
     ]
+
+
+def _preflight_queue_clean_targets(root: Path, actions: list[QueueCleanAction]) -> None:
+    for action in actions:
+        target = root / action.path
+        if target.is_dir() and not target.is_symlink():
+            msg = f"Queue cleanup target is not a removable file: {action.path.as_posix()}"
+            raise ValueError(msg)
 
 
 def _queue_clean_action_payload(action: QueueCleanAction) -> dict[str, object]:

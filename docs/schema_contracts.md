@@ -581,8 +581,9 @@ Queue status values are `pending`, `leased`, `done`, `failed`, and `dead_letter`
 carry `next_attempt_at` to defer the next automatic `splendor ingest --pending` retry. Dead-letter
 records preserve `last_error` and require an explicit `splendor queue retry <job-id>` or
 `splendor repair ingest <source-id>` action. Queue inspection also reports additive
-`cleanup_state` values so orphaned, superseded, completed, active-leased, invalid-payload, and
-non-candidate records can be distinguished without parsing payload paths by hand.
+`cleanup_state` values so `orphaned`, `superseded`, `completed`, `active_leased`,
+`invalid_payload`, and `not_cleanup_candidate` records can be distinguished without parsing
+payload paths by hand.
 
 Run records now reserve explicit provenance fields beside the original generic refs so later
 pipeline steps can answer questions like "which page did this run generate?" without parsing

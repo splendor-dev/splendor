@@ -1499,11 +1499,7 @@ def handle_queue_inspect(args: argparse.Namespace) -> int:
         )
     operator_states = {item.operator_state for item in result.items}
     cleanup_states = {item.cleanup_state for item in result.items}
-    if "orphaned" in cleanup_states:
-        print("Next: splendor queue clean --orphaned --apply")
-    elif "superseded" in cleanup_states:
-        print("Next: splendor queue clean --superseded --apply")
-    elif operator_states.intersection({"pending", "failed_due", "expired_leased"}):
+    if operator_states.intersection({"pending", "failed_due", "expired_leased"}):
         print("Next: splendor ingest --pending")
     elif "dead_letter" in operator_states:
         print("Next: splendor queue retry <job-id> or splendor repair ingest <source-id>")
@@ -1511,6 +1507,10 @@ def handle_queue_inspect(args: argparse.Namespace) -> int:
         print("Next: wait for retry backoff or run splendor queue retry <job-id>")
     elif result.status_counts.get("failed", 0):
         print("Next: splendor queue retry <job-id>")
+    elif "orphaned" in cleanup_states:
+        print("Next: splendor queue clean --orphaned --apply")
+    elif "superseded" in cleanup_states:
+        print("Next: splendor queue clean --superseded --apply")
     return 0
 
 
@@ -1536,9 +1536,10 @@ def handle_queue_clean(args: argparse.Namespace) -> int:
     if not result.applied:
         print("Preview only: no queue records deleted.")
     print(f"Selectors: {', '.join(result.selectors)}")
-    if result.actions:
+    output_actions = result.written if result.applied else result.actions
+    if output_actions:
         print("Deleted queue records:" if result.applied else "Planned queue deletions:")
-        for action in result.actions:
+        for action in output_actions:
             print(
                 f"- {action.path} [{action.cleanup_state}] "
                 f"job_id={action.job_id} source_id={action.source_id or '-'}"
