@@ -1110,8 +1110,8 @@ Current implementation:
   handoff with work context before Splendor maintenance. Inside git worktrees it includes
   runtime-only local branch/head/base context, recent relevant commits, best-effort read-only
   GitHub issue/PR context through `gh` when available, read-first file paths, relevant matches,
-  source refs, active planning records, ranked authority docs, recent sources/runs, maintenance
-  reports, warnings, and ranked suggested actions.
+  source refs, active planning records, ranked authority docs, clearly labeled provisional
+  uncurated docs, recent sources/runs, maintenance reports, warnings, and ranked suggested actions.
 - `splendor suggest-next [--since <ref>] [--no-git] [goal]` renders the ranked action subset
   directly. It is read-only and deterministic. For non-maintenance goals it ranks open work
   threads, recent git/PR context, task-relevant authority docs, active planning records, read-first
@@ -1128,6 +1128,14 @@ Current implementation:
   maintained wiki page frontmatter (`authority_role`, `authority_freshness`, and
   `authority_lifecycle`, `authority_scope`, issue/PR refs, and supersession links). Generated
   source-summary pages are excluded from maintained authority ranking.
+- When configured or maintained authority is incomplete, handoff can infer runtime-only authority
+  from conventional paths such as `.agent-plan.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`,
+  `CONTRIBUTING.md`, roadmap/plan/policy/guideline docs under `docs/`, and planning-doc tests.
+  These entries carry `origin: inferred-authority`. If the file is not an active curated source,
+  it carries `curation_state: provisional-uncurated`, appears in `provisional_context`, and includes
+  exact `splendor add-source <path>` and `splendor ingest <path>` commands. Provisional context can
+  rank above historical outside reviews for planning-resume goals but does not masquerade as
+  configured or reviewed source authority.
 - Authority lifecycle values are `current`, `reviewed`, `pr-linked`, `historical`, `superseded`,
   and `archived`. Briefing and suggest-next rank current, reviewed, and PR-linked authority above
   stale, historical, superseded, or archived context while still showing relevant historical
@@ -1156,8 +1164,8 @@ v0.4 direction from external trials:
   as uncurated and paired with an exact curation command.
 
 `M18-P1.1` implements the git-aware work-first ranking and work/maintenance separation while
-keeping all new context runtime-only. The inferred-authority and provisional uncurated-doc
-fallbacks remain planned follow-up work for `M18-P2.1`.
+keeping all new context runtime-only. `M18-P2.1` implements inferred-authority and provisional
+uncurated-doc fallbacks as runtime briefing signals without a schema-version bump.
 
 ## 18. Search Model
 

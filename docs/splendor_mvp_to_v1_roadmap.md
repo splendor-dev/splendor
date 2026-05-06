@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M18-P0.1`
+- Previous completed PR sub-slice: `M18-P1.1`
 - Current planned slice: `M18 v0.4 work-first agent handoff`
-- Current PR sub-slice: `M18-P1.1`
+- Current PR sub-slice: `M18-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M18 v0.4 work-first agent handoff`
-- Next planned PR sub-slice: `M18-P2.1`
+- Next planned PR sub-slice: `M18-P3.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1246,8 +1246,9 @@ The v0.3 evaluation and follow-up inputs live in:
 `M18-P0.1` is implemented. `M18-P1.1` adds git-aware, work-first handoff without changing schema
 version `1`: `brief --agent-context` and `suggest-next` accept `--since <ref>` and `--no-git`,
 include runtime-only local git plus best-effort read-only GitHub issue/PR context, and split
-agent-facing output into work context before Splendor maintenance. `M18-P2.1` still owns broader
-inferred authority fallback and clearly labeled provisional uncurated-document context.
+agent-facing output into work context before Splendor maintenance. `M18-P2.1` adds runtime-only
+inferred authority fallback and clearly labeled provisional uncurated-document context for
+conventional planning, roadmap, policy, README/CONTRIBUTING, and planning-test files.
 
 ## Milestone 19 — pre-v1 workflow durability after v0.4
 

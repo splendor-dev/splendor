@@ -2165,6 +2165,150 @@ def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(
     assert out.index("Active planning:") < out.index("Splendor maintenance:")
 
 
+def test_agent_context_hocrgen_retry_bar_uses_provisional_uncurated_authority(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/outside_review.md",
+            role="historical-review",
+            freshness="historical",
+            applies_to=["hocrgen F3b"],
+        )
+    ]
+    write_config(tmp_path, config)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\nCurrent critical path: F3a complete; next implementation step is F3b.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrgen\n\nF3b adds typed repo-tracked operator intake manifests.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "CONTRIBUTING.md").write_text(
+        "# Contributing\n\nRun planning tests before changing F3b planning docs.\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "HeOCR_hocrgen_long_term_roadmap.md").write_text(
+        "# Roadmap\n\n## Current critical path\n\nF3b follows F3a and precedes F4/F5.\n",
+        encoding="utf-8",
+    )
+    (docs / "modern_handwritten_acquisition_policy.md").write_text(
+        "# Modern Handwritten Acquisition Policy\n\n"
+        "F3b requires consent, release terms, privacy screening, and typed intake manifests.\n",
+        encoding="utf-8",
+    )
+    (docs / "outside_review.md").write_text(
+        "# Outside Review\n\nHistorical hocrgen review mentions F3b repeatedly.\n",
+        encoding="utf-8",
+    )
+    planning_test = tmp_path / "tests" / "test_planning_docs.py"
+    planning_test.parent.mkdir(exist_ok=True)
+    planning_test.write_text("def test_f3b_planning_docs():\n    assert 'F3b'\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "Resume",
+            "hocrgen",
+            "planning",
+            "after",
+            "F3a",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    authority_paths = [item["path"] for item in payload["authority_briefs"]]
+    expected_provisional = {
+        ".agent-plan.md",
+        "docs/HeOCR_hocrgen_long_term_roadmap.md",
+        "docs/modern_handwritten_acquisition_policy.md",
+        "README.md",
+        "CONTRIBUTING.md",
+        "tests/test_planning_docs.py",
+    }
+    assert expected_provisional <= set(authority_paths)
+    assert all(
+        authority_paths.index(path) < authority_paths.index("docs/outside_review.md")
+        for path in expected_provisional
+    )
+    provisional = payload["provisional_context"]["authority"]
+    provisional_by_path = {item["path"]: item for item in provisional}
+    assert expected_provisional <= set(provisional_by_path)
+    agent_plan = provisional_by_path[".agent-plan.md"]
+    assert agent_plan["origin"] == "inferred-authority"
+    assert agent_plan["curation_state"] == "provisional-uncurated"
+    assert agent_plan["curation_commands"] == [
+        "splendor add-source .agent-plan.md",
+        "splendor ingest .agent-plan.md",
+    ]
+    assert (
+        payload["authority_briefs"][authority_paths.index("docs/outside_review.md")][
+            "curation_state"
+        ]
+        == "configured"
+    )
+    authority_actions = [
+        action for action in payload["suggested_actions"] if action["category"] == "authority"
+    ]
+    assert authority_actions[0]["path"] in expected_provisional
+    assert "provisional-uncurated" in authority_actions[0]["reason"]
+
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "Resume",
+            "hocrgen",
+            "planning",
+            "after",
+            "F3a",
+            "--json",
+        ]
+    )
+    assert suggest_exit == 0
+    suggest_payload = json.loads(capsys.readouterr().out)
+    suggest_paths = [item["path"] for item in suggest_payload["authority_briefs"]]
+    assert suggest_paths.index(".agent-plan.md") < suggest_paths.index("docs/outside_review.md")
+    assert ".agent-plan.md" in {
+        item["path"] for item in suggest_payload["provisional_context"]["authority"]
+    }
+
+    text_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "Resume",
+            "hocrgen",
+            "planning",
+            "after",
+            "F3a",
+        ]
+    )
+    assert text_exit == 0
+    out = capsys.readouterr().out
+    assert "Provisional uncurated docs:" in out
+    assert "Curate: splendor add-source .agent-plan.md; splendor ingest .agent-plan.md" in out
+    assert out.index("Provisional uncurated docs:") < out.index("Splendor maintenance:")
+
+
 def test_brief_plain_text_does_not_call_gh_by_default(tmp_path: Path, capsys, monkeypatch) -> None:
     initialize_workspace(tmp_path)
     _init_git_repo(tmp_path, repo="example/project")
@@ -2308,7 +2452,9 @@ def test_suggest_next_derives_draft_wiki_authority_freshness_as_watch(
     authority_actions = [
         action for action in payload["actions"] if action["category"] == "authority"
     ]
-    assert authority_actions[0]["reason"].startswith("current-authority/watch/current:")
+    assert authority_actions[0]["reason"].startswith(
+        "current-authority/watch/current/wiki-authority/curated:"
+    )
 
 
 def test_suggest_next_includes_lifecycle_aware_decision_authority(tmp_path: Path, capsys) -> None:
