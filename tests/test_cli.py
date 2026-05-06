@@ -186,6 +186,19 @@ def test_cli_source_reconcile_repairs_duplicate_active_versions(tmp_path: Path, 
     assert preview["current_source_id"] == expected_current.source_id
     assert preview["summary"] == {"active_before": 2, "updates": 2}
     assert preview["next_commands"] == ["splendor source reconcile brief.md --apply"]
+    assert preview["mutation"]["mode"] == "preview"
+    assert preview["mutation"]["mutates"] is False
+    assert preview["mutation"]["written"] == []
+    assert {
+        (item["action"], item["kind"], item["source_id"]) for item in preview["mutation"]["planned"]
+    } == {
+        ("write", "source_manifest", expected_current.source_id),
+        *{
+            ("write", "source_manifest", source_id)
+            for source_id in superseded_ids
+            if source_id in {update["source_id"] for update in preview["updates"]}
+        },
+    }
     assert {path.name: path.read_text(encoding="utf-8") for path in manifest_paths} == before_text
 
     ambiguous_current_code = main(
@@ -201,6 +214,7 @@ def test_cli_source_reconcile_repairs_duplicate_active_versions(tmp_path: Path, 
     assert apply_code == 0
     out = capsys.readouterr().out
     assert "Applied source reconciliation" in out
+    assert "Mutation mode: apply" in out
     assert f"Current source ID: {expected_current.source_id}" in out
     assert "Next: splendor lint" in out
     after_records = {
@@ -231,6 +245,10 @@ def test_cli_source_reconcile_explicit_source_id_selects_current(tmp_path: Path,
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["current_source_id"] == original_id
+    assert payload["mutation"]["mode"] == "apply"
+    assert payload["mutation"]["mutates"] is True
+    assert payload["mutation"]["planned"] == []
+    assert {item["kind"] for item in payload["mutation"]["written"]} == {"source_manifest"}
     records = {
         path.stem: load_source_record(path)
         for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
@@ -373,6 +391,17 @@ def test_cli_source_forget_preview_is_non_mutating(tmp_path: Path, capsys) -> No
     assert payload["applied"] is False
     assert payload["summary"]["candidates"] == 1
     assert {action["status"] for action in payload["actions"]} == {"planned"}
+    assert payload["mutation"]["mode"] == "preview"
+    assert payload["mutation"]["mutates"] is False
+    assert payload["mutation"]["written"] == []
+    assert {item["path"] for item in payload["mutation"]["planned"]} >= {
+        f"state/manifests/sources/{source_id}.json",
+        f"wiki/sources/{source_id}.md",
+        f"state/queue/ingest-{source_id}.json",
+    }
+    assert {
+        (item["action"], item["kind"], item["path"]) for item in payload["mutation"]["planned"]
+    } >= {("write", "wiki_index", "wiki/index.md")}
     assert manifest_path.exists()
     assert summary_path.exists()
     assert queue_path.exists()
@@ -408,6 +437,17 @@ def test_cli_source_forget_apply_removes_source_owned_state(tmp_path: Path, caps
     payload = json.loads(capsys.readouterr().out)
     assert payload["applied"] is True
     assert {action["status"] for action in payload["actions"]} == {"removed"}
+    assert payload["mutation"]["mode"] == "apply"
+    assert payload["mutation"]["mutates"] is True
+    assert payload["mutation"]["planned"] == []
+    assert {item["path"] for item in payload["mutation"]["written"]} >= {
+        f"state/manifests/sources/{source_id}.json",
+        f"wiki/sources/{source_id}.md",
+        f"state/queue/ingest-{source_id}.json",
+    }
+    assert {
+        (item["action"], item["kind"], item["path"]) for item in payload["mutation"]["written"]
+    } >= {("write", "wiki_index", "wiki/index.md")}
     assert not manifest_path.exists()
     assert not summary_path.exists()
     assert not queue_path.exists()
@@ -727,9 +767,14 @@ def test_cli_source_forget_human_output_reports_next_commands(tmp_path: Path, ca
 
     assert preview_exit == 0
     assert "Source forget preview" in preview_output
+    assert "Mutation mode: preview" in preview_output
+    assert "Preview only: no source manifests or generated source-owned state removed." in (
+        preview_output
+    )
     assert f"Next: splendor source forget {source_id} --apply" in preview_output
     assert apply_exit == 0
     assert "Source forget applied" in apply_output
+    assert "Mutation mode: apply" in apply_output
     assert "Next: splendor lint" in apply_output
     assert "Next: splendor health" in apply_output
 
@@ -766,6 +811,12 @@ def test_cli_source_forget_removes_materialized_copy_artifacts(tmp_path: Path, c
     assert {(item["kind"], item["path"]) for item in payload["actions"]} >= {
         ("materialized_artifact", f"raw/sources/{source_id}/external.md"),
         ("source_manifest", f"state/manifests/sources/{source_id}.json"),
+    }
+    assert {
+        (item["action"], item["kind"], item["path"]) for item in payload["mutation"]["written"]
+    } >= {
+        ("delete", "materialized_artifact", f"raw/sources/{source_id}/external.md"),
+        ("delete", "source_manifest", f"state/manifests/sources/{source_id}.json"),
     }
     assert not materialized_path.exists()
     assert not materialized_path.parent.exists()
@@ -1285,12 +1336,15 @@ def test_cli_source_refresh_registers_changed_workspace_source_and_queues_it(
 
     assert exit_code == 0
     out = capsys.readouterr().out
+    assert "Mutation mode: apply" in out
     assert "Detected changed source content for brief.md" in out
     assert f"Requested source ID: {original_id}" in out
     manifests = sorted((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
     assert len(manifests) == 2
     refreshed_id = [path.stem for path in manifests if path.stem != original_id][0]
     assert f"Registered refreshed source ID: {refreshed_id}" in out
+    assert "Written paths:" in out
+    assert f"state/manifests/sources/{refreshed_id}.json" in out
     assert (tmp_path / "state" / "queue" / f"ingest-{refreshed_id}.json").exists()
     records = [load_source_record(path) for path in manifests]
     assert {record.logical_id for record in records} == {"source:brief.md"}
@@ -1344,6 +1398,36 @@ def test_source_refresh_noop_returns_existing_materialized_path(tmp_path: Path, 
     assert result.refreshed.stored_path.exists()
 
 
+def test_cli_source_refresh_json_reports_materialized_artifact_write(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "--storage-mode", "copy", str(source)])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    refreshed_id = payload["source_id"]
+    assert refreshed_id != original_id
+    assert {
+        (item["action"], item["kind"], item["path"], item["source_id"])
+        for item in payload["mutation"]["written"]
+    } >= {
+        (
+            "write",
+            "source_artifact",
+            f"raw/sources/{refreshed_id}/brief.md",
+            refreshed_id,
+        )
+    }
+
+
 def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -1357,6 +1441,7 @@ def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
+    mutation = payload.pop("mutation")
     refreshed_ids = [
         path.stem
         for path in (tmp_path / "state" / "manifests" / "sources").glob("*.json")
@@ -1374,6 +1459,32 @@ def test_cli_source_refresh_json_reports_queue_handoff(tmp_path: Path, capsys) -
         "queued": True,
         "queue_path": f"state/queue/ingest-{refreshed_ids[0]}.json",
         "message": "queued ingest",
+    }
+    assert mutation["mode"] == "apply"
+    assert mutation["mutates"] is True
+    assert mutation["planned"] == []
+    assert {
+        (item["action"], item["kind"], item["path"], item["source_id"])
+        for item in mutation["written"]
+    } == {
+        (
+            "write",
+            "queue_record",
+            f"state/queue/ingest-{refreshed_ids[0]}.json",
+            refreshed_ids[0],
+        ),
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{original_id}.json",
+            original_id,
+        ),
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{refreshed_ids[0]}.json",
+            refreshed_ids[0],
+        ),
     }
 
 
@@ -1550,6 +1661,7 @@ def test_cli_source_refresh_by_path_uses_latest_matching_source_ref(tmp_path: Pa
 
     assert exit_code == 0
     out = capsys.readouterr().out
+    assert "Mutation mode: apply" in out
     assert "ambiguous" not in out
     assert "No source content change detected" in out
 
@@ -2104,10 +2216,19 @@ def test_cli_workspace_refresh_rebuilds_index_standalone(tmp_path: Path, capsys)
     assert payload["ingest"] is None
     assert payload["index"]["path"] == "wiki/index.md"
     assert payload["index"]["page_count"] == 0
+    assert payload["mutation"] == {
+        "mode": "apply",
+        "mutates": True,
+        "planned": [],
+        "written": [{"action": "write", "path": "wiki/index.md", "kind": "wiki_index"}],
+    }
 
 
 def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    write_config(tmp_path, config)
     source = tmp_path / "brief.md"
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
@@ -2136,6 +2257,9 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
     assert payload["ingest"]["failed"] == 0
     assert payload["ingest"]["succeeded"] == 1
     assert payload["index"]["path"] == "wiki/index.md"
+    assert payload["mutation"]["mode"] == "apply"
+    assert payload["mutation"]["mutates"] is True
+    assert payload["mutation"]["planned"] == []
     refreshed = payload["refreshed"][0]
     assert refreshed["path"] == "brief.md"
     assert refreshed["requested_source_id"] == original_id
@@ -2143,6 +2267,37 @@ def test_cli_workspace_refresh_changed_ingests_and_rebuilds_index(tmp_path: Path
     refreshed_id = refreshed["source_id"]
     assert refreshed_id != original_id
     assert refreshed["supersedes"] == [original_id]
+    written = {
+        (item["action"], item["kind"], item["path"], item.get("source_id"))
+        for item in payload["mutation"]["written"]
+    }
+    run_records = [item for item in payload["mutation"]["written"] if item["kind"] == "run_record"]
+    assert len({item["path"] for item in run_records}) == 1
+    run_path = run_records[0]["path"]
+    assert written == {
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{original_id}.json",
+            original_id,
+        ),
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{refreshed_id}.json",
+            refreshed_id,
+        ),
+        (
+            "write",
+            "queue_record",
+            f"state/queue/ingest-{refreshed_id}.json",
+            refreshed_id,
+        ),
+        ("write", "run_record", run_path, refreshed_id),
+        ("write", "source_summary_page", f"wiki/sources/{refreshed_id}.md", refreshed_id),
+        ("write", "wiki_index", "wiki/index.md", None),
+        ("write", "wiki_log", "wiki/log.md", None),
+    }
     assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
     index_text = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
     assert f"sources/{refreshed_id}.md" in index_text
@@ -2201,6 +2356,25 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
             "manifest_path": f"state/manifests/sources/{original_id}.json",
         }
     ]
+    assert payload["mutation"] == {
+        "mode": "apply",
+        "mutates": True,
+        "planned": [],
+        "written": [
+            {
+                "action": "write",
+                "path": f"state/manifests/sources/{original_id}.json",
+                "kind": "source_manifest",
+                "source_id": original_id,
+            },
+            {
+                "action": "delete",
+                "path": f"wiki/sources/{original_id}.md",
+                "kind": "source_summary_page",
+                "source_id": original_id,
+            },
+        ],
+    }
     assert not (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
     original_manifest = load_source_record(
         tmp_path / "state" / "manifests" / "sources" / f"{original_id}.json"
@@ -2299,6 +2473,20 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_and_updates_topic_ref
             "replacements": {original_id: refreshed_id},
         }
     ]
+    written_records = {
+        (item["action"], item["kind"], item["path"], item.get("source_id"))
+        for item in payload["mutation"]["written"]
+    }
+    assert written_records >= {
+        (
+            "write",
+            "source_manifest",
+            f"state/manifests/sources/{original_id}.json",
+            original_id,
+        ),
+        ("delete", "source_summary_page", f"wiki/sources/{original_id}.md", original_id),
+        ("write", "maintained_wiki_page", "wiki/topics/brief-synthesis.md", None),
+    }
     assert not (tmp_path / "wiki" / "sources" / f"{original_id}.md").exists()
     assert (tmp_path / "wiki" / "sources" / f"{refreshed_id}.md").exists()
     original_manifest = load_source_record(

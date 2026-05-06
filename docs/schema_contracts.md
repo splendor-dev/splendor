@@ -278,6 +278,12 @@ Implemented fields:
   append a managed `Compiled Source Evidence` section to the markdown body, and validate the
   resulting `KnowledgePageFrontmatter` before reporting or writing. Generated source-summary pages
   are not valid compile targets.
+- Agent-safe preview/apply outputs use an additive `mutation` object where mutating behavior is
+  already part of the command contract. `mutation.mode` is `preview` or `apply`, `mutation.mutates`
+  is true only when the invocation wrote or removed workspace state, `mutation.planned` lists
+  deterministic planned write/delete records for preview mode, and `mutation.written` lists
+  deterministic write/delete records for apply or direct-write mode. Records include `action`,
+  `path`, `kind`, and `source_id` when source-scoped.
 - `splendor pr-summary --since main` is a read-only PR handoff view over local git diff/status and
   existing report files. It diffs from the merge base between `HEAD` and the base ref, respects
   configured workspace layout directories, and groups curated source manifests, generated

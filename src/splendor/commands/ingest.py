@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from splendor import __version__
+from splendor.commands.mutation import mutation_record
 from splendor.config import load_config
 from splendor.ingest_dispatch import IMAGE_SOURCE_TYPES, dispatch_source_content
 from splendor.layout import resolve_layout
@@ -87,6 +88,7 @@ class IngestResult:
     no_op: bool
     canonical_ref: str | None
     content_origin_kind: str | None
+    written_records: list[dict[str, str]]
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,7 @@ class DrainItemResult:
     queue_path: Path
     outcome: str
     message: str
+    written_records: list[dict[str, str]]
 
 
 @dataclass(frozen=True)
@@ -138,12 +141,13 @@ def pending_ingest_next_actions(result: DrainResult) -> list[str]:
     return ["splendor queue inspect"]
 
 
-def _drain_item_payload(root: Path, item: DrainItemResult) -> dict[str, str]:
+def _drain_item_payload(root: Path, item: DrainItemResult) -> dict[str, object]:
     return {
         "source_id": item.source_id,
         "queue_path": _relative_to_root(root, item.queue_path),
         "outcome": item.outcome,
         "message": item.message,
+        "written_records": item.written_records,
     }
 
 
@@ -816,6 +820,84 @@ def _commit_success(
         raise
 
 
+def _ingest_success_written_records(
+    *,
+    root: Path,
+    layout,
+    manifest_path: Path,
+    run_path: Path,
+    queue_path: Path,
+    wiki_payload: WikiUpdatePayload,
+    source_id: str,
+) -> list[dict[str, str]]:
+    records = [
+        mutation_record(
+            action="write",
+            path=_relative_to_root(root, manifest_path),
+            kind="source_manifest",
+            source_id=source_id,
+        ),
+        mutation_record(
+            action="write",
+            path=_relative_to_root(root, run_path),
+            kind="run_record",
+            source_id=source_id,
+        ),
+        mutation_record(
+            action="write",
+            path=_relative_to_root(root, queue_path),
+            kind="queue_record",
+            source_id=source_id,
+        ),
+        mutation_record(
+            action="write",
+            path=_relative_to_root(root, wiki_payload.page_path),
+            kind="source_summary_page",
+            source_id=source_id,
+        ),
+        mutation_record(
+            action="write",
+            path=_relative_to_root(root, layout.index_file),
+            kind="wiki_index",
+        ),
+        mutation_record(
+            action="write",
+            path=_relative_to_root(root, layout.log_file),
+            kind="wiki_log",
+        ),
+    ]
+    records.extend(
+        mutation_record(
+            action="write",
+            path=_relative_to_root(root, path),
+            kind=_extra_write_kind(root, path),
+            source_id=source_id if _extra_write_is_source_scoped(root, path) else None,
+        )
+        for path, _content in wiki_payload.extra_writes
+    )
+    return sorted(records, key=lambda item: (item["kind"], item["path"], item["action"]))
+
+
+def _extra_write_kind(root: Path, path: Path) -> str:
+    relpath = _relative_to_root(root, path)
+    if relpath.startswith("derived/metadata/"):
+        return "metadata_artifact"
+    if relpath.startswith("derived/"):
+        return "derived_artifact"
+    if relpath.startswith("planning/"):
+        return "planning_record"
+    if relpath.startswith("wiki/sources/"):
+        return "source_summary_page"
+    if relpath.startswith("wiki/"):
+        return "wiki_page"
+    return "artifact"
+
+
+def _extra_write_is_source_scoped(root: Path, path: Path) -> bool:
+    relpath = _relative_to_root(root, path)
+    return relpath.startswith(("derived/", "wiki/sources/"))
+
+
 def enqueue_ingest_job(root: Path, source_id: str) -> Path:
     config = load_config(root)
     layout = resolve_layout(root, config)
@@ -930,6 +1012,14 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             no_op=True,
             canonical_ref=None,
             content_origin_kind=None,
+            written_records=[
+                mutation_record(
+                    action="write",
+                    path=_relative_to_root(root, queue_path),
+                    kind="queue_record",
+                    source_id=source.source_id,
+                )
+            ],
         )
 
     run_id = _make_run_id(source.source_id)
@@ -1196,6 +1286,39 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
                 "last_error": None,
             }
         )
+        extra_writes = [
+            *(
+                [
+                    (
+                        dispatched_content.derived_artifact_path,
+                        dispatched_content.derived_artifact_content,
+                    )
+                ]
+                if dispatched_content.derived_artifact_path is not None
+                and dispatched_content.derived_artifact_content is not None
+                else []
+            ),
+            *(
+                [
+                    (
+                        dispatched_content.metadata_artifact_path,
+                        dispatched_content.metadata_artifact_content,
+                    )
+                ]
+                if dispatched_content.metadata_artifact_path is not None
+                and dispatched_content.metadata_artifact_content is not None
+                else []
+            ),
+            *contradiction_review.page_updates,
+            *[(update.task_path, update.content) for update in contradiction_review.task_updates],
+        ]
+        wiki_payload = WikiUpdatePayload(
+            page_path=page_path,
+            page_content=page_content,
+            index_content=index_content,
+            log_content=log_content,
+            extra_writes=extra_writes,
+        )
         _commit_success(
             layout=layout,
             manifest_path=manifest_path,
@@ -1204,41 +1327,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             success_run=success_run,
             queue_path=queue_path,
             success_queue=success_queue,
-            wiki_payload=WikiUpdatePayload(
-                page_path=page_path,
-                page_content=page_content,
-                index_content=index_content,
-                log_content=log_content,
-                extra_writes=[
-                    *(
-                        [
-                            (
-                                dispatched_content.derived_artifact_path,
-                                dispatched_content.derived_artifact_content,
-                            )
-                        ]
-                        if dispatched_content.derived_artifact_path is not None
-                        and dispatched_content.derived_artifact_content is not None
-                        else []
-                    ),
-                    *(
-                        [
-                            (
-                                dispatched_content.metadata_artifact_path,
-                                dispatched_content.metadata_artifact_content,
-                            )
-                        ]
-                        if dispatched_content.metadata_artifact_path is not None
-                        and dispatched_content.metadata_artifact_content is not None
-                        else []
-                    ),
-                    *contradiction_review.page_updates,
-                    *[
-                        (update.task_path, update.content)
-                        for update in contradiction_review.task_updates
-                    ],
-                ],
-            ),
+            wiki_payload=wiki_payload,
         )
         return IngestResult(
             source_id=source.source_id,
@@ -1249,6 +1338,15 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             no_op=False,
             canonical_ref=resolved_source.canonical_ref,
             content_origin_kind=_content_origin_kind(resolved_source.storage_mode),
+            written_records=_ingest_success_written_records(
+                root=root,
+                layout=layout,
+                manifest_path=manifest_path,
+                run_path=run_path,
+                queue_path=queue_path,
+                wiki_payload=wiki_payload,
+                source_id=source.source_id,
+            ),
         )
     except ValueError as exc:
         _mark_attempt_failed(
@@ -1304,6 +1402,7 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
                     queue_path=queue_path,
                     outcome="skipped",
                     message=_skip_message(queue_item, now),
+                    written_records=[],
                 )
             )
             continue
@@ -1319,6 +1418,7 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
                     queue_path=queue_path,
                     outcome="failed",
                     message=str(exc),
+                    written_records=[],
                 )
             )
             continue
@@ -1331,6 +1431,7 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
                     queue_path=queue_path,
                     outcome="skipped",
                     message="already ingested for the current pipeline version",
+                    written_records=result.written_records,
                 )
             )
             continue
@@ -1343,6 +1444,7 @@ def drain_pending_ingest_jobs(root: Path) -> DrainResult:
                 queue_path=queue_path,
                 outcome="succeeded",
                 message=f"run {result.run_id}",
+                written_records=result.written_records,
             )
         )
 
@@ -1380,6 +1482,7 @@ def ingest_source(root: Path, source_id: str) -> IngestResult:
             no_op=True,
             canonical_ref=None,
             content_origin_kind=None,
+            written_records=[],
         )
 
     queue_path = enqueue_ingest_job(root, source_id)

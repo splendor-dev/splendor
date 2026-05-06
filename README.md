@@ -308,12 +308,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M18-P3.1`
+- Previous completed PR sub-slice: `M19-P1.1`
 - Current planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Current PR sub-slice: `M19-P1.1`
+- Current PR sub-slice: `M19-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Next planned PR sub-slice: `M19-P2.1`
+- Next planned PR sub-slice: `M19-P3.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -608,3 +608,7 @@ queue drift, and generated contradiction-review tasks.
 review. `splendor pr-summary --since main` now includes compact committed review groups, and
 git-aware `brief --agent-context` / `suggest-next` expose that PR-summary command under Splendor
 maintenance context when a branch has Splendor-specific review groups or attention diagnostics.
+`M19-P2.1` tightens agent-safe preview/apply consistency across mutating CLI surfaces. JSON
+outputs for reviewed compile, source cleanup/reconciliation, source refresh, and workspace refresh
+now expose a deterministic `mutation` object with `mode`, `mutates`, `planned`, and `written`
+fields, while human output labels preview-only invocations and apply/direct write modes clearly.

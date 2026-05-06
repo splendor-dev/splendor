@@ -7,12 +7,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from splendor.commands.ingest import DrainItemResult, DrainResult, run_ingest_job
+from splendor.commands.mutation import dedupe_mutation_records, mutation_contract, mutation_record
 from splendor.commands.source import (
     SourceFreshnessItem,
     SourceFreshnessResult,
     SourceRefreshResult,
     refresh_source,
     scan_source_freshness,
+    source_refresh_written_records,
 )
 from splendor.commands.wiki import WikiIndexRebuildResult, rebuild_wiki_index
 from splendor.config import load_config
@@ -301,6 +303,10 @@ def render_workspace_refresh_json(root: Path, result: WorkspaceRefreshResult) ->
             "topic_ref_migration": (
                 None if result.topic_ref_migration is None else asdict(result.topic_ref_migration)
             ),
+            "mutation": mutation_contract(
+                mode="apply",
+                written=workspace_refresh_written_records(root, result),
+            ),
         },
         indent=2,
     )
@@ -516,6 +522,7 @@ def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult
                     queue_path=queue_path,
                     outcome="failed",
                     message=str(exc),
+                    written_records=[],
                 )
             )
             continue
@@ -528,6 +535,7 @@ def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult
                     queue_path=queue_path,
                     outcome="skipped",
                     message="already ingested for the current pipeline version",
+                    written_records=result.written_records,
                 )
             )
             continue
@@ -540,6 +548,7 @@ def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult
                 queue_path=queue_path,
                 outcome="succeeded",
                 message=f"run {result.run_id}",
+                written_records=result.written_records,
             )
         )
 
@@ -612,7 +621,54 @@ def _ingest_payload(root: Path, result: DrainResult) -> dict[str, object]:
                 "queue_path": item.queue_path.relative_to(root).as_posix(),
                 "outcome": item.outcome,
                 "message": item.message,
+                "written_records": item.written_records,
             }
             for item in result.items
         ],
     }
+
+
+def workspace_refresh_written_records(
+    root: Path, result: WorkspaceRefreshResult
+) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for refresh in result.refreshed:
+        records.extend(source_refresh_written_records(root, refresh))
+    if result.ingest is not None:
+        records.extend(_ingest_written_records(root, result.ingest))
+    if result.index is not None:
+        records.append(mutation_record(action="write", path=result.index.path, kind="wiki_index"))
+    if result.pruning is not None:
+        for item in result.pruning.pruned:
+            records.extend(
+                [
+                    mutation_record(
+                        action="delete",
+                        path=item.path,
+                        kind="source_summary_page",
+                        source_id=item.source_id,
+                    ),
+                    mutation_record(
+                        action="write",
+                        path=item.manifest_path,
+                        kind="source_manifest",
+                        source_id=item.source_id,
+                    ),
+                ]
+            )
+    if result.topic_ref_migration is not None:
+        records.extend(
+            mutation_record(action="write", path=item.path, kind="maintained_wiki_page")
+            for item in result.topic_ref_migration.updated
+        )
+    return dedupe_mutation_records(records)
+
+
+def _ingest_written_records(root: Path, result: DrainResult) -> list[dict[str, str]]:
+    del root
+    records: list[dict[str, str]] = []
+    for item in result.items:
+        if item.outcome not in {"succeeded", "skipped"}:
+            continue
+        records.extend(item.written_records)
+    return records

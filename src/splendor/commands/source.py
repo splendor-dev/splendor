@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
+from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.config import load_config
 from splendor.ingest_dispatch import SUPPORTED_SOURCE_TYPES
 from splendor.layout import resolve_layout
@@ -41,6 +42,7 @@ class SourceLookupResult:
 @dataclass(frozen=True)
 class SourceRefreshResult:
     requested: SourceRecord
+    requested_manifest_path: Path
     refreshed: RegisteredSource
     changed: bool
     queued: bool
@@ -330,6 +332,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     if is_ingest_current(root, layout, refreshed.record):
         return SourceRefreshResult(
             requested=requested,
+            requested_manifest_path=requested_match.manifest_path,
             refreshed=refreshed,
             changed=changed,
             queued=False,
@@ -340,6 +343,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
     queue_path = enqueue_ingest_job(root, refreshed.record.source_id)
     return SourceRefreshResult(
         requested=requested,
+        requested_manifest_path=requested_match.manifest_path,
         refreshed=refreshed,
         changed=changed,
         queued=True,
@@ -856,6 +860,10 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
                 else result.queue_path.relative_to(root).as_posix()
             ),
             "message": result.message,
+            "mutation": mutation_contract(
+                mode="apply",
+                written=source_refresh_written_records(root, result),
+            ),
         },
         indent=2,
     )
@@ -886,6 +894,15 @@ def render_source_path_update_json(root: Path, result: SourcePathUpdateResult) -
 
 
 def render_source_reconcile_json(root: Path, result: SourceReconcileResult) -> str:
+    mutation_records = [
+        mutation_record(
+            action="write",
+            path=update.manifest_path.relative_to(root).as_posix(),
+            kind="source_manifest",
+            source_id=update.source.source_id,
+        )
+        for update in result.updates
+    ]
     return json.dumps(
         {
             "applied": result.applied,
@@ -901,6 +918,11 @@ def render_source_reconcile_json(root: Path, result: SourceReconcileResult) -> s
             },
             "updates": [_reconcile_update_payload(root, update) for update in result.updates],
             "next_commands": source_reconcile_next_commands(result),
+            "mutation": mutation_contract(
+                mode="apply" if result.applied else "preview",
+                planned=[] if result.applied else mutation_records,
+                written=mutation_records if result.applied else [],
+            ),
         },
         indent=2,
     )
@@ -914,6 +936,47 @@ def source_reconcile_next_commands(result: SourceReconcileResult) -> list[str]:
         command += " --apply"
         return [command]
     return ["splendor lint", "splendor health"]
+
+
+def source_refresh_written_records(root: Path, result: SourceRefreshResult) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    if result.changed:
+        if result.refreshed.copied and result.refreshed.stored_path is not None:
+            records.append(
+                mutation_record(
+                    action="write",
+                    path=result.refreshed.stored_path.relative_to(root).as_posix(),
+                    kind="source_artifact",
+                    source_id=result.refreshed.record.source_id,
+                )
+            )
+        records.append(
+            mutation_record(
+                action="write",
+                path=result.refreshed.manifest_path.relative_to(root).as_posix(),
+                kind="source_manifest",
+                source_id=result.refreshed.record.source_id,
+            )
+        )
+        if result.refreshed.record.source_id != result.requested.source_id:
+            records.append(
+                mutation_record(
+                    action="write",
+                    path=result.requested_manifest_path.relative_to(root).as_posix(),
+                    kind="source_manifest",
+                    source_id=result.requested.source_id,
+                )
+            )
+    if result.queued and result.queue_path is not None:
+        records.append(
+            mutation_record(
+                action="write",
+                path=result.queue_path.relative_to(root).as_posix(),
+                kind="queue_record",
+                source_id=result.refreshed.record.source_id,
+            )
+        )
+    return sorted(records, key=lambda item: (item["kind"], item["path"], item["action"]))
 
 
 def write_source_freshness_report(
