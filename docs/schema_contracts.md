@@ -284,7 +284,12 @@ Implemented fields:
   source-summary pages, maintained wiki/topic pages, queue/run/report/derived generated-state
   churn, latest local lint/health report status when available, and reviewer notes. Malformed
   changed source manifests are reported as invalid curated-source changes instead of aborting the
-  whole summary. `--json` emits the same structure for agents. The command does not create
+  whole summary. Human output includes a compact committed review section before detailed path
+  groups. `--json` emits the same structure for agents, including `compact_review` with
+  `review_first`, `usually_mechanical`, and `attention` groups so reviewers can distinguish
+  generated knowledge changes from mechanical queue/run/report/query/derived churn. Compact groups
+  keep `paths` for quick scanning plus `path_actions` and `action_counts` for add/change/delete/
+  rename review without falling back to the detailed groups. The command does not create
   manifests, queue jobs, wiki pages, run records, reports, or GitHub state.
 - `splendor brief --agent-context [--since <ref>] [--no-git] [goal]` and
   `splendor suggest-next [--since <ref>] [--no-git] [goal]` are read-only handoff views over

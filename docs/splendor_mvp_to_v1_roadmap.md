@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M18-P2.1`
-- Current planned slice: `M18 v0.4 work-first agent handoff`
-- Current PR sub-slice: `M18-P3.1`
+- Previous completed PR sub-slice: `M18-P3.1`
+- Current planned slice: `M19 pre-v1 workflow durability after v0.4`
+- Current PR sub-slice: `M19-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Next planned PR sub-slice: `M19-P1.1`
+- Next planned PR sub-slice: `M19-P2.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1265,6 +1265,17 @@ and consistently safe enough for public v1.
 - Orphan queue cleanup and closeable provenance-missing acknowledgements.
 - Reverse curated-source classification in `pr-summary`.
 - Public acceptance coverage for the SynthBanshee and hocrgen v0.4 retry bars.
+
+### Milestone 19 status
+
+`M19-P1.1` starts the pre-v1 durability track by adding compact committed review groups to
+`splendor pr-summary --since main`. The command now separates review-first source lifecycle,
+generated source-summary, and maintained wiki changes from usually mechanical queue, run, report,
+query, and derived churn, with attention groups for invalid manifests, non-passing latest local
+reports, and uncategorized paths. Git-aware agent handoff surfaces point reviewers back to that
+compact PR summary under Splendor maintenance context only when a branch has Splendor-specific
+review groups or attention diagnostics, without promoting generated maintenance state into default
+planning work.
 
 ## Milestone 20 — post-v1 product bets
 

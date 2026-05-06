@@ -308,12 +308,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M18-P2.1`
-- Current planned slice: `M18 v0.4 work-first agent handoff`
-- Current PR sub-slice: `M18-P3.1`
+- Previous completed PR sub-slice: `M18-P3.1`
+- Current planned slice: `M19 pre-v1 workflow durability after v0.4`
+- Current PR sub-slice: `M19-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M19 pre-v1 workflow durability after v0.4`
-- Next planned PR sub-slice: `M19-P1.1`
+- Next planned PR sub-slice: `M19-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -514,6 +514,12 @@ latest local maintenance report status. The human output is path-first and layou
 `--json` emits the same structure for agent handoff without mutating workspace state or depending
 on GitHub.
 
+`M19-P1.1` adds compact committed review groups to that same PR-summary surface. Human output now
+leads with review-first generated knowledge and maintained wiki changes, usually mechanical
+queue/run/report/query/derived churn, and attention items such as invalid manifests, failed latest
+local reports, or uncategorized paths. JSON exposes the same `compact_review` object for agent
+handoff, including action counts and per-path actions for compact add/change/delete/rename review.
+
 `M14-P3.1` records the internal source-lifecycle re-evaluation gate in
 `docs/evaluations/m14_synthbanshee_reevaluation.md`. The gate covers both the clean current state and a
 controlled changed-source exercise through freshness, full workspace refresh, PR summary, lint, and
@@ -597,3 +603,8 @@ planning and policy paths plus provisional uncurated-doc context with exact cura
 `M18-P3.1` keeps normal implementation and planning handoff work-first while adding explicit
 maintenance command guidance for review-needed wiki pages, missing synthesis, source freshness,
 queue drift, and generated contradiction-review tasks.
+
+`M19-P1.1` starts the pre-v1 durability track by making committed generated-state churn easier to
+review. `splendor pr-summary --since main` now includes compact committed review groups, and
+git-aware `brief --agent-context` / `suggest-next` expose that PR-summary command under Splendor
+maintenance context when a branch has Splendor-specific review groups or attention diagnostics.

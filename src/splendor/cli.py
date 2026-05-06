@@ -1948,6 +1948,7 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
     if summary.head is not None:
         print(f"Head: {summary.head}")
     print(f"Changed paths: {summary.changed_path_count}")
+    _print_compact_review(summary.compact_review)
     print("Curated sources:")
     if not summary.curated_sources:
         print("- none")
@@ -1987,6 +1988,28 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
     for note in summary.reviewer_notes:
         print(f"- {note}")
     return 0
+
+
+def _print_compact_review(compact_review) -> None:
+    print("Compact committed review:")
+    print(f"- mode: {compact_review.mode}")
+    sections = (
+        ("Review first", compact_review.review_first),
+        ("Usually mechanical", compact_review.usually_mechanical),
+        ("Attention", compact_review.attention),
+    )
+    for label, groups in sections:
+        print(f"{label}:")
+        if not groups:
+            print("- none")
+            continue
+        for group in groups:
+            print(f"- {group.label}: total={group.total} role={group.review_role}")
+            print(f"  Summary: {group.summary}")
+            if group.paths:
+                print(f"  Paths: {', '.join(group.paths[:5])}")
+                if len(group.paths) > 5:
+                    print(f"  Additional paths: {len(group.paths) - 5}")
 
 
 def _print_path_group(label: str, group: PathGroup, *, indent: str = "") -> None:

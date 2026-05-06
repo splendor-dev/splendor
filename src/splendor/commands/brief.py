@@ -28,6 +28,7 @@ from splendor.utils.planning import (
 )
 
 from .planning import is_generated_contradiction_review_task, model_for_planning_kind
+from .pr_summary import build_pr_summary
 from .query import QueryMatch, QueryValidationError, run_query
 from .queue import QueueInspectResult, inspect_queue
 from .source import SourceFreshnessResult, scan_source_freshness
@@ -1815,6 +1816,19 @@ def _maintenance_guidance(
             "active human tasks."
         )
 
+    if (
+        snapshot.git_context.enabled
+        and snapshot.git_context.available
+        and snapshot.git_context.base_ref is not None
+        and snapshot.git_context.merge_base is not None
+        and _has_pr_summary_reviewable_state(snapshot.root, snapshot.git_context.base_ref)
+    ):
+        add(
+            "pr-summary",
+            f"splendor pr-summary --since {snapshot.git_context.base_ref}",
+            "Review compact committed Splendor state changes before PR handoff.",
+        )
+
     if snapshot.freshness.changed or snapshot.freshness.missing:
         add(
             "source-freshness",
@@ -1851,6 +1865,19 @@ def _maintenance_guidance(
         )
 
     return commands, list(dict.fromkeys(notes))
+
+
+def _has_pr_summary_reviewable_state(root: Path, base_ref: str) -> bool:
+    try:
+        summary = build_pr_summary(root, since=base_ref)
+    except (FileNotFoundError, RuntimeError, ValueError):
+        return False
+    if summary.changed_path_count == 0:
+        return False
+    compact_review = summary.compact_review
+    if compact_review.review_first or compact_review.usually_mechanical:
+        return True
+    return any(group.id != "uncategorized_changed_paths" for group in compact_review.attention)
 
 
 def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:

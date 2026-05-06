@@ -2665,6 +2665,12 @@ def test_cli_pr_summary_reports_generated_state_without_mutating(tmp_path: Path,
     source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source)])
     main(["--root", str(tmp_path), "ingest", "--pending"])
+    write_queryable_wiki_page(
+        tmp_path / "wiki" / "topics" / "brief.md",
+        title="Brief synthesis",
+        page_id="topic-brief-synthesis",
+        body="Maintained synthesis changed for review.",
+    )
     main(["--root", str(tmp_path), "lint"])
     main(["--root", str(tmp_path), "health"])
     capsys.readouterr()
@@ -2688,6 +2694,44 @@ def test_cli_pr_summary_reports_generated_state_without_mutating(tmp_path: Path,
         f"state/queue/ingest-{source_manifest['source_id']}.json"
     ]
     assert payload["generated_state"]["runs"]["added"]
+    compact_review = payload["compact_review"]
+    assert compact_review["mode"] == "compact_committed"
+    review_first = {group["id"]: group for group in compact_review["review_first"]}
+    assert set(review_first) == {
+        "curated_sources",
+        "source_summary_pages",
+        "maintained_wiki_pages",
+    }
+    assert review_first["curated_sources"]["review_role"] == "source lifecycle authority"
+    assert review_first["curated_sources"]["action_counts"] == {"added": 1}
+    assert review_first["curated_sources"]["path_actions"] == [
+        {
+            "action": "added",
+            "old_path": None,
+            "path": source_manifest["path"],
+        }
+    ]
+    assert review_first["source_summary_pages"]["paths"] == [
+        f"wiki/sources/{source_manifest['source_id']}.md"
+    ]
+    assert review_first["source_summary_pages"]["action_counts"] == {"added": 1}
+    assert review_first["source_summary_pages"]["path_actions"] == [
+        {
+            "action": "added",
+            "old_path": None,
+            "path": f"wiki/sources/{source_manifest['source_id']}.md",
+        }
+    ]
+    assert "wiki/topics/brief.md" in review_first["maintained_wiki_pages"]["paths"]
+    usually_mechanical = {group["id"]: group for group in compact_review["usually_mechanical"]}
+    assert usually_mechanical["generated_queue"]["paths"] == [
+        f"state/queue/ingest-{source_manifest['source_id']}.json"
+    ]
+    assert usually_mechanical["generated_queue"]["action_counts"] == {"added": 1}
+    assert usually_mechanical["generated_runs"]["total"] == 1
+    assert usually_mechanical["generated_reports"]["total"] == 4
+    attention = {group["id"]: group for group in compact_review["attention"]}
+    assert attention["uncategorized_changed_paths"]["paths"] == ["brief.md"]
     assert payload["maintenance"]["lint"]["status"] == "passed"
     assert payload["maintenance"]["lint"]["scope"] == "latest_local_report"
     assert "not tied to the current HEAD" in payload["maintenance"]["lint"]["warning"]
@@ -2713,6 +2757,10 @@ def test_cli_pr_summary_human_output_is_path_first(tmp_path: Path, capsys) -> No
     out = capsys.readouterr().out
     assert "PR summary since main" in out
     assert "Merge base:" in out
+    assert out.index("Compact committed review:") < out.index("Curated sources:")
+    assert "Review first:" in out
+    assert "- Curated source manifests: total=1 role=source lifecycle authority" in out
+    assert "Usually mechanical:" in out
     assert re.search(r"- state/manifests/sources/src-[a-f0-9]+\.json: added", out)
     assert "Source ref: brief.md" in out
     assert "Generated state:" in out
@@ -2796,6 +2844,56 @@ def test_cli_pr_summary_reports_invalid_source_manifest_without_aborting(
     assert "Invalid JSON" in invalid_source["error"]
     assert invalid_source["path"] == "state/manifests/sources/src-bad.json"
     assert invalid_source["source_id"] == "src-bad"
+    review_first = {group["id"]: group for group in payload["compact_review"]["review_first"]}
+    assert "curated_sources" not in review_first
+    attention = {group["id"]: group for group in payload["compact_review"]["attention"]}
+    assert attention["invalid_curated_sources"]["paths"] == ["state/manifests/sources/src-bad.json"]
+    assert attention["invalid_curated_sources"]["action_counts"] == {"invalid": 1}
+    assert attention["invalid_curated_sources"]["path_actions"] == [
+        {
+            "action": "invalid",
+            "old_path": None,
+            "path": "state/manifests/sources/src-bad.json",
+        }
+    ]
+
+
+def test_cli_pr_summary_attention_flags_failed_reports_and_uncategorized_paths(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    (tmp_path / "notes.md").write_text("# Notes\n\nOrdinary changed path.\n", encoding="utf-8")
+    report_dir = tmp_path / "reports" / "lint"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / "20260506T000000Z.json"
+    report = MaintenanceReport(
+        command="lint",
+        created_at="2026-05-06T00:00:00Z",
+        status="failed",
+        checked_count=1,
+        issue_count=1,
+        issues=[
+            MaintenanceIssue(
+                code="demo-failure",
+                message="Demonstrate failed latest local report attention.",
+            )
+        ],
+    )
+    report_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    attention = {group["id"]: group for group in payload["compact_review"]["attention"]}
+    assert attention["non_passing_maintenance_reports"]["paths"] == [
+        "reports/lint/20260506T000000Z.json"
+    ]
+    assert attention["non_passing_maintenance_reports"]["action_counts"] == {"failed": 1}
+    assert attention["uncategorized_changed_paths"]["action_counts"] == {"added": 1}
+    assert attention["uncategorized_changed_paths"]["paths"] == ["notes.md"]
 
 
 def _git_init_main(root: Path) -> None:

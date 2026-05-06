@@ -63,6 +63,33 @@ class MaintenanceStatus:
 
 
 @dataclass(frozen=True)
+class CompactReviewPath:
+    action: str
+    path: str
+    old_path: str | None = None
+
+
+@dataclass(frozen=True)
+class CompactReviewGroup:
+    id: str
+    label: str
+    review_role: str
+    total: int
+    paths: list[str]
+    path_actions: list[CompactReviewPath]
+    action_counts: dict[str, int]
+    summary: str
+
+
+@dataclass(frozen=True)
+class CompactReview:
+    mode: str
+    review_first: list[CompactReviewGroup]
+    usually_mechanical: list[CompactReviewGroup]
+    attention: list[CompactReviewGroup]
+
+
+@dataclass(frozen=True)
 class PrSummary:
     since: str
     merge_base: str
@@ -74,6 +101,7 @@ class PrSummary:
     generated_state: dict[str, PathGroup]
     other_paths: PathGroup
     maintenance: dict[str, MaintenanceStatus | None]
+    compact_review: CompactReview
     reviewer_notes: list[str]
 
 
@@ -133,8 +161,15 @@ def build_pr_summary(root: Path, *, since: str) -> PrSummary:
         generated_state=generated_state,
         other_paths=other_paths,
         maintenance=maintenance,
+        compact_review=CompactReview(
+            mode="compact_committed",
+            review_first=[],
+            usually_mechanical=[],
+            attention=[],
+        ),
         reviewer_notes=[],
     )
+    compact_review = _compact_review(summary)
     return PrSummary(
         since=summary.since,
         merge_base=summary.merge_base,
@@ -146,6 +181,7 @@ def build_pr_summary(root: Path, *, since: str) -> PrSummary:
         generated_state=summary.generated_state,
         other_paths=summary.other_paths,
         maintenance=summary.maintenance,
+        compact_review=compact_review,
         reviewer_notes=_reviewer_notes(summary),
     )
 
@@ -389,6 +425,194 @@ def _latest_maintenance_status(
         issue_count=report.issue_count,
         fatal_error=report.fatal_error,
     )
+
+
+def _compact_review(summary: PrSummary) -> CompactReview:
+    review_first: list[CompactReviewGroup] = []
+    usually_mechanical: list[CompactReviewGroup] = []
+    attention: list[CompactReviewGroup] = []
+
+    valid_curated_sources = [
+        source for source in summary.curated_sources if source.action != "invalid"
+    ]
+    if valid_curated_sources:
+        review_first.append(
+            CompactReviewGroup(
+                id="curated_sources",
+                label="Curated source manifests",
+                review_role="source lifecycle authority",
+                total=len(valid_curated_sources),
+                paths=sorted(source.path for source in valid_curated_sources),
+                path_actions=_source_change_actions(valid_curated_sources),
+                action_counts=_action_counts(source.action for source in valid_curated_sources),
+                summary=(
+                    "Review manifest lifecycle and source identity changes before generated "
+                    "wiki or runtime artifacts."
+                ),
+            )
+        )
+    if summary.source_summary_pages.total:
+        review_first.append(
+            _path_group_review(
+                "source_summary_pages",
+                "Generated source-summary pages",
+                "generated knowledge claims",
+                summary.source_summary_pages,
+                "Review extracted claims and provenance; these pages explain meaningful "
+                "generated knowledge changes.",
+            )
+        )
+    if summary.maintained_wiki_pages.total:
+        review_first.append(
+            _path_group_review(
+                "maintained_wiki_pages",
+                "Maintained wiki/topic pages",
+                "authored synthesis",
+                summary.maintained_wiki_pages,
+                "Review as authored maintained knowledge, including source_refs migrations.",
+            )
+        )
+
+    generated_roles = {
+        "queue": ("Generated queue records", "mechanical ingest queue evidence"),
+        "runs": ("Generated run records", "mechanical ingest run evidence"),
+        "queries": ("Generated query snapshots", "mechanical query handoff evidence"),
+        "reports": ("Generated report files", "mechanical maintenance report evidence"),
+        "derived": ("Derived generated artifacts", "mechanical derived artifact evidence"),
+    }
+    for key, group in summary.generated_state.items():
+        if not group.total:
+            continue
+        label, role = generated_roles[key]
+        usually_mechanical.append(
+            _path_group_review(
+                f"generated_{key}",
+                label,
+                role,
+                group,
+                "Usually review as committed evidence unless a failure or diagnostic changes "
+                "the reviewer decision.",
+            )
+        )
+
+    invalid_sources = [
+        source.path for source in summary.curated_sources if source.action == "invalid"
+    ]
+    if invalid_sources:
+        attention.append(
+            CompactReviewGroup(
+                id="invalid_curated_sources",
+                label="Invalid source manifests",
+                review_role="blocking source-manifest diagnostics",
+                total=len(invalid_sources),
+                paths=sorted(invalid_sources),
+                path_actions=[
+                    CompactReviewPath(action="invalid", path=path)
+                    for path in sorted(invalid_sources)
+                ],
+                action_counts={"invalid": len(invalid_sources)},
+                summary="Fix or explain invalid changed source manifests before PR handoff.",
+            )
+        )
+    failed_reports = [
+        status.path
+        for status in summary.maintenance.values()
+        if status is not None and status.status != "passed"
+    ]
+    if failed_reports:
+        attention.append(
+            CompactReviewGroup(
+                id="non_passing_maintenance_reports",
+                label="Non-passing latest maintenance reports",
+                review_role="local validation attention",
+                total=len(failed_reports),
+                paths=sorted(failed_reports),
+                path_actions=[
+                    CompactReviewPath(action="failed", path=path) for path in sorted(failed_reports)
+                ],
+                action_counts={"failed": len(failed_reports)},
+                summary="Inspect latest local lint/health reports before reviewer handoff.",
+            )
+        )
+    if summary.other_paths.total:
+        attention.append(
+            _path_group_review(
+                "uncategorized_changed_paths",
+                "Uncategorized changed paths",
+                "ordinary repository changes",
+                summary.other_paths,
+                "Review as normal code/docs changes outside Splendor generated-state groups.",
+            )
+        )
+
+    return CompactReview(
+        mode="compact_committed",
+        review_first=review_first,
+        usually_mechanical=usually_mechanical,
+        attention=attention,
+    )
+
+
+def _path_group_review(
+    group_id: str, label: str, review_role: str, group: PathGroup, summary: str
+) -> CompactReviewGroup:
+    return CompactReviewGroup(
+        id=group_id,
+        label=label,
+        review_role=review_role,
+        total=group.total,
+        paths=_path_group_paths(group),
+        path_actions=_path_group_actions(group),
+        action_counts=_path_group_action_counts(group),
+        summary=summary,
+    )
+
+
+def _path_group_paths(group: PathGroup) -> list[str]:
+    paths = [*group.added, *group.changed, *group.deleted]
+    paths.extend(f"{item['from']} -> {item['to']}" for item in group.renamed)
+    return sorted(paths)
+
+
+def _path_group_actions(group: PathGroup) -> list[CompactReviewPath]:
+    actions = [
+        *(CompactReviewPath(action="added", path=path) for path in group.added),
+        *(CompactReviewPath(action="changed", path=path) for path in group.changed),
+        *(CompactReviewPath(action="deleted", path=path) for path in group.deleted),
+        *(
+            CompactReviewPath(action="renamed", path=item["to"], old_path=item["from"])
+            for item in group.renamed
+        ),
+    ]
+    return sorted(actions, key=lambda item: (item.path, item.action, item.old_path or ""))
+
+
+def _path_group_action_counts(group: PathGroup) -> dict[str, int]:
+    return {
+        action: count
+        for action, count in {
+            "added": len(group.added),
+            "changed": len(group.changed),
+            "deleted": len(group.deleted),
+            "renamed": len(group.renamed),
+        }.items()
+        if count
+    }
+
+
+def _source_change_actions(sources: list[SourceChange]) -> list[CompactReviewPath]:
+    actions = [
+        CompactReviewPath(action=source.action, path=source.path, old_path=source.old_path)
+        for source in sources
+    ]
+    return sorted(actions, key=lambda item: (item.path, item.action, item.old_path or ""))
+
+
+def _action_counts(actions: Iterable[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for action in actions:
+        counts[action] = counts.get(action, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _reviewer_notes(summary: PrSummary) -> list[str]:
