@@ -920,6 +920,12 @@ Current implementation:
   boilerplate when selecting snippets, supports tag/source filters, records those filters in JSON
   and saved snapshots, and text output points to `file-answer` when a saved query has matches.
 - `splendor file-answer` prints the created page and a restrained review hint after filing.
+- `brief --agent-context` and `suggest-next` treat dynamic planning files as one input rather than
+  the final word on current work. When `.agent-plan.md`, README, or roadmap state still names a
+  current slice that a bounded recent mainline scan shows as implementation-complete, handoff
+  inference can advance to the next bounded ordered roadmap slice while keeping maintenance state
+  in the separate maintenance block. Merged PR state can corroborate that inference, but stale
+  dynamic `Next planned` lines and historical mentions are not enough on their own.
 - Multi-page, LLM-assisted, and automatic-page-selection compile/update behavior remains deferred
   to later reviewed compile-loop slices.
 

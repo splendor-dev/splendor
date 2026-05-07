@@ -51,9 +51,11 @@ _SUGGESTION_LIMIT = 8
 _GIT_CONTEXT_LIMIT = 5
 _GIT_FILE_LIMIT = 8
 _GIT_COMMAND_TIMEOUT_SECONDS = 5
+_HANDOFF_COMPLETION_COMMIT_LIMIT = 12
 _PROMOTED_THREAD_RELEVANCE_FLOOR = 60
 _SUGGESTION_CATEGORY_LIMITS = {
     "work-thread": 4,
+    "current-state": 1,
     "git-context": 3,
     "source-freshness": 3,
     "queue": 3,
@@ -69,20 +71,21 @@ _SUGGESTION_CATEGORY_LIMITS = {
     "orientation": 1,
 }
 _WORK_FIRST_CATEGORY_ORDER = {
-    "work-thread": 0,
-    "git-context": 1,
-    "authority": 2,
-    "planning": 3,
-    "goal-match": 4,
-    "source-freshness": 5,
-    "queue": 6,
-    "wiki-validation": 7,
-    "contradiction-review": 8,
-    "synthesis": 9,
-    "wiki-review": 10,
-    "maintenance": 11,
-    "query": 12,
-    "orientation": 13,
+    "current-state": 0,
+    "work-thread": 1,
+    "git-context": 2,
+    "authority": 3,
+    "planning": 4,
+    "goal-match": 5,
+    "source-freshness": 6,
+    "queue": 7,
+    "wiki-validation": 8,
+    "contradiction-review": 9,
+    "synthesis": 10,
+    "wiki-review": 11,
+    "maintenance": 12,
+    "query": 13,
+    "orientation": 14,
 }
 _MAINTENANCE_FIRST_CATEGORY_ORDER = {
     "source-freshness": 0,
@@ -92,13 +95,14 @@ _MAINTENANCE_FIRST_CATEGORY_ORDER = {
     "synthesis": 4,
     "wiki-review": 5,
     "contradiction-review": 6,
-    "work-thread": 7,
-    "git-context": 8,
-    "authority": 9,
-    "planning": 10,
-    "goal-match": 11,
-    "query": 12,
-    "orientation": 13,
+    "current-state": 7,
+    "work-thread": 8,
+    "git-context": 9,
+    "authority": 10,
+    "planning": 11,
+    "goal-match": 12,
+    "query": 13,
+    "orientation": 14,
 }
 _MAINTENANCE_CATEGORIES = {
     "source-freshness",
@@ -125,6 +129,14 @@ _AUTHORITY_ORIGIN_ORDER = {
     "inferred-authority": 1,
 }
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
+_ROADMAP_SLICE_PATTERN = re.compile(r"\b(?:[A-Z][A-Za-z0-9]*-P\d+(?:\.\d+)?|[A-Z]\d+[a-z])\b")
+_PLANNING_STATE_PATTERN = re.compile(
+    r"^\s*-\s+(?P<label>"
+    r"Previous completed PR sub-slice|Current planned slice|Current PR sub-slice|"
+    r"Current PR lifecycle|Next planned slice|Next planned PR sub-slice"
+    r"):\s*(?P<value>.+?)\s*$",
+    re.MULTILINE,
+)
 _AUTHORITY_ROLE_ORDER = {
     "current-authority": 0,
     "roadmap": 1,
@@ -406,6 +418,14 @@ class GitContext:
 
 
 @dataclass(frozen=True)
+class HandoffCurrentState:
+    current_slice: str
+    inferred_slice: str
+    evidence: list[str]
+    source_path: str | None
+
+
+@dataclass(frozen=True)
 class SuggestNextResult:
     goal: str | None
     actions: list[SuggestedAction]
@@ -418,6 +438,7 @@ class SuggestNextResult:
     latest_reports: list[BriefReportSnapshot]
     warnings: list[BriefWarning]
     git_context: GitContext
+    handoff_current_state: HandoffCurrentState | None
     work_actions: list[SuggestedAction]
     maintenance_actions: list[SuggestedAction]
     maintenance_commands: list[MaintenanceCommand]
@@ -447,6 +468,7 @@ class BriefStateSnapshot:
     invalid_wiki_pages: list[InvalidWikiPageSnapshot]
     generated_review_task_count: int
     git_context: GitContext
+    handoff_current_state: HandoffCurrentState | None
     maintenance_goal: bool
 
 
@@ -471,6 +493,7 @@ class ProjectBrief:
     provisional_context: list[AuthorityBrief]
     git_context: GitContext
     next_actions: list[str]
+    handoff_current_state: HandoffCurrentState | None
 
 
 def build_project_brief(
@@ -508,6 +531,7 @@ def build_project_brief(
         provisional_context=_provisional_authority_briefs(snapshot.authority_briefs),
         git_context=snapshot.git_context,
         next_actions=next_actions,
+        handoff_current_state=snapshot.handoff_current_state,
     )
 
 
@@ -530,6 +554,7 @@ def build_suggest_next(
         latest_reports=snapshot.latest_reports,
         warnings=snapshot.warnings,
         git_context=snapshot.git_context,
+        handoff_current_state=snapshot.handoff_current_state,
         work_actions=work_actions,
         maintenance_actions=maintenance_actions,
         maintenance_commands=maintenance_commands,
@@ -592,6 +617,7 @@ def _collect_brief_state(
     git_context = _build_git_context(
         root, normalized_goal or None, include_git=include_git, since=since
     )
+    handoff_current_state = _handoff_current_state(root, git_context)
     return BriefStateSnapshot(
         root=root,
         goal=normalized_goal or None,
@@ -613,6 +639,7 @@ def _collect_brief_state(
         invalid_wiki_pages=invalid_wiki_pages,
         generated_review_task_count=generated_review_task_count,
         git_context=git_context,
+        handoff_current_state=handoff_current_state,
         maintenance_goal=maintenance_goal,
     )
 
@@ -1403,6 +1430,227 @@ def _build_git_context(
     )
 
 
+def _handoff_current_state(root: Path, git_context: GitContext) -> HandoffCurrentState | None:
+    planning_state = _combined_planning_state(root)
+    current_slice = planning_state.get("Current PR sub-slice")
+    if current_slice is None:
+        return None
+    next_slice, source_path = _next_ordered_roadmap_slice(root, current_slice)
+    if next_slice is None or next_slice == current_slice:
+        return None
+    evidence = _completed_slice_evidence(root, current_slice, git_context)
+    if not evidence:
+        return None
+    return HandoffCurrentState(
+        current_slice=current_slice,
+        inferred_slice=next_slice,
+        evidence=evidence,
+        source_path=source_path,
+    )
+
+
+def _combined_planning_state(root: Path) -> dict[str, str]:
+    combined: dict[str, str] = {}
+    for relpath in (
+        ".agent-plan.md",
+        "README.md",
+        "docs/splendor_mvp_to_v1_roadmap.md",
+    ):
+        path = root / relpath
+        if not path.is_file():
+            continue
+        values = _parse_planning_state_text(path.read_text(encoding="utf-8"))
+        for label, value in values.items():
+            combined.setdefault(label, value)
+    return combined
+
+
+def _parse_planning_state_text(text: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for match in _PLANNING_STATE_PATTERN.finditer(text):
+        value = match.group("value").strip()
+        if value.startswith("`") and value.endswith("`"):
+            value = value[1:-1]
+        values[match.group("label")] = value
+    return values
+
+
+def _next_ordered_roadmap_slice(root: Path, current_slice: str) -> tuple[str | None, str | None]:
+    roadmap = root / "docs" / "splendor_mvp_to_v1_roadmap.md"
+    if roadmap.is_file():
+        relpath = "docs/splendor_mvp_to_v1_roadmap.md"
+        ordered = _ordered_roadmap_sequence_tokens(roadmap.read_text(encoding="utf-8"))
+        for index, token in enumerate(ordered[:-1]):
+            if token == current_slice:
+                return ordered[index + 1], relpath
+    return None, None
+
+
+def _ordered_roadmap_sequence_tokens(text: str) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for block in _roadmap_sequence_blocks(text):
+        for match in _ROADMAP_SLICE_PATTERN.finditer(block):
+            token = match.group(0)
+            if token in seen:
+                continue
+            seen.add(token)
+            ordered.append(token)
+    return ordered
+
+
+def _roadmap_sequence_blocks(text: str) -> list[str]:
+    lines = text.splitlines()
+    blocks: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        normalized = line.lower()
+        is_sequence_intro = _is_roadmap_sequence_intro(normalized)
+        is_slice_list_heading = line.startswith("### ") and any(
+            phrase in normalized for phrase in ("planned pr slices", "current pr sub-slices")
+        )
+        if not is_sequence_intro and not is_slice_list_heading:
+            index += 1
+            continue
+
+        block_lines = [line]
+        if is_sequence_intro and _has_multiple_slice_tokens(line):
+            blocks.append(line)
+            index += 1
+            continue
+        index += 1
+        list_started = False
+        while index < len(lines):
+            next_line = lines[index]
+            if next_line.startswith("#") and block_lines:
+                break
+            if not next_line.strip():
+                block_lines.append(next_line)
+                index += 1
+                continue
+            stripped = next_line.lstrip()
+            is_list_line = stripped.startswith(("-", "*")) or re.match(r"\d+\.", stripped)
+            if is_list_line:
+                list_started = True
+            elif list_started or any(_ROADMAP_SLICE_PATTERN.search(item) for item in block_lines):
+                break
+            block_lines.append(next_line)
+            index += 1
+        blocks.append("\n".join(block_lines))
+    return blocks
+
+
+def _is_roadmap_sequence_intro(normalized_line: str) -> bool:
+    return (
+        "remaining" in normalized_line
+        and "sequence" in normalized_line
+        and "no ordered" not in normalized_line
+        and "no remaining" not in normalized_line
+    )
+
+
+def _has_multiple_slice_tokens(text: str) -> bool:
+    tokens = {match.group(0) for match in _ROADMAP_SLICE_PATTERN.finditer(text)}
+    return len(tokens) >= 2
+
+
+def _completed_slice_evidence(root: Path, current_slice: str, git_context: GitContext) -> list[str]:
+    evidence: list[str] = []
+    if git_context.enabled and git_context.available:
+        for ref in _mainline_refs_for_completion(root, git_context):
+            boundary = _mainline_slice_boundary(root, ref, current_slice)
+            if boundary is not None:
+                _sha, subject, implementation_paths = boundary
+                sample = ", ".join(sorted(implementation_paths)[:3])
+                evidence.append(
+                    f"mainline history at {ref} includes {subject!r} with implementation "
+                    f"changes: {sample}"
+                )
+                break
+        if not evidence:
+            return evidence
+        for thread in git_context.threads:
+            if thread.kind != "pr" or thread.state not in {"merged", "closed"}:
+                continue
+            if _text_starts_with_slice(thread.title, current_slice):
+                evidence.append(
+                    f"GitHub PR #{thread.number} is {thread.state} and mentions {current_slice}"
+                )
+                break
+    return evidence
+
+
+def _mainline_slice_boundary(
+    root: Path, ref: str, current_slice: str
+) -> tuple[str, str, list[str]] | None:
+    output = _git_output(
+        root,
+        [
+            "log",
+            "--first-parent",
+            f"--max-count={_HANDOFF_COMPLETION_COMMIT_LIMIT}",
+            "--pretty=format:%H%x1f%s%x1e",
+            ref,
+        ],
+        required=False,
+    )
+    for entry in (output or "").split("\x1e"):
+        stripped = entry.strip()
+        if not stripped:
+            continue
+        parts = stripped.split("\x1f", 1)
+        if len(parts) != 2:
+            continue
+        sha, subject = parts
+        if not _text_starts_with_slice(subject, current_slice):
+            continue
+        paths = _commit_implementation_paths(root, sha)
+        if paths:
+            return sha, subject, paths
+    return None
+
+
+def _commit_implementation_paths(root: Path, sha: str) -> list[str]:
+    path_output = (
+        _git_output(root, ["show", "--pretty=format:", "--name-only", sha, "--"], required=False)
+        or ""
+    )
+    return [
+        path
+        for path in path_output.splitlines()
+        if path.strip() and not _is_planning_only_path(path.strip())
+    ]
+
+
+def _mainline_refs_for_completion(root: Path, git_context: GitContext) -> list[str]:
+    refs = [
+        git_context.base_ref,
+        "origin/main",
+        "main",
+        "HEAD" if git_context.branch == "main" else None,
+    ]
+    resolved: list[str] = []
+    for ref in refs:
+        if ref is None or ref in resolved:
+            continue
+        if _git_output(root, ["rev-parse", "--verify", f"{ref}^{{commit}}"], required=False):
+            resolved.append(ref)
+    return resolved
+
+
+def _text_starts_with_slice(text: str, slice_id: str) -> bool:
+    return re.match(rf"^\s*{re.escape(slice_id)}(?![A-Za-z0-9_.-])", text) is not None
+
+
+def _is_planning_only_path(path: str) -> bool:
+    return (
+        path in {".agent-plan.md", "AGENTS.md", "README.md"}
+        or path.startswith("docs/")
+        or path.startswith("planning/")
+    )
+
+
 def _git_output(root: Path, args: list[str], *, required: bool = True) -> str | None:
     result = subprocess.run(
         ["git", *args],
@@ -1970,6 +2218,28 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
                     goal_tokens, goal_phrase=goal_phrase, high_text=path
                 ),
             )
+    if snapshot.handoff_current_state is not None:
+        state = snapshot.handoff_current_state
+        evidence = "; ".join(state.evidence)
+        source_note = f" Ordered roadmap source: {state.source_path}." if state.source_path else ""
+        add(
+            "high",
+            "current-state",
+            f"Continue {state.inferred_slice} after completed {state.current_slice}",
+            (
+                f"Planning state still names {state.current_slice}, but {evidence}; "
+                f"advance handoff to {state.inferred_slice}.{source_note}"
+            ),
+            None,
+            record_id=state.inferred_slice,
+            relevance_score=_goal_relevance_score(
+                goal_tokens,
+                goal_phrase=goal_phrase,
+                high_text=" ".join([state.inferred_slice, state.current_slice]),
+                medium_text=evidence,
+            )
+            + 120,
+        )
 
     for item in snapshot.freshness.sources:
         source = item.source
@@ -2356,6 +2626,9 @@ def render_suggest_next_json(result: SuggestNextResult) -> str:
                 },
             },
             "git_context": asdict(result.git_context),
+            "handoff_current_state": (
+                asdict(result.handoff_current_state) if result.handoff_current_state else None
+            ),
             "status": {
                 "source_total": result.status.source_total,
                 "page_total": result.status.page_total,
@@ -2408,6 +2681,9 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
             "last_query": asdict(brief.last_query) if brief.last_query else None,
             "warnings": [asdict(warning) for warning in brief.warnings],
             "git_context": asdict(brief.git_context),
+            "handoff_current_state": (
+                asdict(brief.handoff_current_state) if brief.handoff_current_state else None
+            ),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
             "work_context": {"actions": [asdict(action) for action in brief.work_actions]},
             "maintenance_context": {
@@ -2444,6 +2720,9 @@ def render_agent_context_json(brief: ProjectBrief) -> str:
             },
             "source_refs": _agent_context_source_refs(brief),
             "git_context": asdict(brief.git_context),
+            "handoff_current_state": (
+                asdict(brief.handoff_current_state) if brief.handoff_current_state else None
+            ),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
             "work_context": {"actions": [asdict(action) for action in brief.work_actions]},
             "maintenance_context": {
