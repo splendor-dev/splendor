@@ -53,7 +53,16 @@ def _install_fake_gh(
         f"issues = {issues!r}\n"
         f"prs = {prs!r}\n"
         "if sys.argv[1:3] == ['issue', 'list']:\n"
-        "    print(json.dumps(issues))\n"
+        "    print(json.dumps([issue for issue in issues if issue.get('_list', True)]))\n"
+        "elif sys.argv[1:3] == ['issue', 'view']:\n"
+        "    number = int(sys.argv[3])\n"
+        "    for issue in issues:\n"
+        "        if issue.get('number') == number:\n"
+        "            print(json.dumps(issue))\n"
+        "            break\n"
+        "    else:\n"
+        "        print('issue not found', file=sys.stderr)\n"
+        "        sys.exit(1)\n"
         "elif sys.argv[1:3] == ['pr', 'list']:\n"
         "    print(json.dumps(prs))\n"
         "else:\n"
@@ -1961,6 +1970,7 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
                 "body": "Parent work thread for the next speech safety follow-up.",
                 "state": "open",
                 "labels": [],
+                "_list": False,
             },
             {
                 "number": 88,
@@ -2064,11 +2074,9 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
         action["category"] for action in payload["maintenance_context"]["actions"]
     ]
     assert "queue" in maintenance_categories or "source-freshness" in maintenance_categories
-    flattened_categories = [action["category"] for action in actions]
-    assert flattened_categories.index("work-thread") < min(
-        flattened_categories.index(category)
-        for category in flattened_categories
-        if category in {"queue", "source-freshness"}
+    assert all(
+        action["category"] not in {"queue", "source-freshness"}
+        for action in payload["work_context"]["actions"]
     )
 
     suggest_exit = main(
@@ -2102,11 +2110,77 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
         action.get("url") != "https://github.com/SynthBanshee/SynthBanshee/issues/118"
         for action in suggest_payload["actions"]
     )
-    assert suggest_categories.index("work-thread") < min(
-        suggest_categories.index(category)
-        for category in suggest_categories
-        if category in {"queue", "source-freshness"}
+    assert all(
+        action["category"] not in {"queue", "source-freshness"}
+        for action in suggest_payload["work_context"]["actions"]
     )
+
+
+def test_agent_context_authority_cited_files_do_not_require_git(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/asr_policy.md",
+            role="current-authority",
+            purpose="ASR policy implementation surface.",
+            applies_to=["M17 ASR"],
+        )
+    ]
+    write_config(tmp_path, config)
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "asr_policy.md").write_text(
+        "# ASR Policy\n\n"
+        "Implement this through synthbanshee/tts/renderer.py, "
+        "tests/unit/test_effective_prosody_cap.py, and pyproject.toml.\n",
+        encoding="utf-8",
+    )
+    renderer = tmp_path / "synthbanshee" / "tts" / "renderer.py"
+    renderer.parent.mkdir(parents=True)
+    renderer.write_text("def render():\n    return 'asr'\n", encoding="utf-8")
+    renderer_test = tmp_path / "tests" / "unit" / "test_effective_prosody_cap.py"
+    renderer_test.parent.mkdir(parents=True, exist_ok=True)
+    renderer_test.write_text("def test_cap():\n    assert True\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'example'\n", encoding="utf-8")
+    capsys.readouterr()
+
+    json_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "M17",
+            "ASR",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "M17",
+            "ASR",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert json_exit == 0
+    assert text_exit == 0
+    assert payload["git_context"]["enabled"] is False
+    assert {
+        "synthbanshee/tts/renderer.py",
+        "tests/unit/test_effective_prosody_cap.py",
+        "pyproject.toml",
+    } <= set(payload["read_first_paths"])
+    assert "Files to read first:" in out
+    assert "- pyproject.toml" in out
 
 
 def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(

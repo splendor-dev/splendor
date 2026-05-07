@@ -1152,9 +1152,10 @@ Current implementation:
   GitHub issue/PR context through `gh` when available, read-first file paths, relevant matches,
   source refs, active planning records, ranked authority docs, clearly labeled provisional
   uncurated docs, recent sources/runs, maintenance reports, warnings, and ranked suggested actions.
-  JSON maintenance context also includes deterministic command guidance and notes for review-needed
-  wiki pages, missing synthesis follow-up, source freshness, queue drift, and generated review
-  tasks.
+  JSON includes top-level `read_first_paths` so authority-cited implementation/test files remain
+  visible even when git context is disabled or unavailable. JSON maintenance context also includes
+  deterministic command guidance and notes for review-needed wiki pages, missing synthesis
+  follow-up, source freshness, queue drift, and generated review tasks.
 - `splendor suggest-next [--since <ref>] [--no-git] [goal]` renders the ranked action subset
   directly. It is read-only and deterministic. For non-maintenance goals it ranks open work
   threads, recent git/PR context, task-relevant authority docs, active planning records, read-first
@@ -1199,8 +1200,9 @@ Current implementation:
   `1` through optional fields only.
 - Open work-thread surfacing is broad enough for agent handoff to show the best issue or PR first
   while retaining a bounded set of related open parent/sibling issues when a promoted open issue
-  names them by issue reference. This keeps a SynthBanshee-style active issue plus sibling/parent
-  work visible without vector search.
+  names them by issue reference. Handoff can fetch a bounded set of referenced open issues by
+  number when they are outside the initial open-issue list. This keeps a SynthBanshee-style active
+  issue plus sibling/parent work visible without vector search.
 - Files-to-read ranking treats surfaced authority-doc path references as implementation-surface
   hints. Existing repo-relative implementation and test paths named by ranked current/reviewed/
   PR-linked authority docs receive a deterministic boost without needing vector search.

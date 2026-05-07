@@ -338,9 +338,11 @@ Implemented fields:
   deterministic `relevance_score` when available. Runtime authority entries also expose `origin`,
   `curation_state`, and `curation_commands`; provisional uncurated authority is repeated under
   `provisional_context` so agents can use it without confusing it for configured or curated source
-  authority. Maintenance context also exposes runtime-only command guidance and explanatory notes
-  so review-needed wiki state, missing synthesis, queue drift, source freshness, and generated
-  contradiction-review tasks stay discoverable without becoming default human planning records.
+  authority. Handoff JSON also exposes top-level `read_first_paths` so authority-cited files remain
+  visible even when git context is disabled or unavailable. Maintenance context also exposes
+  runtime-only command guidance and explanatory notes so review-needed wiki state, missing
+  synthesis, queue drift, source freshness, and generated contradiction-review tasks stay
+  discoverable without becoming default human planning records.
 - Suggested actions are derived from local git commits, best-effort read-only GitHub issue/PR
   context through `gh` when available, source freshness, queue operator state, invalid/stale/
   contested/review-needed wiki pages, ingested sources missing maintained synthesis follow-up,
@@ -356,7 +358,8 @@ Implemented fields:
   before becoming the top suggested action.
 - Work-thread surfacing preserves breadth. JSON and human handoff lead with the best open issue or
   PR, and promoted open issues can pull in a bounded set of referenced open parent/sibling issue
-  threads so related work remains visible.
+  threads, including referenced open issues fetched by number when they were outside the initial
+  open-issue list, so related work remains visible.
 - Files-to-read ranking uses surfaced authority-doc path references as deterministic hints.
   Existing repo-relative implementation and test paths named by current/reviewed/PR-linked
   authority docs can rank alongside recent git and GitHub paths when they are directly tied to the
