@@ -29,6 +29,7 @@ from splendor.state.source_compat import (
     effective_storage_mode,
     logical_source_id_for_ref,
 )
+from splendor.state.source_pointer import pointer_artifact_path
 from splendor.state.source_registry import (
     RegisteredSource,
     load_source_record,
@@ -454,7 +455,7 @@ def _preview_refreshed_registration(
     if storage_mode in {"copy", "symlink"}:
         stored_path = layout.raw_sources_dir / source_id / current_path.name
     elif storage_mode == "pointer":
-        stored_path = root / "raw" / "sources" / source_id / "pointer.json"
+        stored_path = pointer_artifact_path(layout, source_id)
 
     stored_ref = None if stored_path is None else stored_path.relative_to(root).as_posix()
     record = SourceRecord(
@@ -1110,7 +1111,10 @@ def source_reconcile_next_commands(result: SourceReconcileResult) -> list[str]:
 def source_refresh_written_records(root: Path, result: SourceRefreshResult) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     if result.changed:
-        if result.refreshed.copied and result.refreshed.stored_path is not None:
+        if (
+            result.refreshed.storage_mode in {"copy", "pointer", "symlink"}
+            and result.refreshed.stored_path is not None
+        ):
             records.append(
                 mutation_record(
                     action="write",

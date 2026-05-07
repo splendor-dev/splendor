@@ -1407,6 +1407,51 @@ def test_cli_source_refresh_defaults_to_preview_without_mutating(tmp_path: Path,
     )
 
 
+def test_cli_source_refresh_pointer_preview_respects_custom_raw_sources_layout(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.layout.raw_sources_dir = "custom/source-artifacts"
+    write_config(tmp_path, config)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", "--storage-mode", "pointer", "brief.md"])
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    preview_code = main(["--root", str(tmp_path), "source", "refresh", "brief.md", "--json"])
+
+    assert preview_code == 0
+    preview = json.loads(capsys.readouterr().out)
+    refreshed_id = preview["source_id"]
+    expected_ref = f"custom/source-artifacts/{refreshed_id}/pointer.json"
+    assert {(item["kind"], item["path"]) for item in preview["mutation"]["planned"]} == {
+        ("queue_record", f"state/queue/ingest-{refreshed_id}.json"),
+        ("source_artifact", expected_ref),
+        ("source_manifest", f"state/manifests/sources/{refreshed_id}.json"),
+        ("source_manifest", f"state/manifests/sources/{preview['requested_source_id']}.json"),
+    }
+    assert not (tmp_path / expected_ref).exists()
+
+    apply_code = main(
+        ["--root", str(tmp_path), "source", "refresh", "brief.md", "--apply", "--json"]
+    )
+
+    assert apply_code == 0
+    applied = json.loads(capsys.readouterr().out)
+    manifest = load_source_record(
+        tmp_path / "state" / "manifests" / "sources" / f"{refreshed_id}.json"
+    )
+    assert manifest.storage_path == expected_ref
+    assert any(
+        item["kind"] == "source_artifact" and item["path"] == expected_ref
+        for item in applied["mutation"]["written"]
+    )
+    assert (tmp_path / expected_ref).exists()
+    assert not (tmp_path / "raw" / "sources" / refreshed_id / "pointer.json").exists()
+
+
 def test_cli_source_refresh_reports_existing_version_match(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     source = tmp_path / "brief.md"
@@ -2583,6 +2628,7 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
     refreshed_id = payload["pruning"]["pruned"][0]["superseded_by"]
     assert payload["refreshed"] == []
     assert payload["ingest"] is None
+    assert payload["pruning"]["applied"] is True
     assert payload["pruning"]["pruned"] == [
         {
             "path": f"wiki/sources/{original_id}.md",
@@ -2615,6 +2661,76 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_standalone(
         tmp_path / "state" / "manifests" / "sources" / f"{original_id}.json"
     )
     assert f"wiki/sources/{original_id}.md" not in original_manifest.linked_pages
+
+
+def test_cli_workspace_refresh_preview_marks_prune_and_topic_ref_actions_unapplied(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    write_config(tmp_path, config)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nOriginal.\n", encoding="utf-8")
+    main(["--root", str(tmp_path), "add-source", str(source)])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
+    original_id = next((tmp_path / "state" / "manifests" / "sources").glob("*.json")).stem
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "add-topic",
+            "Brief Synthesis",
+            "--source-refs",
+            original_id,
+        ]
+    )
+    topic_path = tmp_path / "wiki" / "topics" / "brief-synthesis.md"
+    topic_before = topic_path.read_text(encoding="utf-8")
+    source.write_text("# Brief\n\nUpdated.\n", encoding="utf-8")
+    main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--changed",
+            "--ingest",
+            "--rebuild-index",
+            "--apply",
+        ]
+    )
+    original_summary = tmp_path / "wiki" / "sources" / f"{original_id}.md"
+    original_summary_before = original_summary.read_text(encoding="utf-8")
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "workspace",
+            "refresh",
+            "--prune-superseded",
+            "--update-topic-refs",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    refreshed_id = payload["pruning"]["pruned"][0]["superseded_by"]
+    assert payload["mutation"]["mode"] == "preview"
+    assert payload["mutation"]["written"] == []
+    assert payload["pruning"]["applied"] is False
+    assert payload["topic_ref_migration"]["applied"] is False
+    assert payload["topic_ref_migration"]["updated"] == [
+        {
+            "path": "wiki/topics/brief-synthesis.md",
+            "replacements": {original_id: refreshed_id},
+        }
+    ]
+    assert original_summary.read_text(encoding="utf-8") == original_summary_before
+    assert topic_path.read_text(encoding="utf-8") == topic_before
 
 
 def test_cli_workspace_refresh_changed_rebuilds_index_without_ingest(
@@ -2695,6 +2811,8 @@ def test_cli_workspace_refresh_prunes_superseded_summaries_and_updates_topic_ref
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     refreshed_id = payload["refreshed"][0]["source_id"]
+    assert payload["pruning"]["applied"] is True
+    assert payload["topic_ref_migration"]["applied"] is True
     assert payload["pruning"]["pruned"] == [
         {
             "path": f"wiki/sources/{original_id}.md",

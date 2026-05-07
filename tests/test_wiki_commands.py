@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+import splendor.commands.wiki as wiki_module
 from splendor.cli import main
 from splendor.commands import brief as brief_module
 from splendor.commands.add_source import add_source
@@ -284,6 +285,33 @@ def test_rebuild_wiki_index_includes_pages_in_deterministic_sections(tmp_path: P
     assert "[Alpha Architecture](architecture/alpha.md)" in first_index
     assert "[Zeta Topic](topics/zeta.md)" in first_index
     assert "[Source A](sources/src-a.md)" in first_index
+
+
+def test_rebuild_wiki_index_loads_pages_once(tmp_path: Path, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "zeta.md",
+        kind="topic",
+        title="Zeta Topic",
+        page_id="topic-zeta",
+    )
+    load_calls = 0
+    original_load_wiki_pages = wiki_module.load_wiki_pages
+
+    def counted_load_wiki_pages(*args, **kwargs):
+        nonlocal load_calls
+        load_calls += 1
+        return original_load_wiki_pages(*args, **kwargs)
+
+    monkeypatch.setattr(wiki_module, "load_wiki_pages", counted_load_wiki_pages)
+
+    result = rebuild_wiki_index(tmp_path)
+
+    assert result.page_count == 1
+    assert load_calls == 1
+    assert "[Zeta Topic](topics/zeta.md)" in (tmp_path / "wiki" / "index.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_wiki_rebuild_index_cli_reports_invalid_frontmatter(tmp_path: Path, capsys) -> None:

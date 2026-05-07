@@ -57,6 +57,7 @@ class PruneSupersededResult:
     candidates: int
     pruned: list[PrunedSourceSummary]
     skipped: list[SkippedPruneSourceSummary]
+    applied: bool = True
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,7 @@ class TopicRefMigration:
 class TopicRefMigrationResult:
     candidates: int
     updated: list[TopicRefMigration]
+    applied: bool = True
 
 
 @dataclass(frozen=True)
@@ -248,7 +250,12 @@ def prune_superseded_source_summaries(root: Path, *, apply: bool = True) -> Prun
             )
         )
 
-    return PruneSupersededResult(candidates=candidates, pruned=pruned, skipped=skipped)
+    return PruneSupersededResult(
+        candidates=candidates,
+        pruned=pruned,
+        skipped=skipped,
+        applied=apply,
+    )
 
 
 def migrate_superseded_topic_refs(root: Path, *, apply: bool = True) -> TopicRefMigrationResult:
@@ -258,7 +265,7 @@ def migrate_superseded_topic_refs(root: Path, *, apply: bool = True) -> TopicRef
     updated: list[TopicRefMigration] = []
     candidates = 0
     if not replacements:
-        return TopicRefMigrationResult(candidates=0, updated=[])
+        return TopicRefMigrationResult(candidates=0, updated=[], applied=apply)
 
     for page_path in sorted(layout.wiki_dir.rglob("*.md")):
         if page_path.name == ".gitkeep" or page_path in {layout.index_file, layout.log_file}:
@@ -302,7 +309,7 @@ def migrate_superseded_topic_refs(root: Path, *, apply: bool = True) -> TopicRef
             )
         )
 
-    return TopicRefMigrationResult(candidates=candidates, updated=updated)
+    return TopicRefMigrationResult(candidates=candidates, updated=updated, applied=apply)
 
 
 def render_workspace_refresh_json(root: Path, result: WorkspaceRefreshResult) -> str:
