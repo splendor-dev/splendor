@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Iterable
-from os import PathLike
+from os import PathLike, fspath
 from pathlib import Path
 from shutil import which
+
+GIT_EXECUTABLE_NOT_FOUND = "git executable not found"
 
 
 def git_executable() -> str | None:
@@ -19,7 +21,7 @@ def git_command(*args: str | PathLike[str]) -> list[str] | None:
     executable = git_executable()
     if executable is None:
         return None
-    return [executable, *(str(arg) for arg in args)]
+    return [executable, *(fspath(arg) for arg in args)]
 
 
 def run_git(
@@ -29,14 +31,14 @@ def run_git(
     input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     args_list = list(args)
-    fallback_command = ["git", *(str(arg) for arg in args_list)]
+    fallback_command = ["git", *(fspath(arg) for arg in args_list)]
     command = git_command(*args_list)
     if command is None:
         return subprocess.CompletedProcess(
             fallback_command,
             returncode=127,
             stdout="",
-            stderr="git executable not found",
+            stderr=GIT_EXECUTABLE_NOT_FOUND,
         )
     try:
         return subprocess.run(
@@ -54,6 +56,10 @@ def run_git(
             stdout="",
             stderr=str(exc),
         )
+
+
+def is_git_executable_missing(result: subprocess.CompletedProcess[str]) -> bool:
+    return result.returncode == 127 and result.stderr == GIT_EXECUTABLE_NOT_FOUND
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:

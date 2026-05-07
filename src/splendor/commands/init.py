@@ -75,7 +75,7 @@ def _init_review_groups(layout: ResolvedLayout) -> list[InitReviewGroup]:
     return [
         InitReviewGroup(
             label="configuration",
-            paths=["splendor.yaml"],
+            paths=[config_path_for(layout.root).relative_to(layout.root).as_posix()],
             note="project defaults and configurable state locations",
         ),
         InitReviewGroup(

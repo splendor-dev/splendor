@@ -3191,6 +3191,24 @@ def test_agent_context_git_lookup_ignores_path_file_entries(
     assert payload["git_context"]["repository"] == "example/project"
 
 
+def test_agent_context_reports_missing_git_executable(tmp_path: Path, capsys, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    path_entry = tmp_path / "not-a-directory"
+    path_entry.write_text("not a search directory\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", str(path_entry))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--agent-context", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["git_context"]["enabled"] is True
+    assert payload["git_context"]["available"] is False
+    assert payload["git_context"]["warnings"] == [
+        "git executable not found; git context unavailable."
+    ]
+
+
 def test_agent_context_explicit_since_empty_range_does_not_fallback_to_head(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
