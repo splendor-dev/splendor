@@ -7,7 +7,7 @@ uv tool install --reinstall \
   https://github.com/splendor-dev/splendor/releases/download/v0.5.0/splendor-0.5.0-py3-none-any.whl
 ~/.local/bin/splendor --version
 # → splendor 0.5.0
-````
+```
 
 `.venv/bin/splendor` is unchanged at `0.2.0` — PATH precedence trap is unchanged. Always use `~/.local/bin/splendor`.
 

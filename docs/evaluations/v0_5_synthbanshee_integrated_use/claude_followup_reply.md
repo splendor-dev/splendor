@@ -6,7 +6,7 @@ Missed-case command (`renderer.py` and `test_effective_prosody_cap.py` absent):
 
 ```bash
 ~/.local/bin/splendor brief --agent-context "pick up M17 ASR work"
-````
+```
 
 Files to read first from that run:
 
