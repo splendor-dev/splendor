@@ -446,14 +446,15 @@ def _contains_token_sequence(tokens: list[str], phrase: tuple[str, ...]) -> bool
 
 
 def _score_document(document: _QueryDocument, query_tokens: list[str]) -> int:
-    score = 0
+    lexical_score = 0
     for token in query_tokens:
-        score += 5 * document.title_tokens.count(token)
-        score += 4 * document.record_id_tokens.count(token)
-        score += 3 * document.keyword_tokens.count(token)
-        score += document.body_tokens.count(token)
-        score += 2 * document.semantic_tokens.count(token)
-    return score
+        lexical_score += 5 * document.title_tokens.count(token)
+        lexical_score += 4 * document.record_id_tokens.count(token)
+        lexical_score += 3 * document.keyword_tokens.count(token)
+        lexical_score += document.body_tokens.count(token)
+    semantic_score = sum(document.semantic_tokens.count(token) for token in query_tokens)
+    semantic_boost = min(1, semantic_score)
+    return lexical_score + semantic_boost if lexical_score > 0 else semantic_boost
 
 
 def _best_snippet(text: str, query_tokens: list[str]) -> str:
@@ -506,7 +507,10 @@ def _candidate_score(candidate: str, query_tokens: list[str]) -> int:
     if heading in _CLAIM_SECTION_HEADINGS:
         heading_bonus = 3
     boilerplate_penalty = _boilerplate_score(candidate)
-    return token_score + semantic_score + heading_bonus - boilerplate_penalty
+    semantic_boost = min(1, semantic_score)
+    if token_score == 0:
+        return semantic_boost - boilerplate_penalty
+    return token_score + semantic_boost + heading_bonus - boilerplate_penalty
 
 
 def _candidate_segments(text: str) -> list[str]:

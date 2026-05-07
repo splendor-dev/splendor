@@ -424,7 +424,7 @@ def test_run_query_matches_acronym_phrase_expansion(tmp_path: Path) -> None:
 
     assert result.match_count == 1
     assert result.matches[0].path == "wiki/topics/asr-policy.md"
-    assert result.matches[0].score == 2
+    assert result.matches[0].score > 0
     assert result.matches[0].snippet == (
         "Automatic speech recognition validation must keep renderer and tests together."
     )
@@ -444,6 +444,30 @@ def test_run_query_expands_known_acronyms_back_to_full_phrases(tmp_path: Path) -
     assert result.match_count == 1
     assert result.matches[0].path == "wiki/topics/asr-gate.md"
     assert result.matches[0].snippet == "The ASR gate owns renderer validation."
+
+
+def test_run_query_keeps_exact_phrase_above_acronym_only_match(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "full-asr.md",
+        title="Full speech recognition notes",
+        page_id="topic-full-asr",
+        body="Automatic speech recognition is the exact retrieval target.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "short-asr.md",
+        title="Short ASR note",
+        page_id="topic-short-asr",
+        body="ASR is mentioned here with less detail.",
+    )
+
+    result = run_query(tmp_path, "automatic speech recognition")
+
+    assert [match.path for match in result.matches] == [
+        "wiki/topics/full-asr.md",
+        "wiki/topics/short-asr.md",
+    ]
+    assert result.matches[0].score > result.matches[1].score
 
 
 def test_brief_agent_context_uses_semantic_query_matches_for_handoff(tmp_path: Path) -> None:

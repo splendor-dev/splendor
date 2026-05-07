@@ -289,11 +289,12 @@ signals. Title/path/scope matches carry more weight than loose body overlap, and
 review noise from burying current specs, rollout plans, accepted decisions, and key contradicting
 research.
 
-`M20-P1.1` begins the advanced retrieval track conservatively. `splendor query` now adds
-runtime-only semantic expansion to deterministic local scoring with a small built-in acronym phrase
-map for common code/research workflow terms. This improves query and agent-context handoff matches
-such as `ASR` to `automatic speech recognition` without
-adding a persisted vector store, external service, database, or background worker.
+`M20-P1.1` begins the retrieval track conservatively. `splendor query` now adds a bounded,
+runtime-only acronym phrase expansion to deterministic local scoring for common code/research
+workflow terms. This improves query and agent-context handoff recall for cases such as `ASR` to
+`automatic speech recognition` while keeping exact lexical evidence ranked ahead of expansion-only
+matches and without adding a persisted vector store, external service, database, or background
+worker.
 
 `M17-P4.1` reduces issue #117 contradiction-review task noise without weakening contradiction
 evidence. Ingest-created contradiction-review tasks are classified as generated planning records,

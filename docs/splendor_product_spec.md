@@ -1118,12 +1118,12 @@ pages, sections such as `Core Claims`, `Design Implications`, `Product Experienc
 source extract should outrank frontmatter-derived facts, provenance boilerplate, and generic
 machine-generated labels.
 
-Current query ranking includes a deterministic local semantic expansion layer. It derives
-inspectable in-memory signals from document text through a small built-in acronym phrase map for
-common code/research workflow terms such as ASR, CLI, OCR, PR, and UI. These signals can match
-`ASR` against `automatic speech recognition` and flow into
-`brief --agent-context` query matches, but they do not write persisted index state, call external
-services, or change source/wiki schemas.
+Current query ranking includes a bounded deterministic acronym phrase expansion layer. It derives
+inspectable in-memory signals from document text through a small built-in map for common
+code/research workflow terms such as ASR, CLI, OCR, PR, and UI. These signals can match `ASR`
+against `automatic speech recognition` and flow into `brief --agent-context` query matches, but
+expansion-only matches are capped below direct lexical evidence. The feature does not write
+persisted index state, call external services, or change source/wiki schemas.
 
 Current query output includes any active deterministic filters. `splendor query --tag <tag>`
 restricts matches to wiki pages carrying all requested tags, and

@@ -1371,11 +1371,12 @@ relevant to the selected M20 implementation.
 - Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
 
 `M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
-first slice adds deterministic runtime semantic expansion to `splendor query` and the query-backed
-parts of `brief --agent-context`, using a small built-in acronym phrase map instead of external
-services, background workers, databases, or persisted vector-index state. This keeps retrieval
-improvements inspectable and recoverable from file-based workspace state while leaving mutating web
-review workflows for `M20-P2.1`.
+first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
+query-backed parts of `brief --agent-context`, using a small built-in map instead of external
+services, background workers, databases, or persisted vector-index state. This is a bounded recall
+improvement, not a full vector-search implementation: exact lexical evidence still ranks ahead of
+expansion-only matches, and broader retrieval evaluation remains part of the M20 search track.
+Mutating web review workflows stay deferred to `M20-P2.1`.
 
 ---
 

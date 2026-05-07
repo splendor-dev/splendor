@@ -599,10 +599,10 @@ Current implementation fields:
 
 Query matches preserve rank, score, class/kind, record identity, path, status/review state, snippet,
 source refs, generated run IDs, provenance links, contradiction counts, review task IDs, and tags.
-Scores may include deterministic runtime semantic expansion from local document text, including
-a small built-in acronym phrase map. The semantic profile is recoverable from the document text and
-implementation constants; it is not persisted in `state/queries/last-query.json`, source manifests,
-wiki frontmatter, or any separate index file.
+Scores may include deterministic runtime acronym phrase expansion from local document text. The
+bounded expansion profile is recoverable from the document text and implementation constants,
+expansion-only matches are capped below direct lexical evidence, and no expansion state is persisted
+in `state/queries/last-query.json`, source manifests, wiki frontmatter, or any separate index file.
 When a source filter is provided by readable path and multiple content-addressed source versions
 share that path, `source_id` stores the primary resolved source ID and `source_ids` stores every
 matching source ID used for the filter.
