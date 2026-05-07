@@ -2342,9 +2342,162 @@ def test_agent_context_advances_stale_current_slice_after_main_merge(
         assert state["current_slice"] == "F3b"
         assert state["inferred_slice"] == "F4c"
         assert any("F3b" in item for item in state["evidence"])
-        assert payload["work_context"]["actions"][0]["category"] == "current-state"
-        assert "F4c" in payload["work_context"]["actions"][0]["title"]
+        current_state_actions = [
+            action
+            for action in payload["work_context"]["actions"]
+            if action["category"] == "current-state"
+        ]
+        assert len(current_state_actions) == 1
+        assert current_state_actions[0]["rank"] == 1
+        assert "F4c" in current_state_actions[0]["title"]
     assert "Continue F4c after completed F3b" in out
+
+
+def test_agent_context_accepts_single_line_remaining_sequence(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="HeOCR/hocrgen")
+    _commit_all(tmp_path, "Initial hocrgen workspace")
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n- Current PR sub-slice: `F3b`\n- Next planned PR sub-slice: `F4c`\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "splendor_mvp_to_v1_roadmap.md").write_text(
+        "# Roadmap\n\nThe remaining hocrgen sequence is therefore: `F3b`, `F4c`, `F5a`.\n",
+        encoding="utf-8",
+    )
+    implementation = tmp_path / "src" / "hocrgen" / "intake.py"
+    implementation.parent.mkdir(parents=True)
+    implementation.write_text("INTAKE_READY = True\n", encoding="utf-8")
+    _commit_all(tmp_path, "F3b: Typed repo-tracked operator intake manifests")
+    _install_fake_gh(tmp_path, monkeypatch, issues=[], prs=[])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "Resume",
+            "hocrgen",
+            "after",
+            "F3b",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["handoff_current_state"]["inferred_slice"] == "F4c"
+
+
+def test_agent_context_accepts_sequence_lists_with_blank_lines(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="HeOCR/hocrgen")
+    _commit_all(tmp_path, "Initial hocrgen workspace")
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n- Current PR sub-slice: `F3b`\n- Next planned PR sub-slice: `F4c`\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "splendor_mvp_to_v1_roadmap.md").write_text(
+        "# Roadmap\n\n"
+        "The remaining hocrgen sequence is therefore:\n\n"
+        "- `F3b` completed operator intake manifests.\n\n"
+        "- `F4c` is the next adoption slice.\n\n"
+        "- `F5a` follows later.\n",
+        encoding="utf-8",
+    )
+    implementation = tmp_path / "src" / "hocrgen" / "intake.py"
+    implementation.parent.mkdir(parents=True)
+    implementation.write_text("INTAKE_READY = True\n", encoding="utf-8")
+    _commit_all(tmp_path, "F3b: Typed repo-tracked operator intake manifests")
+    _install_fake_gh(tmp_path, monkeypatch, issues=[], prs=[])
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "Resume",
+            "hocrgen",
+            "after",
+            "F3b",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["handoff_current_state"]["inferred_slice"] == "F4c"
+
+
+def test_agent_context_scans_recent_mainline_for_slice_boundary(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="HeOCR/hocrgen")
+    _commit_all(tmp_path, "Initial hocrgen workspace")
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n- Current PR sub-slice: `F3b`\n- Next planned PR sub-slice: `F4c`\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "splendor_mvp_to_v1_roadmap.md").write_text(
+        "# Roadmap\n\nThe remaining hocrgen sequence is therefore: `F3b`, `F4c`.\n",
+        encoding="utf-8",
+    )
+    implementation = tmp_path / "src" / "hocrgen" / "intake.py"
+    implementation.parent.mkdir(parents=True)
+    implementation.write_text("INTAKE_READY = True\n", encoding="utf-8")
+    _commit_all(tmp_path, "F3b: Typed repo-tracked operator intake manifests")
+    (tmp_path / "notes.txt").write_text("follow-up note\n", encoding="utf-8")
+    _commit_all(tmp_path, "Merge pull request #63 from feature/f3b")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[],
+        prs=[
+            {
+                "number": 63,
+                "title": "F3b: Typed repo-tracked operator intake manifests",
+                "url": "https://github.com/HeOCR/hocrgen/pull/63",
+                "body": "Merged F3b.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-06T07:14:00Z",
+                "labels": [],
+            }
+        ],
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "Resume",
+            "hocrgen",
+            "after",
+            "F3b",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["handoff_current_state"]["inferred_slice"] == "F4c"
 
 
 def test_agent_context_does_not_advance_for_docs_only_planning_intake(

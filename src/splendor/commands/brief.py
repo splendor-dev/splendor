@@ -51,6 +51,7 @@ _SUGGESTION_LIMIT = 8
 _GIT_CONTEXT_LIMIT = 5
 _GIT_FILE_LIMIT = 8
 _GIT_COMMAND_TIMEOUT_SECONDS = 5
+_HANDOFF_COMPLETION_COMMIT_LIMIT = 12
 _PROMOTED_THREAD_RELEVANCE_FLOOR = 60
 _SUGGESTION_CATEGORY_LIMITS = {
     "work-thread": 4,
@@ -1505,9 +1506,7 @@ def _roadmap_sequence_blocks(text: str) -> list[str]:
     while index < len(lines):
         line = lines[index]
         normalized = line.lower()
-        is_sequence_intro = (
-            "remaining" in normalized and "sequence" in normalized and line.rstrip().endswith(":")
-        )
+        is_sequence_intro = _is_roadmap_sequence_intro(normalized)
         is_slice_list_heading = line.startswith("### ") and any(
             phrase in normalized for phrase in ("planned pr slices", "current pr sub-slices")
         )
@@ -1516,22 +1515,25 @@ def _roadmap_sequence_blocks(text: str) -> list[str]:
             continue
 
         block_lines = [line]
+        if is_sequence_intro and _has_multiple_slice_tokens(line):
+            blocks.append(line)
+            index += 1
+            continue
         index += 1
+        list_started = False
         while index < len(lines):
             next_line = lines[index]
             if next_line.startswith("#") and block_lines:
                 break
             if not next_line.strip():
-                if any(_ROADMAP_SLICE_PATTERN.search(item) for item in block_lines):
-                    break
                 block_lines.append(next_line)
                 index += 1
                 continue
-            if (
-                block_lines
-                and any(_ROADMAP_SLICE_PATTERN.search(item) for item in block_lines)
-                and not next_line.lstrip().startswith(("-", "*", "1."))
-            ):
+            stripped = next_line.lstrip()
+            is_list_line = stripped.startswith(("-", "*")) or re.match(r"\d+\.", stripped)
+            if is_list_line:
+                list_started = True
+            elif list_started or any(_ROADMAP_SLICE_PATTERN.search(item) for item in block_lines):
                 break
             block_lines.append(next_line)
             index += 1
@@ -1539,30 +1541,30 @@ def _roadmap_sequence_blocks(text: str) -> list[str]:
     return blocks
 
 
+def _is_roadmap_sequence_intro(normalized_line: str) -> bool:
+    return (
+        "remaining" in normalized_line
+        and "sequence" in normalized_line
+        and "no ordered" not in normalized_line
+        and "no remaining" not in normalized_line
+    )
+
+
+def _has_multiple_slice_tokens(text: str) -> bool:
+    tokens = {match.group(0) for match in _ROADMAP_SLICE_PATTERN.finditer(text)}
+    return len(tokens) >= 2
+
+
 def _completed_slice_evidence(root: Path, current_slice: str, git_context: GitContext) -> list[str]:
     evidence: list[str] = []
     if git_context.enabled and git_context.available:
         for ref in _mainline_refs_for_completion(root, git_context):
-            subject = _git_output(root, ["log", "-1", "--pretty=format:%s", ref], required=False)
-            if not subject or not _text_starts_with_slice(subject, current_slice):
-                continue
-            path_output = (
-                _git_output(
-                    root,
-                    ["show", "--pretty=format:", "--name-only", ref, "--"],
-                    required=False,
-                )
-                or ""
-            )
-            implementation_paths = [
-                path
-                for path in path_output.splitlines()
-                if path.strip() and not _is_planning_only_path(path.strip())
-            ]
-            if implementation_paths:
+            boundary = _mainline_slice_boundary(root, ref, current_slice)
+            if boundary is not None:
+                _sha, subject, implementation_paths = boundary
                 sample = ", ".join(sorted(implementation_paths)[:3])
                 evidence.append(
-                    f"mainline head at {ref} is {current_slice} with implementation "
+                    f"mainline history at {ref} includes {subject!r} with implementation "
                     f"changes: {sample}"
                 )
                 break
@@ -1577,6 +1579,48 @@ def _completed_slice_evidence(root: Path, current_slice: str, git_context: GitCo
                 )
                 break
     return evidence
+
+
+def _mainline_slice_boundary(
+    root: Path, ref: str, current_slice: str
+) -> tuple[str, str, list[str]] | None:
+    output = _git_output(
+        root,
+        [
+            "log",
+            "--first-parent",
+            f"--max-count={_HANDOFF_COMPLETION_COMMIT_LIMIT}",
+            "--pretty=format:%H%x1f%s%x1e",
+            ref,
+        ],
+        required=False,
+    )
+    for entry in (output or "").split("\x1e"):
+        stripped = entry.strip()
+        if not stripped:
+            continue
+        parts = stripped.split("\x1f", 1)
+        if len(parts) != 2:
+            continue
+        sha, subject = parts
+        if not _text_starts_with_slice(subject, current_slice):
+            continue
+        paths = _commit_implementation_paths(root, sha)
+        if paths:
+            return sha, subject, paths
+    return None
+
+
+def _commit_implementation_paths(root: Path, sha: str) -> list[str]:
+    path_output = (
+        _git_output(root, ["show", "--pretty=format:", "--name-only", sha, "--"], required=False)
+        or ""
+    )
+    return [
+        path
+        for path in path_output.splitlines()
+        if path.strip() and not _is_planning_only_path(path.strip())
+    ]
 
 
 def _mainline_refs_for_completion(root: Path, git_context: GitContext) -> list[str]:

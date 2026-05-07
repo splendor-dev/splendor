@@ -323,12 +323,12 @@ Implemented fields:
   manifests, queue jobs, wiki pages, run records, reports, or GitHub state.
 - `brief --agent-context` and `suggest-next` include an optional JSON `handoff_current_state`
   object when planning state appears stale because the named current slice is the latest mainline
-  slice boundary with implementation/test/tooling changes and an ordered roadmap sequence names the
-  following slice. Merged PR context can corroborate the mainline evidence, but arbitrary
-  historical mentions and stale `Next planned PR sub-slice` lines do not advance state by
-  themselves. The object records `current_slice`, `inferred_slice`, completion `evidence`, and the
-  ordered roadmap `source_path`. Absence of the object means no completion-aware advancement was
-  inferred.
+  slice boundary found in a bounded recent mainline scan with implementation/test/tooling changes,
+  and a bounded ordered roadmap sequence names the following slice. Merged PR context can
+  corroborate the mainline evidence, but arbitrary historical mentions and stale
+  `Next planned PR sub-slice` lines do not advance state by themselves. The object records
+  `current_slice`, `inferred_slice`, completion `evidence`, and the ordered roadmap `source_path`.
+  Absence of the object means no completion-aware advancement was inferred.
 - `splendor brief --agent-context [--since <ref>] [--no-git] [goal]` and
   `splendor suggest-next [--since <ref>] [--no-git] [goal]` are read-only handoff views over
   existing deterministic state plus runtime-only git/GitHub signals. They do not create planning
