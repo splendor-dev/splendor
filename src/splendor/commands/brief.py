@@ -2144,7 +2144,9 @@ def _authority_cited_read_first_paths(
     for authority in authority_briefs[:_AUTHORITY_READ_FIRST_LIMIT]:
         if authority.lifecycle in {"historical", "superseded", "archived"}:
             continue
-        authority_path = root / authority.path
+        authority_path = _safe_existing_repo_file(root, authority.path)
+        if authority_path is None:
+            continue
         try:
             body = authority_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -2162,11 +2164,17 @@ def _authority_cited_read_first_paths(
 
 
 def _is_existing_read_first_path(root: Path, path: str) -> bool:
+    return _safe_existing_repo_file(root, path) is not None
+
+
+def _safe_existing_repo_file(root: Path, path: str) -> Path | None:
     candidate = Path(path)
     if candidate.is_absolute() or ".." in candidate.parts:
-        return False
+        return None
     absolute = root / candidate
-    return absolute.is_file()
+    if not absolute.is_file():
+        return None
+    return absolute
 
 
 def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:

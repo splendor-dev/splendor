@@ -2183,6 +2183,62 @@ def test_agent_context_authority_cited_files_do_not_require_git(tmp_path: Path, 
     assert "- pyproject.toml" in out
 
 
+def test_agent_context_skips_non_repo_authority_paths_for_read_first(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-policy.md"
+    outside.write_text(
+        "# Outside\n\nDo not surface pyproject.toml from this non-repo policy.\n",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    config.briefing.authority_documents = []
+    write_config(tmp_path, config)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'example'\n", encoding="utf-8")
+    capsys.readouterr()
+
+    traversal = brief_module.AuthorityBrief(
+        rank=1,
+        path=f"../{outside.name}",
+        title="Outside policy",
+        role="current-authority",
+        freshness="current",
+        lifecycle="current",
+        score=500,
+        reason="Synthetic non-repo authority path.",
+        origin="configured-authority",
+        curation_state="configured",
+        curation_commands=[],
+        issue_refs=[],
+        pr_refs=[],
+        supersedes=[],
+        superseded_by=None,
+    )
+    absolute = brief_module.AuthorityBrief(
+        rank=2,
+        path=str(outside),
+        title="Absolute outside policy",
+        role="current-authority",
+        freshness="current",
+        lifecycle="current",
+        score=500,
+        reason="Synthetic absolute authority path.",
+        origin="configured-authority",
+        curation_state="configured",
+        curation_commands=[],
+        issue_refs=[],
+        pr_refs=[],
+        supersedes=[],
+        superseded_by=None,
+    )
+
+    assert (
+        brief_module._authority_cited_read_first_paths(tmp_path, [traversal, absolute], "policy")
+        == {}
+    )
+
+
 def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
