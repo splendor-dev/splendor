@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P5.1`
-- Current planned slice: `M19 post-v0.4 generated-state safety follow-ups`
-- Current PR sub-slice: `M19-P5.2`
+- Previous completed PR sub-slice: `M19-P5.2`
+- Current planned slice: `M19 completion-aware current-state handoff inference`
+- Current PR sub-slice: `M19-P6.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 completion-aware current-state handoff inference`
-- Next planned PR sub-slice: `M19-P6.1`
+- Next planned slice: `M19 handoff breadth and policy-cited implementation surfacing`
+- Next planned PR sub-slice: `M19-P7.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1318,6 +1318,12 @@ Evidence/Contradictions excerpts can leak control bytes into markdown/YAML, and 
 source manifests can keep stale `pipeline_version` provenance after ingest rewrites `last_run_id`.
 These stay under the `M19-P5` family because they are immediate post-v0.4 safety follow-ups for
 generated state integrity, while `M19-P6.1` remains the next handoff-inference feature slice.
+
+`M19-P5.2` is now implemented on `main`, so the next active M19 handoff feature slice is
+`M19-P6.1`. This slice makes `brief --agent-context` and `suggest-next` reconcile stale dynamic
+planning state with mainline git or merged PR evidence plus the ordered roadmap sequence, so a
+recently completed current slice advances to the next open roadmap item instead of remaining the
+top work recommendation.
 
 The remaining M19 sequence is therefore:
 

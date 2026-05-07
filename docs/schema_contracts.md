@@ -321,6 +321,11 @@ Implemented fields:
   keep `paths` for quick scanning plus `path_actions` and `action_counts` for add/change/delete/
   rename review without falling back to the detailed groups. The command does not create
   manifests, queue jobs, wiki pages, run records, reports, or GitHub state.
+- `brief --agent-context` and `suggest-next` include an optional JSON `handoff_current_state`
+  object when planning state appears stale because the named current slice is already present in
+  mainline git history or merged PR context. The object records `current_slice`, `inferred_slice`,
+  completion `evidence`, and the ordered roadmap `source_path` when known. Absence of the object
+  means no completion-aware advancement was inferred.
 - `splendor brief --agent-context [--since <ref>] [--no-git] [goal]` and
   `splendor suggest-next [--since <ref>] [--no-git] [goal]` are read-only handoff views over
   existing deterministic state plus runtime-only git/GitHub signals. They do not create planning
