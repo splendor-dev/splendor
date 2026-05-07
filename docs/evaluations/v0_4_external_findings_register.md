@@ -26,6 +26,17 @@ Severity legend:
 | V04-F11 | Ingest needs progress feedback for long drains. | hocrsyngen observed `ingest --pending` remaining silent for roughly a minute. | Ingest command UX | P3 | Add deterministic progress/status output where it does not break JSON contracts. |
 | V04-F12 | Lint may report repo-relative README links as missing. | hocrsyngen reported false positives for links such as `docs/roadmap.md`. | `splendor lint` docs/link checks | P3 | Reproduce and fix link resolution, or narrow the diagnostic until it is reliable. |
 
+## Post-Round Follow-Up Findings
+
+These findings were filed as GitHub issues after the original v0.4 external review round. They are
+kept separate from the round findings above so the historical review record stays intact, but they
+now affect the accepted M19 sequence because they expose generated-state correctness risks.
+
+| ID | Finding | Evidence | Affected surface | Severity | Recommended next action |
+| --- | --- | --- | --- | --- | --- |
+| V04-F13 | Generated Evidence/Contradictions text can leak control bytes. | SynthBanshee follow-up issue #165 reports UTF-8 punctuation from clean source docs becoming BEL, partial UTF-8 bytes, digit substitutions, and YAML `\xNN` escapes in generated wiki pages and review tasks. | Ingest generation, evidence extraction, wiki/task markdown, YAML frontmatter | P1 | Fix the encoding/sanitization path and add regression coverage proving generated markdown/YAML contains no control bytes. Treat as an immediate bugfix before broader handoff work. |
+| V04-F14 | Manifest `pipeline_version` provenance can stay stale after path repair plus ingest. | SynthBanshee follow-up issue #164 reports manifests retaining old `pipeline_version` values after `source update-path` and ingest rewrite `last_run_id`, while run records and wiki pages reflect the newer Splendor version. | Source manifests, ingest provenance, source path repair | P1 | Refresh manifest `pipeline_version` whenever ingest/source refresh rewrites manifest provenance, or document immutable semantics with a migration path. Include this in `M19-P5.2` with V04-F13. |
+
 ## Validated Improvements
 
 | ID | Improvement | Evidence | Follow-up |
@@ -37,16 +48,20 @@ Severity legend:
 
 ## Suggested Sequencing
 
-The review round does not settle exact milestone names, but it does give a practical order:
+The review round set the original M19 order. The post-round follow-up findings above insert one
+generated-state safety slice before completion-aware handoff inference resumes:
 
 1. **`M19-P5.1` safety first:** address V04-F1, because mixed mutation semantics can destroy
    exploratory handoff safety.
-2. **`M19-P6.1` handoff correctness second:** address V04-F2, because two partners failed the
+2. **`M19-P5.2` generated-state correctness before handoff inference:** address both V04-F13 and
+   V04-F14, because corrupted generated artifacts and stale provenance undermine the state later
+   handoff commands depend on.
+3. **`M19-P6.1` handoff correctness second:** address V04-F2, because two partners failed the
    same completed-slice-to-next-slice inference test.
-3. **`M19-P7.1` handoff breadth third:** address V04-F3 and V04-F6 together if scope allows.
-4. **`M19-P8.1` cold-start adoption fourth:** address V04-F4 plus the narrower V04-F5 robustness
+4. **`M19-P7.1` handoff breadth third:** address V04-F3 and V04-F6 together if scope allows.
+5. **`M19-P8.1` cold-start adoption fourth:** address V04-F4 plus the narrower V04-F5 robustness
    bug.
-5. **Polish later:** address V04-F7 through V04-F12 as scoped follow-ups or opportunistic fixes.
+6. **Polish later:** address V04-F7 through V04-F12 as scoped follow-ups or opportunistic fixes.
 
 ## Non-Decisions
 

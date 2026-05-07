@@ -323,9 +323,9 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P4.1`
-- Current planned slice: `M19 legacy mutation safety`
-- Current PR sub-slice: `M19-P5.1`
+- Previous completed PR sub-slice: `M19-P5.1`
+- Current planned slice: `M19 post-v0.4 generated-state safety follow-ups`
+- Current PR sub-slice: `M19-P5.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M19 completion-aware current-state handoff inference`
 - Next planned PR sub-slice: `M19-P6.1`
@@ -641,3 +641,7 @@ commands. `ingest --pending`, `source refresh`, `source update-path`, and `works
 preview by default, report planned writes through the shared mutation contract, and require
 explicit `--apply` before draining queue jobs or writing manifests, source summaries, queue/run
 records, index/log state, pruning changes, or topic-ref migrations.
+
+`M19-P5.2` is the next focused bugfix slice before handoff-inference work resumes. It addresses
+the new SynthBanshee follow-up reports for generated Evidence/Contradictions text corruption and
+stale source-manifest `pipeline_version` provenance after path repair plus ingest.
