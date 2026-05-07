@@ -289,6 +289,12 @@ signals. Title/path/scope matches carry more weight than loose body overlap, and
 review noise from burying current specs, rollout plans, accepted decisions, and key contradicting
 research.
 
+`M20-P1.1` begins the advanced retrieval track conservatively. `splendor query` now adds
+runtime-only semantic expansion to deterministic local scoring with a small built-in acronym phrase
+map for common code/research workflow terms. This improves query and agent-context handoff matches
+such as `ASR` to `automatic speech recognition` without
+adding a persisted vector store, external service, database, or background worker.
+
 `M17-P4.1` reduces issue #117 contradiction-review task noise without weakening contradiction
 evidence. Ingest-created contradiction-review tasks are classified as generated planning records,
 hidden from default active planning handoff, and managed intentionally through task-list, resolve,
@@ -329,12 +335,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P8.1`
-- Current planned slice: `M20 review intake and planning handoff`
-- Current PR sub-slice: `M20-P0.1`
+- Previous completed PR sub-slice: `M20-P0.1`
+- Current planned slice: `M20 advanced semantic search or vector index`
+- Current PR sub-slice: `M20-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 advanced semantic search or vector index`
-- Next planned PR sub-slice: `M20-P1.1`
+- Next planned slice: `M20 mutating web review workflows`
+- Next planned PR sub-slice: `M20-P2.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
