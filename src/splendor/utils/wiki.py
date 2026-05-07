@@ -93,12 +93,13 @@ def render_source_summary_page(
         contradiction_lines = "\n".join(f"- {line}" for line in contradictions)
         contradiction_section = f"## Contradictions\n\n{contradiction_lines}\n\n"
     provenance_lines = "\n".join(f"- {sanitize_generated_text(line)}" for line in provenance)
+    title = sanitize_generated_text(frontmatter.title)
     extract_section = ""
     if extract is not None:
         extract_section = f"## Extract\n\n{_fenced_extract_block(extract)}\n\n"
     return (
         f"---\n{render_frontmatter(frontmatter)}\n---\n\n"
-        f"# {frontmatter.title}\n\n"
+        f"# {title}\n\n"
         "## Source\n\n"
         f"{source_section}\n\n"
         "## Summary\n\n"

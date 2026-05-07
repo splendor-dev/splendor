@@ -9,6 +9,7 @@ from pypdf import PdfWriter
 import splendor.commands.ingest as ingest_module
 import splendor.utils.contradictions as contradictions_module
 from conftest import write_text_pdf
+from splendor import __version__
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import (
     drain_pending_ingest_jobs,
@@ -166,6 +167,10 @@ def test_ingest_source_preserves_utf8_punctuation_in_generated_surfaces(
         encoding="utf-8",
     )
     added = add_source(tmp_path, source, storage_mode="copy")
+    source_record = load_source_record(added.manifest_path).model_copy(
+        update={"title": "Brief — Generated Text\x07"}
+    )
+    write_source_record(added.manifest_path, source_record)
 
     result = ingest_source(tmp_path, added.source_id)
 
@@ -173,6 +178,7 @@ def test_ingest_source_preserves_utf8_punctuation_in_generated_surfaces(
     page_text = result.page_path.read_text(encoding="utf-8")
     frontmatter_text = page_text.removeprefix("---\n").split("\n---\n", maxsplit=1)[0]
     assert "Brief — Generated Text" in page_text
+    assert "# Brief — Generated Text" in page_text
     assert "em dashes — smart quotes “naturalness” — ellipses … and café" in page_text
     assert "\\x" not in frontmatter_text
     assert_no_forbidden_control_chars(page_text)
@@ -310,6 +316,10 @@ def test_ingest_source_rejects_unsupported_type(tmp_path: Path) -> None:
     source = tmp_path / "diagram.bin"
     source.write_bytes(b"\x00\x01\x02")
     added = add_source(tmp_path, source)
+    stale_source = load_source_record(added.manifest_path).model_copy(
+        update={"pipeline_version": "0.1.0a0"}
+    )
+    write_source_record(added.manifest_path, stale_source)
 
     with pytest.raises(ValueError, match="Unsupported source type"):
         ingest_source(tmp_path, added.source_id)
@@ -317,6 +327,7 @@ def test_ingest_source_rejects_unsupported_type(tmp_path: Path) -> None:
     source_record = load_source_record(added.manifest_path)
     assert source_record.status == "failed"
     assert source_record.last_run_id is not None
+    assert source_record.pipeline_version == __version__
     queue_path = tmp_path / "state" / "queue" / f"ingest-{added.source_id}.json"
     run_paths = list((tmp_path / "state" / "runs").glob("*.json"))
     assert load_queue_item(queue_path).status == "failed"
@@ -2010,6 +2021,62 @@ def test_ingest_source_preserves_utf8_punctuation_in_contradiction_review_output
     assert "Generated evidence differs — “alpha” vs “beta” …" in task_text
     assert "Current says naturalness — “alpha” — should stay readable." in task_text
     assert "Candidate says naturalness — “beta” — should stay readable." in task_text
+    assert "\\x" not in task_frontmatter_text
+    assert_no_forbidden_control_chars(task_text)
+
+
+def test_ingest_source_repairs_control_byte_mojibake_in_contradiction_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    initialize_workspace(tmp_path)
+
+    class FakeAnalyzer:
+        def detect(self, *, current, candidate):
+            return [
+                contradictions_module.DetectedContradiction(
+                    summary=("Generated evidence differs â\x80\x94 \x1a raw SUB and \x7f raw DEL"),
+                    current_excerpt=(
+                        "Current says â\x80\x9cnaturalnessâ\x80\x9d â\x80\x94 alpha\x07."
+                    ),
+                    candidate_excerpt=(
+                        "Candidate says â\x80\x9cnaturalnessâ\x80\x9d â\x80\x94 beta\x1a."
+                    ),
+                )
+            ]
+
+    monkeypatch.setattr(
+        contradictions_module,
+        "build_contradiction_analyzer",
+        lambda config: FakeAnalyzer(),
+    )
+
+    first_source = tmp_path / "first.md"
+    first_source.write_text("# First\n\n## Core Claims\n\n- Claim one.\n", encoding="utf-8")
+    first_added = add_source(tmp_path, first_source, storage_mode="copy")
+    ingest_source(tmp_path, first_added.source_id)
+
+    second_source = tmp_path / "second.md"
+    second_source.write_text("# Second\n\n## Core Claims\n\n- Claim two.\n", encoding="utf-8")
+    second_added = add_source(tmp_path, second_source, storage_mode="copy")
+    second_result = ingest_source(tmp_path, second_added.source_id)
+
+    assert second_result.page_path is not None
+    second_text = second_result.page_path.read_text(encoding="utf-8")
+    second_frontmatter_text = second_text.removeprefix("---\n").split("\n---\n", maxsplit=1)[0]
+    assert "Generated evidence differs — raw SUB and raw DEL" in second_text
+    assert "Current says “naturalness” — alpha" in second_text
+    assert "\\x" not in second_frontmatter_text
+    assert_no_forbidden_control_chars(second_text)
+
+    second_page = parse_frontmatter(second_result.page_path)[0]
+    task_path = (
+        tmp_path / "planning" / "tasks" / f"{second_page.contradictions[0].review_task_id}.md"
+    )
+    task_text = task_path.read_text(encoding="utf-8")
+    task_frontmatter_text = task_text.removeprefix("---\n").split("\n---\n", maxsplit=1)[0]
+    assert "Generated evidence differs — raw SUB and raw DEL" in task_text
+    assert "Current says “naturalness” — alpha" in task_text
+    assert "Candidate says “naturalness” — beta" in task_text
     assert "\\x" not in task_frontmatter_text
     assert_no_forbidden_control_chars(task_text)
 

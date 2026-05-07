@@ -7,24 +7,8 @@ import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
-_COMMON_MOJIBAKE_REPLACEMENTS = {
-    "â\x80\x94": "—",
-    "â€”": "—",
-    "â\x80\x93": "–",
-    "â€“": "–",
-    "â\x80\x98": "‘",
-    "â€˜": "‘",
-    "â\x80\x99": "’",
-    "â€™": "’",
-    "â\x80\x9c": "“",
-    "â€œ": "“",
-    "â\x80\x9d": "”",
-    "â€�": "”",
-    "â\x80¦": "…",
-    "â€¦": "…",
-}
-
 _CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_LATIN1_DECODED_UTF8_SPAN_PATTERN = re.compile(r"[\x80-\xff]{2,}")
 _SPACES_PATTERN = re.compile(r" {2,}")
 
 
@@ -32,10 +16,23 @@ def sanitize_generated_text(value: str) -> str:
     """Preserve readable Unicode while removing controls from generated markdown/YAML."""
 
     text = unicodedata.normalize("NFC", value)
-    for broken, replacement in _COMMON_MOJIBAKE_REPLACEMENTS.items():
-        text = text.replace(broken, replacement)
+    if _CONTROL_CHARACTER_PATTERN.search(text):
+        text = _repair_latin1_decoded_utf8_spans(text)
     text = _CONTROL_CHARACTER_PATTERN.sub(" ", text)
     return "\n".join(_SPACES_PATTERN.sub(" ", line).rstrip() for line in text.split("\n"))
+
+
+def _repair_latin1_decoded_utf8_spans(value: str) -> str:
+    def repair(match: re.Match[str]) -> str:
+        span = match.group(0)
+        if not _CONTROL_CHARACTER_PATTERN.search(span):
+            return span
+        try:
+            return span.encode("latin-1").decode("utf-8")
+        except UnicodeError:
+            return span
+
+    return _LATIN1_DECODED_UTF8_SPAN_PATTERN.sub(repair, value)
 
 
 def sanitize_generated_value(value: Any) -> Any:

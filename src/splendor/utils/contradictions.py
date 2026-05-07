@@ -561,15 +561,19 @@ def _render_review_task_body(
     evidence_lines = "\n".join(
         f"- `{item.page_id}`: {item.excerpt}" for item in annotation.evidence
     )
+    summary = sanitize_generated_text(annotation.summary)
+    evidence_lines = sanitize_generated_text(evidence_lines)
+    current_title = sanitize_generated_text(current.frontmatter.title)
+    candidate_title = sanitize_generated_text(candidate.frontmatter.title)
     return (
         "\n"
         "## Contradiction\n\n"
-        f"{annotation.summary}\n\n"
+        f"{summary}\n\n"
         "## Evidence\n\n"
         f"{evidence_lines}\n\n"
         "## Linked Pages\n\n"
-        f"- [{current.frontmatter.title}]({current_link}) (`{current.frontmatter.page_id}`)\n"
-        f"- [{candidate.frontmatter.title}]({candidate_link}) "
+        f"- [{current_title}]({current_link}) (`{current.frontmatter.page_id}`)\n"
+        f"- [{candidate_title}]({candidate_link}) "
         f"(`{candidate.frontmatter.page_id}`)\n\n"
         "## Notes\n\n"
     )

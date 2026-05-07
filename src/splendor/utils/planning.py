@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from splendor.layout import ResolvedLayout
 from splendor.utils.fs import write_text_atomic
-from splendor.utils.text_integrity import sanitize_generated_text, sanitize_generated_value
+from splendor.utils.text_integrity import sanitize_generated_value
 
 PlanningRecord = TypeVar("PlanningRecord", bound=BaseModel)
 
@@ -87,13 +87,11 @@ def render_frontmatter(record: BaseModel) -> str:
 
 
 def render_planning_markdown(record: BaseModel, *, title: str) -> str:
-    title = sanitize_generated_text(title)
     return f"---\n{render_frontmatter(record)}\n---\n\n# {title}\n\n## Notes\n\n"
 
 
 def render_planning_document(record: BaseModel, *, body: str) -> str:
     normalized_body = body.replace("\r\n", "\n").replace("\r", "\n")
-    normalized_body = sanitize_generated_text(normalized_body)
     return f"---\n{render_frontmatter(record)}\n---\n{normalized_body}"
 
 
