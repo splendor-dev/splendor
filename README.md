@@ -323,13 +323,15 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [v0.4 external retry bar](docs/evaluations/v0_4_external_retry_bar.md)
 - [v0.4 external review summary](docs/evaluations/v0_4_external_review_round_summary.md)
 - [v0.4 external findings register](docs/evaluations/v0_4_external_findings_register.md)
+- [v0.5 SynthBanshee integrated-use review](docs/evaluations/v0_5_synthbanshee_integrated_use/summary.md)
 - [v0.4.0 release notes](docs/releases/v0_4_0_release_notes.md)
+- [v0.5.0 release notes](docs/releases/v0_5_0_release_notes.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P7.1`
-- Current planned slice: `M19 cold-start adoption and PATH-safe git lookup`
-- Current PR sub-slice: `M19-P8.1`
+- Previous completed PR sub-slice: `M19-P8.1`
+- Current planned slice: `M20 review intake and planning handoff`
+- Current PR sub-slice: `M20-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M20 advanced semantic search or vector index`
 - Next planned PR sub-slice: `M20-P1.1`
@@ -656,5 +658,8 @@ next ordered slice.
 parent/sibling issues, and read-first files get deterministic boosts from implementation/test paths
 cited by surfaced authority docs while keeping maintenance actions in the separate maintenance
 block.
-`M19-P8.1` is in progress: it focuses the final M19 durability slice on cold-start state review
-groups and PATH-safe git lookup without starting M20 vector search or mutating web workflow bets.
+`M19-P8.1` is implemented on `main`, and v0.5.0 has shipped with cold-start state review groups
+and PATH-safe git lookup hardening. The v0.5 SynthBanshee integrated-use review exercised the
+PATH-safe git lookup fix and accepted the M19 blocker loop as closed; it did not independently rerun
+the cold-start layout path in a fresh repository. Remaining polish for #160, #161, #162, and #163
+stays tracked as follow-up issue work and should not block the first M20 product slice.
