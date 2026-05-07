@@ -343,6 +343,9 @@ Implemented fields:
   runtime-only command guidance and explanatory notes so review-needed wiki state, missing
   synthesis, queue drift, source freshness, and generated contradiction-review tasks stay
   discoverable without becoming default human planning records.
+- Git subprocess lookup is PATH-safe: Splendor resolves `git` before invoking it and treats a
+  missing executable or non-searchable PATH entries as unavailable git context rather than as a
+  workspace failure. Persisted schemas remain unchanged because this is runtime-only lookup state.
 - Suggested actions are derived from local git commits, best-effort read-only GitHub issue/PR
   context through `gh` when available, source freshness, queue operator state, invalid/stale/
   contested/review-needed wiki pages, ingested sources missing maintained synthesis follow-up,

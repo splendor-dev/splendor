@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from dataclasses import dataclass, replace
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -18,6 +17,7 @@ from splendor.state.source_registry import (
     load_source_record,
     register_source,
 )
+from splendor.utils.git import run_git
 from splendor.utils.hashing import sha256_file
 
 _CONFIG_EXTENSIONS = {"json", "yaml", "yml"}
@@ -567,15 +567,7 @@ def _directory_has_entries(path: Path) -> bool:
 
 
 def _git_ignore_context(root: Path) -> GitIgnoreContext:
-    try:
-        top_level = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    except OSError:
-        return GitIgnoreContext(repo_root=None, workspace_root=root.resolve())
+    top_level = run_git(root, ["-C", root, "rev-parse", "--show-toplevel"])
     if top_level.returncode != 0:
         return GitIgnoreContext(repo_root=None, workspace_root=root.resolve())
     return GitIgnoreContext(
@@ -667,22 +659,11 @@ def _git_ignored_repo_paths(
 ) -> set[str]:
     if not repo_paths_by_value or gitignore.repo_root is None:
         return set()
-    try:
-        result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(gitignore.repo_root),
-                "check-ignore",
-                "--stdin",
-            ],
-            input="\n".join(repo_paths_by_value) + "\n",
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    except OSError:
-        return set()
+    result = run_git(
+        gitignore.repo_root,
+        ["-C", gitignore.repo_root, "check-ignore", "--stdin"],
+        input="\n".join(repo_paths_by_value) + "\n",
+    )
     if result.returncode not in {0, 1}:
         return set()
 

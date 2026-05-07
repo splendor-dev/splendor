@@ -21,6 +21,7 @@ from splendor.schemas import (
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.query_snapshot import last_query_path_for
 from splendor.state.source_compat import canonical_source_ref
+from splendor.utils.git import is_git_executable_missing, run_git
 from splendor.utils.planning import (
     iter_planning_paths,
     parse_planning_document,
@@ -1410,7 +1411,23 @@ def _build_git_context(
         )
 
     warnings: list[str] = []
-    inside = _git_output(root, ["rev-parse", "--is-inside-work-tree"], required=False)
+    inside_result = run_git(root, ["rev-parse", "--is-inside-work-tree"])
+    inside = inside_result.stdout.strip() if inside_result.returncode == 0 else None
+    if is_git_executable_missing(inside_result):
+        return GitContext(
+            enabled=True,
+            available=False,
+            since=since,
+            base_ref=None,
+            merge_base=None,
+            branch=None,
+            head=None,
+            repository=None,
+            commits=[],
+            threads=[],
+            read_first_paths=authority_read_first_paths,
+            warnings=["git executable not found; git context unavailable."],
+        )
     if inside != "true":
         return GitContext(
             enabled=True,
@@ -1687,13 +1704,7 @@ def _is_planning_only_path(path: str) -> bool:
 
 
 def _git_output(root: Path, args: list[str], *, required: bool = True) -> str | None:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    result = run_git(root, args)
     if result.returncode != 0:
         if required:
             message = result.stderr.strip() or result.stdout.strip() or "git command failed"

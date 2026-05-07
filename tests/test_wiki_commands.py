@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -3165,6 +3166,47 @@ def test_agent_context_reports_gh_timeout_as_warning(tmp_path: Path, capsys, mon
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert any("Timed out" in warning for warning in payload["git_context"]["warnings"])
+
+
+def test_agent_context_git_lookup_ignores_path_file_entries(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    git_path = shutil.which("git")
+    assert git_path is not None
+    path_entry = tmp_path / "not-a-directory"
+    path_entry.write_text("not a search directory\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", f"{path_entry}{os.pathsep}{Path(git_path).parent}")
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--agent-context", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["git_context"]["enabled"] is True
+    assert payload["git_context"]["available"] is True
+    assert payload["git_context"]["branch"] == "main"
+    assert payload["git_context"]["repository"] == "example/project"
+
+
+def test_agent_context_reports_missing_git_executable(tmp_path: Path, capsys, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    path_entry = tmp_path / "not-a-directory"
+    path_entry.write_text("not a search directory\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", str(path_entry))
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "brief", "--agent-context", "handoff", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["git_context"]["enabled"] is True
+    assert payload["git_context"]["available"] is False
+    assert payload["git_context"]["warnings"] == [
+        "git executable not found; git context unavailable."
+    ]
 
 
 def test_agent_context_explicit_since_empty_range_does_not_fallback_to_head(
