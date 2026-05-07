@@ -458,7 +458,9 @@ def _score_document(document: _QueryDocument, query_tokens: list[str]) -> int:
         lexical_score += document.body_tokens.count(token)
     semantic_score = sum(document.semantic_tokens.count(token) for token in query_tokens)
     semantic_boost = min(1, semantic_score)
-    return lexical_score + semantic_boost if lexical_score > 0 else semantic_boost
+    if lexical_score <= 0:
+        return semantic_boost
+    return lexical_score + semantic_boost + 1
 
 
 def _best_snippet(text: str, query_tokens: list[str]) -> str:

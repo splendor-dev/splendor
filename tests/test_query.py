@@ -470,6 +470,32 @@ def test_run_query_keeps_exact_phrase_above_acronym_only_match(tmp_path: Path) -
     assert result.matches[0].score > result.matches[1].score
 
 
+def test_run_query_keeps_minimal_lexical_hit_above_semantic_only_match(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "lexical.md",
+        title="Lexical evidence",
+        page_id="topic-lexical-evidence",
+        body="recognition appears as direct lexical evidence.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "semantic.md",
+        title="Semantic shorthand",
+        page_id="topic-semantic-shorthand",
+        body="ASR appears only as shorthand.",
+    )
+
+    result = run_query(tmp_path, "recognition")
+
+    assert [match.path for match in result.matches] == [
+        "wiki/topics/lexical.md",
+        "wiki/topics/semantic.md",
+    ]
+    assert result.matches[0].score > result.matches[1].score
+
+
 def test_brief_agent_context_uses_semantic_query_matches_for_handoff(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(
