@@ -22,6 +22,7 @@ from splendor.schemas import (
 )
 from splendor.schemas.planning import status_for_review_task_state
 from splendor.utils.planning import parse_planning_document, planning_path, render_planning_document
+from splendor.utils.text_integrity import sanitize_generated_text
 from splendor.utils.time import utc_now_iso
 from splendor.utils.wiki import parse_wiki_markdown
 
@@ -560,15 +561,19 @@ def _render_review_task_body(
     evidence_lines = "\n".join(
         f"- `{item.page_id}`: {item.excerpt}" for item in annotation.evidence
     )
+    summary = sanitize_generated_text(annotation.summary)
+    evidence_lines = sanitize_generated_text(evidence_lines)
+    current_title = sanitize_generated_text(current.frontmatter.title)
+    candidate_title = sanitize_generated_text(candidate.frontmatter.title)
     return (
         "\n"
         "## Contradiction\n\n"
-        f"{annotation.summary}\n\n"
+        f"{summary}\n\n"
         "## Evidence\n\n"
         f"{evidence_lines}\n\n"
         "## Linked Pages\n\n"
-        f"- [{current.frontmatter.title}]({current_link}) (`{current.frontmatter.page_id}`)\n"
-        f"- [{candidate.frontmatter.title}]({candidate_link}) "
+        f"- [{current_title}]({current_link}) (`{current.frontmatter.page_id}`)\n"
+        f"- [{candidate_title}]({candidate_link}) "
         f"(`{candidate.frontmatter.page_id}`)\n\n"
         "## Notes\n\n"
     )
@@ -702,11 +707,11 @@ def _is_metadata_only_contradiction(contradiction: DetectedContradiction) -> boo
 
 
 def _normalized_summary(value: str) -> str:
-    return _WHITESPACE_PATTERN.sub(" ", value.strip())
+    return _WHITESPACE_PATTERN.sub(" ", sanitize_generated_text(value).strip())
 
 
 def _normalized_excerpt(value: str) -> str:
-    return value.strip()
+    return sanitize_generated_text(value).strip()
 
 
 def _dedupe_detected_contradictions(

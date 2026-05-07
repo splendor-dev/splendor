@@ -27,7 +27,12 @@ from splendor.schemas import (
     TaskRecord,
 )
 from splendor.state.query_snapshot import last_query_path_for, load_query_snapshot
-from splendor.state.runtime import load_queue_item, write_queue_item, write_run_record
+from splendor.state.runtime import (
+    load_queue_item,
+    load_run_record,
+    write_queue_item,
+    write_run_record,
+)
 from splendor.state.source_registry import load_source_record, write_source_record
 from splendor.utils.planning import render_planning_markdown
 
@@ -2073,6 +2078,10 @@ def test_cli_source_update_path_reingests_same_byte_move_to_refresh_provenance(
     main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     page_path = tmp_path / "wiki" / "sources" / f"{source_id}.md"
     assert "old.md" in page_path.read_text(encoding="utf-8")
+    stale_manifest = load_source_record(manifest_path).model_copy(
+        update={"pipeline_version": "0.1.0a0"}
+    )
+    write_source_record(manifest_path, stale_manifest)
     source.rename(replacement)
     capsys.readouterr()
 
@@ -2089,8 +2098,14 @@ def test_cli_source_update_path_reingests_same_byte_move_to_refresh_provenance(
     ingest_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert ingest_code == 0
+    refreshed_manifest = load_source_record(manifest_path)
+    assert refreshed_manifest.pipeline_version == __version__
+    assert refreshed_manifest.last_run_id != stale_manifest.last_run_id
+    run_path = tmp_path / "state" / "runs" / f"{refreshed_manifest.last_run_id}.json"
+    assert load_run_record(run_path).pipeline_version == __version__
     page_text = page_path.read_text(encoding="utf-8")
     assert "new.md" in page_text
+    assert f"Pipeline version: `{__version__}`" in page_text
 
 
 def test_cli_source_update_path_changed_bytes_reports_partial_repair(
