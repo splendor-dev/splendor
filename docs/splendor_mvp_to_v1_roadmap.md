@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P5.2`
-- Current planned slice: `M19 completion-aware current-state handoff inference`
-- Current PR sub-slice: `M19-P6.1`
+- Previous completed PR sub-slice: `M19-P6.1`
+- Current planned slice: `M19 handoff breadth and policy-cited implementation surfacing`
+- Current PR sub-slice: `M19-P7.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 handoff breadth and policy-cited implementation surfacing`
-- Next planned PR sub-slice: `M19-P7.1`
+- Next planned slice: `M19 cold-start adoption and PATH-safe git lookup`
+- Next planned PR sub-slice: `M19-P8.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1317,14 +1317,18 @@ gaps that should land before broader handoff inference work resumes: generated
 Evidence/Contradictions excerpts can leak control bytes into markdown/YAML, and path-repaired
 source manifests can keep stale `pipeline_version` provenance after ingest rewrites `last_run_id`.
 These stay under the `M19-P5` family because they are immediate post-v0.4 safety follow-ups for
-generated state integrity, while `M19-P6.1` remains the next handoff-inference feature slice.
+generated state integrity.
 
-`M19-P5.2` is now implemented on `main`, so the next active M19 handoff feature slice is
-`M19-P6.1`. This slice makes `brief --agent-context` and `suggest-next` reconcile stale dynamic
-planning state with a bounded ordered roadmap sequence and recent mainline implementation
-evidence, so a recently completed current slice advances to the next open roadmap item instead of
-remaining the top work recommendation. Merged PR state can corroborate the inference, but docs-only
-planning intake and arbitrary historical mentions do not advance current state by themselves.
+`M19-P6.1` is now implemented on `main`. It makes `brief --agent-context` and `suggest-next`
+reconcile stale dynamic planning state with a bounded ordered roadmap sequence and recent mainline
+implementation evidence, so a recently completed current slice advances to the next open roadmap
+item instead of remaining the top work recommendation. Merged PR state can corroborate the
+inference, but docs-only planning intake and arbitrary historical mentions do not advance current
+state by themselves.
+
+`M19-P7.1` is the active handoff-breadth slice. It broadens GitHub issue handoff from a single best
+open thread to a bounded set of related open parent/sibling issues and boosts implementation/test
+files explicitly named by surfaced authority docs in read-first file ranking.
 
 The remaining M19 sequence is therefore:
 

@@ -2558,7 +2558,7 @@ def _print_agent_context(result: ProjectBrief) -> None:
         promoted_threads = [thread for thread in result.git_context.threads if thread.promoted]
         if promoted_threads:
             print("Recent issues and PRs:")
-            for thread in promoted_threads[:3]:
+            for thread in promoted_threads[:5]:
                 print(
                     f"- {thread.kind} #{thread.number} [{thread.state}] "
                     f"score={thread.relevance_score}: {thread.title} ({thread.url})"
@@ -2567,10 +2567,10 @@ def _print_agent_context(result: ProjectBrief) -> None:
             print("Recent commits:")
             for commit in result.git_context.commits[:3]:
                 print(f"- {commit.short_sha} score={commit.relevance_score}: {commit.subject}")
-        if result.git_context.read_first_paths:
-            print("Files to read first:")
-            for path in result.git_context.read_first_paths[:5]:
-                print(f"- {path}")
+    if result.read_first_paths:
+        print("Files to read first:")
+        for path in result.read_first_paths[:5]:
+            print(f"- {path}")
     if result.matches:
         print("Relevant matches:")
         for match in result.matches:

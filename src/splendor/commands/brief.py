@@ -18,6 +18,7 @@ from splendor.schemas import (
     QuerySnapshot,
     SourceRecord,
 )
+from splendor.state.paths import resolve_workspace_path
 from splendor.state.query_snapshot import last_query_path_for
 from splendor.state.source_compat import canonical_source_ref
 from splendor.utils.planning import (
@@ -48,8 +49,11 @@ _BRIEF_PLANNING_LIMIT = 8
 _BRIEF_SOURCE_LIMIT = 5
 _BRIEF_REPORT_COMMANDS = ("lint", "health")
 _SUGGESTION_LIMIT = 8
+_MAINTENANCE_ACTION_LIMIT = 8
 _GIT_CONTEXT_LIMIT = 5
 _GIT_FILE_LIMIT = 8
+_AUTHORITY_READ_FIRST_LIMIT = 5
+_RELATED_THREAD_FETCH_LIMIT = 5
 _GIT_COMMAND_TIMEOUT_SECONDS = 5
 _HANDOFF_COMPLETION_COMMIT_LIMIT = 12
 _PROMOTED_THREAD_RELEVANCE_FLOOR = 60
@@ -399,6 +403,7 @@ class GitThreadBrief:
     summary: str
     relevance_score: int
     promoted: bool
+    related_to: int | None = None
 
 
 @dataclass(frozen=True)
@@ -438,6 +443,7 @@ class SuggestNextResult:
     latest_reports: list[BriefReportSnapshot]
     warnings: list[BriefWarning]
     git_context: GitContext
+    read_first_paths: list[str]
     handoff_current_state: HandoffCurrentState | None
     work_actions: list[SuggestedAction]
     maintenance_actions: list[SuggestedAction]
@@ -468,6 +474,7 @@ class BriefStateSnapshot:
     invalid_wiki_pages: list[InvalidWikiPageSnapshot]
     generated_review_task_count: int
     git_context: GitContext
+    read_first_paths: list[str]
     handoff_current_state: HandoffCurrentState | None
     maintenance_goal: bool
 
@@ -492,6 +499,7 @@ class ProjectBrief:
     maintenance_notes: list[str]
     provisional_context: list[AuthorityBrief]
     git_context: GitContext
+    read_first_paths: list[str]
     next_actions: list[str]
     handoff_current_state: HandoffCurrentState | None
 
@@ -500,8 +508,14 @@ def build_project_brief(
     root: Path, goal: str | None, *, include_git: bool = True, since: str | None = None
 ) -> ProjectBrief:
     snapshot = _collect_brief_state(root, goal, include_git=include_git, since=since)
-    suggested_actions = _ranked_suggestions(snapshot)
+    candidate_actions = _suggestion_candidates(snapshot)
+    suggested_actions = _finalize_suggestions(
+        candidate_actions, maintenance_goal=snapshot.maintenance_goal
+    )
     work_actions, maintenance_actions = _split_actions(suggested_actions)
+    maintenance_actions = _finalize_maintenance_actions(
+        candidate_actions, maintenance_goal=snapshot.maintenance_goal
+    )
     maintenance_commands, maintenance_notes = _maintenance_guidance(snapshot, maintenance_actions)
     next_actions = _next_actions(
         status=snapshot.status,
@@ -530,6 +544,7 @@ def build_project_brief(
         maintenance_notes=maintenance_notes,
         provisional_context=_provisional_authority_briefs(snapshot.authority_briefs),
         git_context=snapshot.git_context,
+        read_first_paths=snapshot.read_first_paths,
         next_actions=next_actions,
         handoff_current_state=snapshot.handoff_current_state,
     )
@@ -539,8 +554,12 @@ def build_suggest_next(
     root: Path, goal: str | None = None, *, include_git: bool = True, since: str | None = None
 ) -> SuggestNextResult:
     snapshot = _collect_brief_state(root, goal, include_git=include_git, since=since)
-    actions = _ranked_suggestions(snapshot)
+    candidate_actions = _suggestion_candidates(snapshot)
+    actions = _finalize_suggestions(candidate_actions, maintenance_goal=snapshot.maintenance_goal)
     work_actions, maintenance_actions = _split_actions(actions)
+    maintenance_actions = _finalize_maintenance_actions(
+        candidate_actions, maintenance_goal=snapshot.maintenance_goal
+    )
     maintenance_commands, maintenance_notes = _maintenance_guidance(snapshot, maintenance_actions)
     return SuggestNextResult(
         goal=snapshot.goal,
@@ -554,6 +573,7 @@ def build_suggest_next(
         latest_reports=snapshot.latest_reports,
         warnings=snapshot.warnings,
         git_context=snapshot.git_context,
+        read_first_paths=snapshot.read_first_paths,
         handoff_current_state=snapshot.handoff_current_state,
         work_actions=work_actions,
         maintenance_actions=maintenance_actions,
@@ -614,9 +634,17 @@ def _collect_brief_state(
     recent_runs = status.recent_runs
     latest_reports = _latest_reports(root, layout)
     last_query = _last_query(layout)
-    git_context = _build_git_context(
-        root, normalized_goal or None, include_git=include_git, since=since
+    authority_read_first_scores = _authority_cited_read_first_paths(
+        root, authority_briefs, normalized_goal or None
     )
+    git_context = _build_git_context(
+        root,
+        normalized_goal or None,
+        include_git=include_git,
+        since=since,
+        authority_read_first_scores=authority_read_first_scores,
+    )
+    read_first_paths = _combined_read_first_paths(git_context, authority_read_first_scores)
     handoff_current_state = _handoff_current_state(root, git_context)
     return BriefStateSnapshot(
         root=root,
@@ -639,6 +667,7 @@ def _collect_brief_state(
         invalid_wiki_pages=invalid_wiki_pages,
         generated_review_task_count=generated_review_task_count,
         git_context=git_context,
+        read_first_paths=read_first_paths,
         handoff_current_state=handoff_current_state,
         maintenance_goal=maintenance_goal,
     )
@@ -1356,8 +1385,14 @@ def _goal_relevance_score(
 
 
 def _build_git_context(
-    root: Path, goal: str | None, *, include_git: bool, since: str | None
+    root: Path,
+    goal: str | None,
+    *,
+    include_git: bool,
+    since: str | None,
+    authority_read_first_scores: dict[str, int],
 ) -> GitContext:
+    authority_read_first_paths = _rank_read_first_scores(authority_read_first_scores)
     if not include_git:
         return GitContext(
             enabled=False,
@@ -1370,7 +1405,7 @@ def _build_git_context(
             repository=None,
             commits=[],
             threads=[],
-            read_first_paths=[],
+            read_first_paths=authority_read_first_paths,
             warnings=[],
         )
 
@@ -1388,7 +1423,7 @@ def _build_git_context(
             repository=None,
             commits=[],
             threads=[],
-            read_first_paths=[],
+            read_first_paths=authority_read_first_paths,
             warnings=["Not inside a git worktree."],
         )
 
@@ -1413,7 +1448,7 @@ def _build_git_context(
         warnings.extend(thread_warnings)
     else:
         warnings.append("GitHub remote repository could not be inferred from origin.")
-    read_first_paths = _read_first_paths(commits, threads, goal)
+    read_first_paths = _read_first_paths(commits, threads, goal, authority_read_first_scores)
     return GitContext(
         enabled=True,
         available=True,
@@ -1833,45 +1868,24 @@ def _github_threads(
 
     goal_tokens = _tokens(goal or "")
     goal_phrase = _normalize_goal_phrase(goal or "")
-    threads: list[GitThreadBrief] = []
+    thread_texts: list[tuple[GitThreadBrief, str]] = []
     for item in raw_threads:
-        title = str(item.get("title") or "")
-        body = str(item.get("body") or "")
-        url = str(item.get("url") or "")
-        number = item.get("number")
-        if not isinstance(number, int) or not title or not url:
+        parsed_thread = _git_thread_from_item(item, goal_tokens, goal_phrase)
+        if parsed_thread is None:
             continue
-        state = str(item.get("state") or "unknown").lower()
-        kind = str(item.get("kind") or "thread")
-        relevance_score = _goal_relevance_score(
-            goal_tokens,
-            goal_phrase=goal_phrase,
-            high_text=title,
-            medium_text=body,
-        )
-        summary = _one_line(body) or title
-        promoted = _promote_git_thread(
-            goal_tokens=goal_tokens,
-            relevance_score=relevance_score,
-            kind=kind,
-            text=" ".join([title, body]),
-        )
-        threads.append(
-            GitThreadBrief(
-                kind=kind,
-                number=number,
-                title=title,
-                url=url,
-                state=state,
-                summary=summary,
-                relevance_score=relevance_score,
-                promoted=promoted,
-            )
-        )
+        thread_texts.append(parsed_thread)
+    related_thread_texts, related_warnings = _fetch_referenced_open_issue_threads(
+        root, repository, thread_texts, goal_tokens, goal_phrase
+    )
+    thread_texts.extend(related_thread_texts)
+    warnings.extend(related_warnings)
+    threads = _promote_related_open_issue_threads(thread_texts)
     if goal_tokens:
         threads.sort(
             key=lambda item: (
                 item.state != "open",
+                not item.promoted,
+                item.related_to is not None,
                 -item.relevance_score,
                 item.kind != "issue",
                 item.number,
@@ -1880,6 +1894,172 @@ def _github_threads(
     else:
         threads.sort(key=lambda item: (item.state != "open", item.kind != "issue", item.number))
     return threads[:_GIT_CONTEXT_LIMIT], warnings
+
+
+def _git_thread_from_item(
+    item: dict[str, object], goal_tokens: set[str], goal_phrase: str
+) -> tuple[GitThreadBrief, str] | None:
+    title = str(item.get("title") or "")
+    body = str(item.get("body") or "")
+    url = str(item.get("url") or "")
+    number = item.get("number")
+    if not isinstance(number, int) or not title or not url:
+        return None
+    state = str(item.get("state") or "unknown").lower()
+    kind = str(item.get("kind") or "thread")
+    relevance_score = _goal_relevance_score(
+        goal_tokens,
+        goal_phrase=goal_phrase,
+        high_text=title,
+        medium_text=body,
+    )
+    summary = _one_line(body) or title
+    promoted = _promote_git_thread(
+        goal_tokens=goal_tokens,
+        relevance_score=relevance_score,
+        kind=kind,
+        text=" ".join([title, body]),
+    )
+    thread = GitThreadBrief(
+        kind=kind,
+        number=number,
+        title=title,
+        url=url,
+        state=state,
+        summary=summary,
+        relevance_score=relevance_score,
+        promoted=promoted,
+    )
+    return thread, " ".join([title, body])
+
+
+def _fetch_referenced_open_issue_threads(
+    root: Path,
+    repository: str,
+    thread_texts: list[tuple[GitThreadBrief, str]],
+    goal_tokens: set[str],
+    goal_phrase: str,
+) -> tuple[list[tuple[GitThreadBrief, str]], list[str]]:
+    existing_issue_numbers = {
+        thread.number for thread, _text in thread_texts if thread.kind == "issue"
+    }
+    referenced_numbers: list[int] = []
+    for thread, text in thread_texts:
+        if thread.kind != "issue" or thread.state != "open" or not thread.promoted:
+            continue
+        for number in sorted(_issue_numbers_in_text(text)):
+            if number in existing_issue_numbers or number in referenced_numbers:
+                continue
+            referenced_numbers.append(number)
+            if len(referenced_numbers) >= _RELATED_THREAD_FETCH_LIMIT:
+                break
+        if len(referenced_numbers) >= _RELATED_THREAD_FETCH_LIMIT:
+            break
+
+    warnings: list[str] = []
+    fetched: list[tuple[GitThreadBrief, str]] = []
+    for number in referenced_numbers:
+        command = [
+            "gh",
+            "issue",
+            "view",
+            str(number),
+            "--repo",
+            repository,
+            "--json",
+            "number,title,url,body,state,labels",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=_GIT_COMMAND_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            warnings.append(
+                f"Timed out after {_GIT_COMMAND_TIMEOUT_SECONDS}s running gh issue view {number}."
+            )
+            continue
+        except OSError as exc:
+            warnings.append(f"Could not run gh issue view {number}: {exc}")
+            continue
+        if result.returncode != 0:
+            message = (
+                result.stderr.strip() or result.stdout.strip() or f"gh issue view {number} failed"
+            )
+            warnings.append(f"gh issue view {number} failed: {message}")
+            continue
+        try:
+            payload = json.loads(result.stdout or "{}")
+        except json.JSONDecodeError as exc:
+            warnings.append(f"Could not parse gh issue view {number} output: {exc}")
+            continue
+        if not isinstance(payload, dict):
+            continue
+        parsed_thread = _git_thread_from_item(
+            {"kind": "issue", **payload}, goal_tokens, goal_phrase
+        )
+        if parsed_thread is None:
+            continue
+        thread, text = parsed_thread
+        if thread.state == "open":
+            fetched.append((thread, text))
+    return fetched, warnings
+
+
+def _promote_related_open_issue_threads(
+    thread_texts: list[tuple[GitThreadBrief, str]],
+) -> list[GitThreadBrief]:
+    threads_by_issue_number = {
+        thread.number: thread
+        for thread, _text in thread_texts
+        if thread.kind == "issue" and thread.state == "open"
+    }
+    promoted_issue_numbers = {
+        thread.number
+        for thread, _text in thread_texts
+        if thread.kind == "issue" and thread.state == "open" and thread.promoted
+    }
+    related_numbers: dict[int, tuple[int, int]] = {}
+    for thread, text in thread_texts:
+        if thread.number not in promoted_issue_numbers:
+            continue
+        for number in _issue_numbers_in_text(text):
+            related = threads_by_issue_number.get(number)
+            if related is None or related.number == thread.number:
+                continue
+            related_score = max(
+                thread.relevance_score - 5,
+                _PROMOTED_THREAD_RELEVANCE_FLOOR + related.relevance_score,
+            )
+            existing = related_numbers.get(number)
+            if existing is None or related_score > existing[0]:
+                related_numbers[number] = (related_score, thread.number)
+    promoted: list[GitThreadBrief] = []
+    for thread, _text in thread_texts:
+        related = related_numbers.get(thread.number)
+        if related is not None:
+            related_score, related_to = related
+            thread = replace(
+                thread,
+                promoted=True,
+                relevance_score=max(thread.relevance_score, related_score),
+                related_to=related_to,
+                summary=(
+                    thread.summary
+                    if thread.summary.startswith("Related to promoted issue")
+                    else f"Related to promoted issue context. {thread.summary}"
+                ),
+            )
+        promoted.append(thread)
+    return promoted
+
+
+def _issue_numbers_in_text(text: str) -> set[int]:
+    return {int(match.group(1)) for match in re.finditer(r"(?<![\w/])#(\d+)\b", text)}
 
 
 def _promote_git_thread(
@@ -1906,7 +2086,10 @@ def _one_line(text: str) -> str:
 
 
 def _read_first_paths(
-    commits: list[GitCommitBrief], threads: list[GitThreadBrief], goal: str | None
+    commits: list[GitCommitBrief],
+    threads: list[GitThreadBrief],
+    goal: str | None,
+    authority_read_first_scores: dict[str, int],
 ) -> list[str]:
     goal_tokens = _tokens(goal or "")
     goal_phrase = _normalize_goal_phrase(goal or "")
@@ -1928,13 +2111,75 @@ def _read_first_paths(
             continue
         for path in _repo_paths_in_text(" ".join([thread.title, thread.summary])):
             scored[path] = max(scored.get(path, 0), thread.relevance_score + 20)
+    for path, score in authority_read_first_scores.items():
+        scored[path] = max(scored.get(path, 0), score)
+    return _rank_read_first_scores(scored)
+
+
+def _rank_read_first_scores(scored: dict[str, int]) -> list[str]:
     ranked = sorted(scored, key=lambda path: (-scored[path], path))
     return ranked[:_GIT_FILE_LIMIT]
 
 
+def _combined_read_first_paths(
+    git_context: GitContext, authority_read_first_scores: dict[str, int]
+) -> list[str]:
+    if git_context.read_first_paths:
+        return git_context.read_first_paths
+    return _rank_read_first_scores(authority_read_first_scores)
+
+
 def _repo_paths_in_text(text: str) -> list[str]:
-    candidates = re.findall(r"(?<![\w/.-])(?:[\w.-]+/)+[\w.-]+(?:\.[A-Za-z0-9]+)?", text)
-    return sorted(dict.fromkeys(candidate.strip("`.,)") for candidate in candidates))
+    candidates = re.findall(
+        r"(?<![\w/.-])(?:[\w.-]+/)+[\w.-]+(?:\.[A-Za-z0-9]+)?|"
+        r"(?<![\w/.-])[\w.-]+\.[A-Za-z0-9]{1,8}(?![\w/-])",
+        text,
+    )
+    return sorted(
+        dict.fromkeys(candidate.strip("`.,):;\"'") for candidate in candidates if candidate)
+    )
+
+
+def _authority_cited_read_first_paths(
+    root: Path, authority_briefs: list[AuthorityBrief], goal: str | None
+) -> dict[str, int]:
+    goal_tokens = _tokens(goal or "")
+    goal_phrase = _normalize_goal_phrase(goal or "")
+    scored: dict[str, int] = {}
+    for authority in authority_briefs[:_AUTHORITY_READ_FIRST_LIMIT]:
+        if authority.lifecycle in {"historical", "superseded", "archived"}:
+            continue
+        authority_path = _safe_existing_repo_file(root, authority.path)
+        if authority_path is None:
+            continue
+        try:
+            body = authority_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for path in _repo_paths_in_text(body):
+            if not _is_existing_read_first_path(root, path):
+                continue
+            path_score = (
+                authority.score
+                + 35
+                + _goal_relevance_score(goal_tokens, goal_phrase=goal_phrase, high_text=path)
+            )
+            scored[path] = max(scored.get(path, 0), path_score)
+    return scored
+
+
+def _is_existing_read_first_path(root: Path, path: str) -> bool:
+    return _safe_existing_repo_file(root, path) is not None
+
+
+def _safe_existing_repo_file(root: Path, path: str) -> Path | None:
+    try:
+        resolved = resolve_workspace_path(root, path, context="Authority document")
+    except ValueError:
+        return None
+    if not resolved.is_file():
+        return None
+    return resolved
 
 
 def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:
@@ -2144,7 +2389,7 @@ def _has_pr_summary_reviewable_state(root: Path, base_ref: str) -> bool:
     return any(group.id != "uncategorized_changed_paths" for group in compact_review.attention)
 
 
-def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
+def _suggestion_candidates(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
     actions: list[SuggestedAction] = []
     goal_tokens = _tokens(snapshot.goal or "")
     goal_phrase = _normalize_goal_phrase(snapshot.goal or "")
@@ -2194,7 +2439,7 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
                 thread.summary,
                 None,
                 url=thread.url,
-                relevance_score=thread.relevance_score,
+                relevance_score=thread.relevance_score + (50 if thread.related_to is None else 0),
             )
         for commit in snapshot.git_context.commits:
             add(
@@ -2206,18 +2451,18 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
                 record_id=commit.short_sha,
                 relevance_score=commit.relevance_score,
             )
-        for path in snapshot.git_context.read_first_paths:
-            add(
-                "medium",
-                "git-context",
-                f"Read changed file {path}",
-                "Recent git or GitHub context points at this file for the work handoff.",
-                None,
-                path=path,
-                relevance_score=_goal_relevance_score(
-                    goal_tokens, goal_phrase=goal_phrase, high_text=path
-                ),
-            )
+    for path in snapshot.read_first_paths:
+        add(
+            "medium",
+            "git-context",
+            f"Read first file {path}",
+            "GitHub, git, or authority context points at this file for the work handoff.",
+            None,
+            path=path,
+            relevance_score=_goal_relevance_score(
+                goal_tokens, goal_phrase=goal_phrase, high_text=path
+            ),
+        )
     if snapshot.handoff_current_state is not None:
         state = snapshot.handoff_current_state
         evidence = "; ".join(state.evidence)
@@ -2462,7 +2707,7 @@ def _ranked_suggestions(snapshot: BriefStateSnapshot) -> list[SuggestedAction]:
             "splendor brief --agent-context",
         )
 
-    return _finalize_suggestions(actions, maintenance_goal=snapshot.maintenance_goal)
+    return actions
 
 
 def _first_command(commands: list[str]) -> str | None:
@@ -2471,6 +2716,32 @@ def _first_command(commands: list[str]) -> str | None:
 
 def _finalize_suggestions(
     actions: list[SuggestedAction], *, maintenance_goal: bool
+) -> list[SuggestedAction]:
+    return _rank_and_cap_actions(
+        actions,
+        maintenance_goal=maintenance_goal,
+        category_limits=_SUGGESTION_CATEGORY_LIMITS,
+        total_limit=_SUGGESTION_LIMIT,
+    )
+
+
+def _finalize_maintenance_actions(
+    actions: list[SuggestedAction], *, maintenance_goal: bool
+) -> list[SuggestedAction]:
+    return _rank_and_cap_actions(
+        [action for action in actions if action.category in _MAINTENANCE_CATEGORIES],
+        maintenance_goal=maintenance_goal,
+        category_limits=_SUGGESTION_CATEGORY_LIMITS,
+        total_limit=_MAINTENANCE_ACTION_LIMIT,
+    )
+
+
+def _rank_and_cap_actions(
+    actions: list[SuggestedAction],
+    *,
+    maintenance_goal: bool,
+    category_limits: dict[str, int],
+    total_limit: int,
 ) -> list[SuggestedAction]:
     by_category: dict[str, int] = {}
     capped: list[tuple[int, SuggestedAction]] = []
@@ -2488,7 +2759,7 @@ def _finalize_suggestions(
     )
     for sequence, action in ordered:
         current_count = by_category.get(action.category, 0)
-        category_limit = _SUGGESTION_CATEGORY_LIMITS.get(action.category, 1)
+        category_limit = category_limits.get(action.category, 1)
         if current_count >= category_limit:
             continue
         by_category[action.category] = current_count + 1
@@ -2504,7 +2775,7 @@ def _finalize_suggestions(
     )
     return [
         replace(action, rank=rank)
-        for rank, (_sequence, action) in enumerate(capped[:_SUGGESTION_LIMIT], start=1)
+        for rank, (_sequence, action) in enumerate(capped[:total_limit], start=1)
     ]
 
 
@@ -2626,6 +2897,7 @@ def render_suggest_next_json(result: SuggestNextResult) -> str:
                 },
             },
             "git_context": asdict(result.git_context),
+            "read_first_paths": result.read_first_paths,
             "handoff_current_state": (
                 asdict(result.handoff_current_state) if result.handoff_current_state else None
             ),
@@ -2681,6 +2953,7 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
             "last_query": asdict(brief.last_query) if brief.last_query else None,
             "warnings": [asdict(warning) for warning in brief.warnings],
             "git_context": asdict(brief.git_context),
+            "read_first_paths": brief.read_first_paths,
             "handoff_current_state": (
                 asdict(brief.handoff_current_state) if brief.handoff_current_state else None
             ),
@@ -2720,6 +2993,7 @@ def render_agent_context_json(brief: ProjectBrief) -> str:
             },
             "source_refs": _agent_context_source_refs(brief),
             "git_context": asdict(brief.git_context),
+            "read_first_paths": brief.read_first_paths,
             "handoff_current_state": (
                 asdict(brief.handoff_current_state) if brief.handoff_current_state else None
             ),

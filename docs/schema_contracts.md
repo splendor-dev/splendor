@@ -338,9 +338,11 @@ Implemented fields:
   deterministic `relevance_score` when available. Runtime authority entries also expose `origin`,
   `curation_state`, and `curation_commands`; provisional uncurated authority is repeated under
   `provisional_context` so agents can use it without confusing it for configured or curated source
-  authority. Maintenance context also exposes runtime-only command guidance and explanatory notes
-  so review-needed wiki state, missing synthesis, queue drift, source freshness, and generated
-  contradiction-review tasks stay discoverable without becoming default human planning records.
+  authority. Handoff JSON also exposes top-level `read_first_paths` so authority-cited files remain
+  visible even when git context is disabled or unavailable. Maintenance context also exposes
+  runtime-only command guidance and explanatory notes so review-needed wiki state, missing
+  synthesis, queue drift, source freshness, and generated contradiction-review tasks stay
+  discoverable without becoming default human planning records.
 - Suggested actions are derived from local git commits, best-effort read-only GitHub issue/PR
   context through `gh` when available, source freshness, queue operator state, invalid/stale/
   contested/review-needed wiki pages, ingested sources missing maintained synthesis follow-up,
@@ -354,12 +356,14 @@ Implemented fields:
   and rank the successor as the next work item. Stale `.agent-plan.md` or roadmap "current" text is
   still useful evidence, but it should be reconciled against merge state and explicit roadmap order
   before becoming the top suggested action.
-- Work-thread surfacing should preserve breadth. The JSON and human handoff can lead with the best
-  open issue or PR, but should also include a bounded set of related open parent/sibling threads
-  when goal terms, labels, issue references, or recent merged PR bodies connect them.
-- Files-to-read ranking may use high-authority path and symbol references as deterministic hints.
-  Paths and tests named by authority docs should rank above broad historical docs when they are
-  directly tied to the goal.
+- Work-thread surfacing preserves breadth. JSON and human handoff lead with the best open issue or
+  PR, and promoted open issues can pull in a bounded set of referenced open parent/sibling issue
+  threads, including referenced open issues fetched by number when they were outside the initial
+  open-issue list, so related work remains visible.
+- Files-to-read ranking uses surfaced authority-doc path references as deterministic hints.
+  Existing repo-relative implementation and test paths named by current/reviewed/PR-linked
+  authority docs can rank alongside recent git and GitHub paths when they are directly tied to the
+  goal.
 - Text-bearing PDF sources are routed through source-type dispatch during ingest. The source
   manifest keeps the same `source_ref`, `source_ref_kind`, and `storage_mode` contract as
   text-native sources, while extracted text artifacts are recorded in `derived_artifacts`.
