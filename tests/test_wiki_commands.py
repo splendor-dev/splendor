@@ -1920,7 +1920,9 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
     ]
     write_config(tmp_path, config)
     (tmp_path / "CLAUDE.md").write_text(
-        "# CLAUDE\n\nASR sanity checks gate M17 effective prosody work.\n",
+        "# CLAUDE\n\n"
+        "ASR sanity checks gate M17 effective prosody work. The implementation surface is "
+        "synthbanshee/tts/renderer.py and tests/unit/test_effective_prosody_cap.py.\n",
         encoding="utf-8",
     )
     docs = tmp_path / "docs"
@@ -1953,11 +1955,35 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
         monkeypatch,
         issues=[
             {
-                "number": 89,
+                "number": 87,
+                "title": "Parent epic: microphone capture parity",
+                "url": "https://github.com/SynthBanshee/SynthBanshee/issues/87",
+                "body": "Parent work thread for the next speech safety follow-up.",
+                "state": "open",
+                "labels": [],
+            },
+            {
+                "number": 88,
+                "title": "Sibling task: renderer policy cleanup",
+                "url": "https://github.com/SynthBanshee/SynthBanshee/issues/88",
+                "body": "Sibling work thread for the same rollout.",
+                "state": "open",
+                "labels": [],
+            },
+            {
+                "number": 91,
                 "title": "fix(tts): M17 ASR follow-up after effective-prosody cap",
-                "url": "https://github.com/SynthBanshee/SynthBanshee/issues/89",
-                "body": "Next open ASR issue: close WER gap. Read synthbanshee/tts/renderer.py "
-                "and tests/unit/test_effective_prosody_cap.py.",
+                "url": "https://github.com/SynthBanshee/SynthBanshee/issues/91",
+                "body": "Next open ASR issue: close WER gap. Keep related parent/sibling "
+                "threads #87, #88, and #92 visible in handoff.",
+                "state": "open",
+                "labels": [],
+            },
+            {
+                "number": 92,
+                "title": "Sibling task: evaluation fixture follow-through",
+                "url": "https://github.com/SynthBanshee/SynthBanshee/issues/92",
+                "body": "Sibling work thread for the same rollout.",
                 "state": "open",
                 "labels": [],
             },
@@ -2005,12 +2031,25 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
     payload = json.loads(capsys.readouterr().out)
     actions = payload["suggested_actions"]
     assert actions[0]["category"] == "work-thread"
-    assert actions[0]["url"] == "https://github.com/SynthBanshee/SynthBanshee/issues/89"
+    assert actions[0]["url"] == "https://github.com/SynthBanshee/SynthBanshee/issues/91"
+    promoted_issue_urls = [
+        action["url"] for action in actions if action["category"] == "work-thread"
+    ]
+    assert promoted_issue_urls == [
+        "https://github.com/SynthBanshee/SynthBanshee/issues/91",
+        "https://github.com/SynthBanshee/SynthBanshee/issues/87",
+        "https://github.com/SynthBanshee/SynthBanshee/issues/88",
+        "https://github.com/SynthBanshee/SynthBanshee/issues/92",
+    ]
     assert all(
         action.get("url") != "https://github.com/SynthBanshee/SynthBanshee/issues/118"
         for action in actions
     )
-    assert payload["git_context"]["threads"][0]["number"] == 89
+    assert payload["git_context"]["threads"][0]["number"] == 91
+    promoted_thread_numbers = [
+        thread["number"] for thread in payload["git_context"]["threads"] if thread["promoted"]
+    ]
+    assert promoted_thread_numbers[:4] == [91, 87, 88, 92]
     irrelevant_threads = [
         thread for thread in payload["git_context"]["threads"] if thread["number"] == 118
     ]
@@ -2049,6 +2088,16 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
     suggest_payload = json.loads(capsys.readouterr().out)
     suggest_categories = [action["category"] for action in suggest_payload["actions"]]
     assert suggest_categories[0] == "work-thread"
+    assert [
+        action["url"]
+        for action in suggest_payload["work_context"]["actions"]
+        if action["category"] == "work-thread"
+    ] == [
+        "https://github.com/SynthBanshee/SynthBanshee/issues/91",
+        "https://github.com/SynthBanshee/SynthBanshee/issues/87",
+        "https://github.com/SynthBanshee/SynthBanshee/issues/88",
+        "https://github.com/SynthBanshee/SynthBanshee/issues/92",
+    ]
     assert all(
         action.get("url") != "https://github.com/SynthBanshee/SynthBanshee/issues/118"
         for action in suggest_payload["actions"]

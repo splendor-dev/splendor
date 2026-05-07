@@ -323,12 +323,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P5.2`
-- Current planned slice: `M19 completion-aware current-state handoff inference`
-- Current PR sub-slice: `M19-P6.1`
+- Previous completed PR sub-slice: `M19-P6.1`
+- Current planned slice: `M19 handoff breadth and policy-cited implementation surfacing`
+- Current PR sub-slice: `M19-P7.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 handoff breadth and policy-cited implementation surfacing`
-- Next planned PR sub-slice: `M19-P7.1`
+- Next planned slice: `M19 cold-start adoption and PATH-safe git lookup`
+- Next planned PR sub-slice: `M19-P8.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -648,3 +648,7 @@ after path repair plus ingest. `M19-P6.1` resumes handoff-inference work by maki
 `brief --agent-context` and `suggest-next` completion-aware when stale planning docs still name a
 slice already present in recent mainline implementation history and the roadmap names the
 next ordered slice.
+`M19-P7.1` broadens handoff context: promoted open work threads now pull in referenced open
+parent/sibling issues, and read-first files get deterministic boosts from implementation/test paths
+cited by surfaced authority docs while keeping maintenance actions in the separate maintenance
+block.

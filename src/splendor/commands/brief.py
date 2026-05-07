@@ -47,9 +47,10 @@ _BRIEF_MATCH_LIMIT = 5
 _BRIEF_PLANNING_LIMIT = 8
 _BRIEF_SOURCE_LIMIT = 5
 _BRIEF_REPORT_COMMANDS = ("lint", "health")
-_SUGGESTION_LIMIT = 8
+_SUGGESTION_LIMIT = 10
 _GIT_CONTEXT_LIMIT = 5
 _GIT_FILE_LIMIT = 8
+_AUTHORITY_READ_FIRST_LIMIT = 5
 _GIT_COMMAND_TIMEOUT_SECONDS = 5
 _HANDOFF_COMPLETION_COMMIT_LIMIT = 12
 _PROMOTED_THREAD_RELEVANCE_FLOOR = 60
@@ -615,7 +616,11 @@ def _collect_brief_state(
     latest_reports = _latest_reports(root, layout)
     last_query = _last_query(layout)
     git_context = _build_git_context(
-        root, normalized_goal or None, include_git=include_git, since=since
+        root,
+        normalized_goal or None,
+        include_git=include_git,
+        since=since,
+        authority_briefs=authority_briefs,
     )
     handoff_current_state = _handoff_current_state(root, git_context)
     return BriefStateSnapshot(
@@ -1356,7 +1361,12 @@ def _goal_relevance_score(
 
 
 def _build_git_context(
-    root: Path, goal: str | None, *, include_git: bool, since: str | None
+    root: Path,
+    goal: str | None,
+    *,
+    include_git: bool,
+    since: str | None,
+    authority_briefs: list[AuthorityBrief],
 ) -> GitContext:
     if not include_git:
         return GitContext(
@@ -1413,7 +1423,7 @@ def _build_git_context(
         warnings.extend(thread_warnings)
     else:
         warnings.append("GitHub remote repository could not be inferred from origin.")
-    read_first_paths = _read_first_paths(commits, threads, goal)
+    read_first_paths = _read_first_paths(commits, threads, goal, root, authority_briefs)
     return GitContext(
         enabled=True,
         available=True,
@@ -1833,7 +1843,7 @@ def _github_threads(
 
     goal_tokens = _tokens(goal or "")
     goal_phrase = _normalize_goal_phrase(goal or "")
-    threads: list[GitThreadBrief] = []
+    thread_texts: list[tuple[GitThreadBrief, str]] = []
     for item in raw_threads:
         title = str(item.get("title") or "")
         body = str(item.get("body") or "")
@@ -1856,22 +1866,28 @@ def _github_threads(
             kind=kind,
             text=" ".join([title, body]),
         )
-        threads.append(
-            GitThreadBrief(
-                kind=kind,
-                number=number,
-                title=title,
-                url=url,
-                state=state,
-                summary=summary,
-                relevance_score=relevance_score,
-                promoted=promoted,
+        thread = GitThreadBrief(
+            kind=kind,
+            number=number,
+            title=title,
+            url=url,
+            state=state,
+            summary=summary,
+            relevance_score=relevance_score,
+            promoted=promoted,
+        )
+        thread_texts.append(
+            (
+                thread,
+                " ".join([title, body]),
             )
         )
+    threads = _promote_related_open_issue_threads(thread_texts)
     if goal_tokens:
         threads.sort(
             key=lambda item: (
                 item.state != "open",
+                not item.promoted,
                 -item.relevance_score,
                 item.kind != "issue",
                 item.number,
@@ -1880,6 +1896,53 @@ def _github_threads(
     else:
         threads.sort(key=lambda item: (item.state != "open", item.kind != "issue", item.number))
     return threads[:_GIT_CONTEXT_LIMIT], warnings
+
+
+def _promote_related_open_issue_threads(
+    thread_texts: list[tuple[GitThreadBrief, str]],
+) -> list[GitThreadBrief]:
+    threads_by_issue_number = {
+        thread.number: thread
+        for thread, _text in thread_texts
+        if thread.kind == "issue" and thread.state == "open"
+    }
+    promoted_issue_numbers = {
+        thread.number
+        for thread, _text in thread_texts
+        if thread.kind == "issue" and thread.state == "open" and thread.promoted
+    }
+    related_numbers: dict[int, int] = {}
+    for thread, text in thread_texts:
+        if thread.number not in promoted_issue_numbers:
+            continue
+        for number in _issue_numbers_in_text(text):
+            related = threads_by_issue_number.get(number)
+            if related is None or related.number == thread.number:
+                continue
+            related_numbers[number] = max(
+                related_numbers.get(number, 0),
+                max(thread.relevance_score - 5, _PROMOTED_THREAD_RELEVANCE_FLOOR),
+            )
+    promoted: list[GitThreadBrief] = []
+    for thread, _text in thread_texts:
+        related_score = related_numbers.get(thread.number)
+        if related_score is not None:
+            thread = replace(
+                thread,
+                promoted=True,
+                relevance_score=max(thread.relevance_score, related_score),
+                summary=(
+                    thread.summary
+                    if thread.summary.startswith("Related to promoted issue")
+                    else f"Related to promoted issue context. {thread.summary}"
+                ),
+            )
+        promoted.append(thread)
+    return promoted
+
+
+def _issue_numbers_in_text(text: str) -> set[int]:
+    return {int(match.group(1)) for match in re.finditer(r"(?<![\w/])#(\d+)\b", text)}
 
 
 def _promote_git_thread(
@@ -1906,7 +1969,11 @@ def _one_line(text: str) -> str:
 
 
 def _read_first_paths(
-    commits: list[GitCommitBrief], threads: list[GitThreadBrief], goal: str | None
+    commits: list[GitCommitBrief],
+    threads: list[GitThreadBrief],
+    goal: str | None,
+    root: Path,
+    authority_briefs: list[AuthorityBrief],
 ) -> list[str]:
     goal_tokens = _tokens(goal or "")
     goal_phrase = _normalize_goal_phrase(goal or "")
@@ -1928,6 +1995,8 @@ def _read_first_paths(
             continue
         for path in _repo_paths_in_text(" ".join([thread.title, thread.summary])):
             scored[path] = max(scored.get(path, 0), thread.relevance_score + 20)
+    for path, score in _authority_cited_read_first_paths(root, authority_briefs, goal).items():
+        scored[path] = max(scored.get(path, 0), score)
     ranked = sorted(scored, key=lambda path: (-scored[path], path))
     return ranked[:_GIT_FILE_LIMIT]
 
@@ -1935,6 +2004,40 @@ def _read_first_paths(
 def _repo_paths_in_text(text: str) -> list[str]:
     candidates = re.findall(r"(?<![\w/.-])(?:[\w.-]+/)+[\w.-]+(?:\.[A-Za-z0-9]+)?", text)
     return sorted(dict.fromkeys(candidate.strip("`.,)") for candidate in candidates))
+
+
+def _authority_cited_read_first_paths(
+    root: Path, authority_briefs: list[AuthorityBrief], goal: str | None
+) -> dict[str, int]:
+    goal_tokens = _tokens(goal or "")
+    goal_phrase = _normalize_goal_phrase(goal or "")
+    scored: dict[str, int] = {}
+    for authority in authority_briefs[:_AUTHORITY_READ_FIRST_LIMIT]:
+        if authority.lifecycle in {"historical", "superseded", "archived"}:
+            continue
+        authority_path = root / authority.path
+        try:
+            body = authority_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for path in _repo_paths_in_text(body):
+            if not _is_existing_read_first_path(root, path):
+                continue
+            path_score = (
+                authority.score
+                + 35
+                + _goal_relevance_score(goal_tokens, goal_phrase=goal_phrase, high_text=path)
+            )
+            scored[path] = max(scored.get(path, 0), path_score)
+    return scored
+
+
+def _is_existing_read_first_path(root: Path, path: str) -> bool:
+    candidate = Path(path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return False
+    absolute = root / candidate
+    return absolute.is_file()
 
 
 def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:

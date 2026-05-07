@@ -1197,12 +1197,13 @@ Current implementation:
   records. Accepted decision records are included as goal-relevant reviewed authority; superseded
   decisions are retained below current decisions as historical context. This extends schema version
   `1` through optional fields only.
-- Open work-thread surfacing should be broad enough for agent handoff. The top-ranked issue or PR
-  can remain first, but related open parent/sibling issues and review threads should remain visible
-  when they match the goal, labels, linked references, or recent merged PR context.
-- Files-to-read ranking should treat high-authority path and symbol references as implementation
-  surface hints. If authority docs name a concrete file, test, command, or symbol involved in the
-  requested work, that surface should receive a deterministic boost without needing vector search.
+- Open work-thread surfacing is broad enough for agent handoff to show the best issue or PR first
+  while retaining a bounded set of related open parent/sibling issues when a promoted open issue
+  names them by issue reference. This keeps a SynthBanshee-style active issue plus sibling/parent
+  work visible without vector search.
+- Files-to-read ranking treats surfaced authority-doc path references as implementation-surface
+  hints. Existing repo-relative implementation and test paths named by ranked current/reviewed/
+  PR-linked authority docs receive a deterministic boost without needing vector search.
 - Briefing is read-only and does not replace `splendor query`; query finds records, while briefing
   packages the surrounding project state needed to resume work.
 

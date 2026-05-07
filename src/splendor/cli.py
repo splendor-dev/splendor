@@ -2558,7 +2558,7 @@ def _print_agent_context(result: ProjectBrief) -> None:
         promoted_threads = [thread for thread in result.git_context.threads if thread.promoted]
         if promoted_threads:
             print("Recent issues and PRs:")
-            for thread in promoted_threads[:3]:
+            for thread in promoted_threads[:5]:
                 print(
                     f"- {thread.kind} #{thread.number} [{thread.state}] "
                     f"score={thread.relevance_score}: {thread.title} ({thread.url})"
