@@ -334,9 +334,9 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P4.1`
-- Current planned slice: `M19 legacy mutation safety`
-- Current PR sub-slice: `M19-P5.1`
+- Previous completed PR sub-slice: `M19-P5.1`
+- Current planned slice: `M19 generated artifact integrity and provenance hygiene`
+- Current PR sub-slice: `M19-P5.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M19 completion-aware current-state handoff inference`
 - Next planned PR sub-slice: `M19-P6.1`
@@ -1312,8 +1312,16 @@ require explicit `--apply` before draining queue jobs or writing source manifest
 pages, run records, queue records, wiki index/log state, pruning changes, or maintained topic-ref
 migrations.
 
+After `M19-P5.1` merged, SynthBanshee follow-up issues identified two generated-state correctness
+gaps that should land before broader handoff inference work resumes: generated
+Evidence/Contradictions excerpts can leak control bytes into markdown/YAML, and path-repaired
+source manifests can keep stale `pipeline_version` provenance after ingest rewrites `last_run_id`.
+
 The remaining M19 sequence is therefore:
 
+- `M19-P5.2` Generated text integrity and manifest provenance fixes: eliminate control-byte
+  corruption from generated Evidence/Contradictions output and keep source-manifest
+  `pipeline_version` provenance coherent when ingest rewrites manifests.
 - `M19-P6.1` Completion-aware current-state handoff inference: reconcile stale dynamic planning
   docs against git/GitHub merge state and ordered roadmap items so completed slices lead to the
   next open slice.
