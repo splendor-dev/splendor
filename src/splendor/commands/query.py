@@ -442,7 +442,11 @@ def _semantic_tokens(text: str) -> list[str]:
 def _contains_token_sequence(tokens: list[str], phrase: tuple[str, ...]) -> bool:
     if not phrase or len(phrase) > len(tokens):
         return False
-    return any(tuple(tokens[index : index + len(phrase)]) == phrase for index in range(len(tokens)))
+    phrase_len = len(phrase)
+    return any(
+        tuple(tokens[index : index + phrase_len]) == phrase
+        for index in range(len(tokens) - phrase_len + 1)
+    )
 
 
 def _score_document(document: _QueryDocument, query_tokens: list[str]) -> int:
@@ -498,8 +502,9 @@ def _default_snippet(text: str) -> str:
 
 def _candidate_score(candidate: str, query_tokens: list[str]) -> int:
     candidate_tokens = _content_tokens(candidate)
+    semantic_tokens = _semantic_tokens(candidate)
     token_score = sum(candidate_tokens.count(token) for token in query_tokens)
-    semantic_score = sum(_semantic_tokens(candidate).count(token) for token in query_tokens)
+    semantic_score = sum(semantic_tokens.count(token) for token in query_tokens)
     if token_score == 0 and semantic_score == 0:
         return 0
     heading = _candidate_heading(candidate)
