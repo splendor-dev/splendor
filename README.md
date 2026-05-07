@@ -646,4 +646,5 @@ records, index/log state, pruning changes, or topic-ref migrations.
 Evidence/Contradictions text corruption and stale source-manifest `pipeline_version` provenance
 after path repair plus ingest. `M19-P6.1` resumes handoff-inference work by making
 `brief --agent-context` and `suggest-next` completion-aware when stale planning docs still name a
-slice already present in mainline git or merged PR history.
+slice already present as the latest mainline implementation boundary and the roadmap names the
+next ordered slice.

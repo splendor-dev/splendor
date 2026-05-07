@@ -1321,9 +1321,10 @@ generated state integrity, while `M19-P6.1` remains the next handoff-inference f
 
 `M19-P5.2` is now implemented on `main`, so the next active M19 handoff feature slice is
 `M19-P6.1`. This slice makes `brief --agent-context` and `suggest-next` reconcile stale dynamic
-planning state with mainline git or merged PR evidence plus the ordered roadmap sequence, so a
+planning state with a bounded ordered roadmap sequence and mainline implementation evidence, so a
 recently completed current slice advances to the next open roadmap item instead of remaining the
-top work recommendation.
+top work recommendation. Merged PR state can corroborate the inference, but docs-only planning
+intake and arbitrary historical mentions do not advance current state by themselves.
 
 The remaining M19 sequence is therefore:
 

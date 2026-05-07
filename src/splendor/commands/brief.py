@@ -1434,11 +1434,7 @@ def _handoff_current_state(root: Path, git_context: GitContext) -> HandoffCurren
     current_slice = planning_state.get("Current PR sub-slice")
     if current_slice is None:
         return None
-    next_slice, source_path = _next_ordered_roadmap_slice(
-        root,
-        current_slice,
-        fallback=planning_state.get("Next planned PR sub-slice"),
-    )
+    next_slice, source_path = _next_ordered_roadmap_slice(root, current_slice)
     if next_slice is None or next_slice == current_slice:
         return None
     evidence = _completed_slice_evidence(root, current_slice, git_context)
@@ -1478,53 +1474,104 @@ def _parse_planning_state_text(text: str) -> dict[str, str]:
     return values
 
 
-def _next_ordered_roadmap_slice(
-    root: Path, current_slice: str, *, fallback: str | None
-) -> tuple[str | None, str | None]:
-    candidates: list[tuple[str, Path]] = []
+def _next_ordered_roadmap_slice(root: Path, current_slice: str) -> tuple[str | None, str | None]:
     roadmap = root / "docs" / "splendor_mvp_to_v1_roadmap.md"
     if roadmap.is_file():
-        candidates.append(("docs/splendor_mvp_to_v1_roadmap.md", roadmap))
-    for relpath in (".agent-plan.md", "README.md"):
-        path = root / relpath
-        if path.is_file():
-            candidates.append((relpath, path))
-    for relpath, path in candidates:
-        ordered = _ordered_slice_tokens(path.read_text(encoding="utf-8"))
+        relpath = "docs/splendor_mvp_to_v1_roadmap.md"
+        ordered = _ordered_roadmap_sequence_tokens(roadmap.read_text(encoding="utf-8"))
         for index, token in enumerate(ordered[:-1]):
             if token == current_slice:
                 return ordered[index + 1], relpath
-    return fallback, None
+    return None, None
 
 
-def _ordered_slice_tokens(text: str) -> list[str]:
+def _ordered_roadmap_sequence_tokens(text: str) -> list[str]:
     ordered: list[str] = []
     seen: set[str] = set()
-    for match in _ROADMAP_SLICE_PATTERN.finditer(text):
-        token = match.group(0)
-        if token in seen:
-            continue
-        seen.add(token)
-        ordered.append(token)
+    for block in _roadmap_sequence_blocks(text):
+        for match in _ROADMAP_SLICE_PATTERN.finditer(block):
+            token = match.group(0)
+            if token in seen:
+                continue
+            seen.add(token)
+            ordered.append(token)
     return ordered
+
+
+def _roadmap_sequence_blocks(text: str) -> list[str]:
+    lines = text.splitlines()
+    blocks: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        normalized = line.lower()
+        is_sequence_intro = (
+            "remaining" in normalized and "sequence" in normalized and line.rstrip().endswith(":")
+        )
+        is_slice_list_heading = line.startswith("### ") and any(
+            phrase in normalized for phrase in ("planned pr slices", "current pr sub-slices")
+        )
+        if not is_sequence_intro and not is_slice_list_heading:
+            index += 1
+            continue
+
+        block_lines = [line]
+        index += 1
+        while index < len(lines):
+            next_line = lines[index]
+            if next_line.startswith("#") and block_lines:
+                break
+            if not next_line.strip():
+                if any(_ROADMAP_SLICE_PATTERN.search(item) for item in block_lines):
+                    break
+                block_lines.append(next_line)
+                index += 1
+                continue
+            if (
+                block_lines
+                and any(_ROADMAP_SLICE_PATTERN.search(item) for item in block_lines)
+                and not next_line.lstrip().startswith(("-", "*", "1."))
+            ):
+                break
+            block_lines.append(next_line)
+            index += 1
+        blocks.append("\n".join(block_lines))
+    return blocks
 
 
 def _completed_slice_evidence(root: Path, current_slice: str, git_context: GitContext) -> list[str]:
     evidence: list[str] = []
     if git_context.enabled and git_context.available:
         for ref in _mainline_refs_for_completion(root, git_context):
-            subject = _git_output(
-                root,
-                ["log", "--first-parent", "--max-count=60", "--pretty=format:%s%n%b", ref],
-                required=False,
+            subject = _git_output(root, ["log", "-1", "--pretty=format:%s", ref], required=False)
+            if not subject or not _text_starts_with_slice(subject, current_slice):
+                continue
+            path_output = (
+                _git_output(
+                    root,
+                    ["show", "--pretty=format:", "--name-only", ref, "--"],
+                    required=False,
+                )
+                or ""
             )
-            if subject and _text_mentions_slice(subject, current_slice):
-                evidence.append(f"mainline git history at {ref} mentions {current_slice}")
+            implementation_paths = [
+                path
+                for path in path_output.splitlines()
+                if path.strip() and not _is_planning_only_path(path.strip())
+            ]
+            if implementation_paths:
+                sample = ", ".join(sorted(implementation_paths)[:3])
+                evidence.append(
+                    f"mainline head at {ref} is {current_slice} with implementation "
+                    f"changes: {sample}"
+                )
                 break
+        if not evidence:
+            return evidence
         for thread in git_context.threads:
             if thread.kind != "pr" or thread.state not in {"merged", "closed"}:
                 continue
-            if _text_mentions_slice(thread.title, current_slice):
+            if _text_starts_with_slice(thread.title, current_slice):
                 evidence.append(
                     f"GitHub PR #{thread.number} is {thread.state} and mentions {current_slice}"
                 )
@@ -1548,9 +1595,15 @@ def _mainline_refs_for_completion(root: Path, git_context: GitContext) -> list[s
     return resolved
 
 
-def _text_mentions_slice(text: str, slice_id: str) -> bool:
+def _text_starts_with_slice(text: str, slice_id: str) -> bool:
+    return re.match(rf"^\s*{re.escape(slice_id)}(?![A-Za-z0-9_.-])", text) is not None
+
+
+def _is_planning_only_path(path: str) -> bool:
     return (
-        re.search(rf"(?<![A-Za-z0-9_.-]){re.escape(slice_id)}(?![A-Za-z0-9_.-])", text) is not None
+        path in {".agent-plan.md", "AGENTS.md", "README.md"}
+        or path.startswith("docs/")
+        or path.startswith("planning/")
     )
 
 
