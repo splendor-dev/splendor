@@ -2643,6 +2643,39 @@ def test_agent_context_m20_fixture_advances_retrieval_closeout_after_merged_slic
         kind="topic",
         body="M20-P1.1 advanced semantic search appears in stale review material.",
     )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "automatic-speech-recognition-closeout.md",
+        title="Automatic speech recognition closeout fixture",
+        page_id="topic-automatic-speech-recognition-closeout",
+        kind="topic",
+        body=(
+            "# Automatic speech recognition closeout fixture\n\n"
+            "The retrieval handoff should recover this full-phrase record for shorthand agent "
+            "goals even though the acronym itself is absent from this page.\n"
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-shorthand-competitor.md",
+        title="ASR shorthand competitor",
+        page_id="topic-asr-shorthand-competitor",
+        kind="topic",
+        body=(
+            "# ASR shorthand competitor\n\n"
+            "ASR appears here as a direct acronym match and competes with richer full-phrase "
+            "retrieval evidence.\n"
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "speech-recognition-background.md",
+        title="Speech recognition background",
+        page_id="topic-speech-recognition-background",
+        kind="topic",
+        body=(
+            "# Speech recognition background\n\n"
+            "General speech recognition background should not satisfy the shorthand fixture by "
+            "itself.\n"
+        ),
+    )
     implementation = tmp_path / "src" / "splendor" / "commands" / "query.py"
     implementation.parent.mkdir(parents=True, exist_ok=True)
     implementation.write_text("SEMANTIC_EXPANSION_READY = True\n", encoding="utf-8")
@@ -2714,6 +2747,25 @@ def test_agent_context_m20_fixture_advances_retrieval_closeout_after_merged_slic
     assert authority_paths.index("docs/stale_external_review.md") > authority_paths.index(
         "docs/splendor_mvp_to_v1_roadmap.md"
     )
+
+    query_backed_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "ASR",
+            "--json",
+        ]
+    )
+    query_backed_payload = json.loads(capsys.readouterr().out)
+    query_match_paths = [match["path"] for match in query_backed_payload["matches"]]
+
+    assert query_backed_exit == 0
+    assert "wiki/topics/asr-shorthand-competitor.md" in query_match_paths
+    assert "wiki/topics/automatic-speech-recognition-closeout.md" in query_match_paths
+    assert "wiki/topics/speech-recognition-background.md" not in query_match_paths
 
 
 def test_agent_context_accepts_single_line_remaining_sequence(

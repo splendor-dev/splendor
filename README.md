@@ -296,9 +296,10 @@ workflow terms. This improves query and agent-context handoff recall for cases s
 matches and without adding a persisted vector store, external service, database, or background
 worker.
 
-`M20-P1.2` closes the first retrieval acceptance gap with deterministic fixture-backed coverage
-rather than new infrastructure. The fixtures assert that richer full-phrase evidence beats
-acronym-only evidence, shorthand queries still recover full-phrase records, current planning
+`M20-P1.2` closes the first retrieval acceptance gap with deterministic fixture-backed regression
+coverage rather than new infrastructure. The fixtures use competing records to assert that richer
+full-phrase evidence beats acronym-only evidence, shorthand queries still recover full-phrase
+records in non-empty corpora, query-backed agent handoff exposes that recovery, current planning
 authority outranks stale review material, and completed slices advance handoff to the next planned
 slice before mutating web workflows begin.
 

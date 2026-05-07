@@ -1379,10 +1379,11 @@ improvement, not a full vector-search implementation: exact lexical evidence sti
 expansion-only matches, and broader retrieval evaluation remains part of the M20 search track.
 Mutating web review workflows stay deferred to `M20-P2.1`.
 
-`M20-P1.2` closes the first retrieval acceptance gap with deterministic public-evaluator-style
-fixtures instead of new index infrastructure. The fixtures cover hocrgen/hocrsyngen-style retry
-bars where exact full-phrase evidence must beat acronym-only evidence, shorthand queries must still
-recover full-phrase records, current planning authority must outrank stale historical review
+`M20-P1.2` closes the first retrieval acceptance gap with deterministic fixture-backed regression
+coverage instead of new index infrastructure. The fixtures cover hocrgen/hocrsyngen-style retry
+bars where exact full-phrase evidence must beat acronym-only evidence under competition, shorthand
+queries must still recover full-phrase records in non-empty corpora, query-backed agent handoff
+must expose that recovery, current planning authority must outrank stale historical review
 material, and completed-slice evidence must advance handoff to the next planned slice. The ordered
 M20 retrieval sequence is therefore:
 

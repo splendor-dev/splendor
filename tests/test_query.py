@@ -277,15 +277,26 @@ def test_run_query_m20_retrieval_fixture_prefers_exact_phrase_over_alias_only(
         page_id="topic-asr-alias-only",
         body=(
             "# ASR shorthand memo\n\n"
-            "ASR is mentioned here as an acronym-only alias without the richer retry evidence.\n"
+            "ASR retry gates mention hocrsyngen, renderer paths, test coverage, and agent retry "
+            "bars, but only through the shorthand acronym.\n"
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-stale-review.md",
+        title="Historical ASR review",
+        page_id="topic-asr-stale-review",
+        body=(
+            "# Historical ASR review\n\n"
+            "Older ASR review notes discuss retry bars but do not carry the full phrase evidence.\n"
         ),
     )
 
     result = run_query(tmp_path, "automatic speech recognition")
 
-    assert [match.path for match in result.matches[:2]] == [
+    assert [match.path for match in result.matches[:3]] == [
         "wiki/topics/asr-rich-evidence.md",
         "wiki/topics/asr-alias-only.md",
+        "wiki/topics/asr-stale-review.md",
     ]
     assert result.matches[0].score > result.matches[1].score
 
@@ -304,11 +315,32 @@ def test_run_query_m20_retrieval_fixture_recovers_full_phrase_from_shorthand(
             "shorthand acronym in its body.\n"
         ),
     )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-shorthand-competitor.md",
+        title="ASR shorthand competitor",
+        page_id="topic-asr-shorthand-competitor",
+        body=(
+            "# ASR shorthand competitor\n\n"
+            "ASR appears here as a direct acronym match and competes for the shorthand query.\n"
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "speech-recognition-history.md",
+        title="Speech recognition historical note",
+        page_id="topic-speech-recognition-history",
+        body=(
+            "# Speech recognition historical note\n\n"
+            "Historical speech recognition notes mention the domain without naming the complete "
+            "three-word phrase.\n"
+        ),
+    )
 
     result = run_query(tmp_path, "ASR")
 
-    assert result.match_count == 1
-    assert result.matches[0].path == "wiki/topics/full-phrase-only.md"
+    paths = [match.path for match in result.matches]
+    assert "wiki/topics/asr-shorthand-competitor.md" in paths
+    assert "wiki/topics/full-phrase-only.md" in paths
+    assert "wiki/topics/speech-recognition-history.md" not in paths
 
 
 def test_run_query_rejects_unknown_source_filter(tmp_path: Path) -> None:
