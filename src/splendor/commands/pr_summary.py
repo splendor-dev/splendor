@@ -14,6 +14,7 @@ from splendor.schemas import SourceRecord
 from splendor.schemas.maintenance import MaintenanceReport
 from splendor.state.source_compat import canonical_source_ref, effective_logical_id
 from splendor.state.source_registry import load_source_record
+from splendor.utils.git import git_command
 
 
 @dataclass(frozen=True)
@@ -199,8 +200,13 @@ def _merge_base(root: Path, *, since: str) -> str:
 
 
 def _git_text(root: Path, args: list[str], *, required: bool = True) -> str | None:
+    command = git_command(*args)
+    if command is None:
+        if required:
+            raise ValueError("git executable not found")
+        return None
     result = subprocess.run(
-        ["git", *args],
+        command,
         cwd=root,
         check=False,
         capture_output=True,

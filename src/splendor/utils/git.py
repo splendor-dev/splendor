@@ -3,12 +3,35 @@
 from __future__ import annotations
 
 import subprocess
+from os import PathLike
 from pathlib import Path
+from shutil import which
+
+
+def git_executable() -> str | None:
+    """Return a PATH-resolved git executable, ignoring unsafe PATH entries."""
+
+    return which("git")
+
+
+def git_command(*args: str | PathLike[str]) -> list[str] | None:
+    executable = git_executable()
+    if executable is None:
+        return None
+    return [executable, *(str(arg) for arg in args)]
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    command = git_command(*args)
+    if command is None:
+        return subprocess.CompletedProcess(
+            ["git", *args],
+            returncode=127,
+            stdout="",
+            stderr="git executable not found",
+        )
     return subprocess.run(
-        ["git", *args],
+        command,
         cwd=root,
         check=False,
         capture_output=True,

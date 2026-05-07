@@ -18,6 +18,13 @@ def test_initialize_workspace_creates_layout(tmp_path: Path) -> None:
     assert config.sources.external_storage_mode == "copy"
     assert result.created_directories
     assert result.created_files
+    assert [group.label for group in result.review_groups] == [
+        "configuration",
+        "human workspace",
+        "source and derived state",
+        "runtime state",
+    ]
+    assert result.review_groups[-1].paths == ["state", "reports"]
 
 
 def test_initialize_workspace_is_idempotent(tmp_path: Path) -> None:

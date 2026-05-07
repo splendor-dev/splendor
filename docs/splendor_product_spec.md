@@ -1156,6 +1156,9 @@ Current implementation:
   visible even when git context is disabled or unavailable. JSON maintenance context also includes
   deterministic command guidance and notes for review-needed wiki pages, missing synthesis
   follow-up, source freshness, queue drift, and generated review tasks.
+- Git lookup for handoff and local provenance uses a PATH-safe resolver that ignores PATH entries
+  that are files or otherwise not searchable directories. A malformed cold-start shell PATH should
+  degrade git context to unavailable rather than crashing the CLI.
 - `splendor suggest-next [--since <ref>] [--no-git] [goal]` renders the ranked action subset
   directly. It is read-only and deterministic. For non-maintenance goals it ranks open work
   threads, recent git/PR context, task-relevant authority docs, active planning records, read-first

@@ -21,6 +21,7 @@ from splendor.schemas import (
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.query_snapshot import last_query_path_for
 from splendor.state.source_compat import canonical_source_ref
+from splendor.utils.git import git_command
 from splendor.utils.planning import (
     iter_planning_paths,
     parse_planning_document,
@@ -1687,8 +1688,13 @@ def _is_planning_only_path(path: str) -> bool:
 
 
 def _git_output(root: Path, args: list[str], *, required: bool = True) -> str | None:
+    command = git_command(*args)
+    if command is None:
+        if required:
+            raise ValueError("git executable not found")
+        return None
     result = subprocess.run(
-        ["git", *args],
+        command,
         cwd=root,
         check=False,
         capture_output=True,

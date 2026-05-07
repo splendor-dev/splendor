@@ -18,6 +18,7 @@ from splendor.state.source_registry import (
     load_source_record,
     register_source,
 )
+from splendor.utils.git import git_command
 from splendor.utils.hashing import sha256_file
 
 _CONFIG_EXTENSIONS = {"json", "yaml", "yml"}
@@ -567,9 +568,12 @@ def _directory_has_entries(path: Path) -> bool:
 
 
 def _git_ignore_context(root: Path) -> GitIgnoreContext:
+    command = git_command("-C", root, "rev-parse", "--show-toplevel")
+    if command is None:
+        return GitIgnoreContext(repo_root=None, workspace_root=root.resolve())
     try:
         top_level = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            command,
             text=True,
             capture_output=True,
             check=False,
@@ -667,15 +671,12 @@ def _git_ignored_repo_paths(
 ) -> set[str]:
     if not repo_paths_by_value or gitignore.repo_root is None:
         return set()
+    command = git_command("-C", gitignore.repo_root, "check-ignore", "--stdin")
+    if command is None:
+        return set()
     try:
         result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(gitignore.repo_root),
-                "check-ignore",
-                "--stdin",
-            ],
+            command,
             input="\n".join(repo_paths_by_value) + "\n",
             text=True,
             capture_output=True,

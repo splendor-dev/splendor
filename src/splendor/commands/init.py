@@ -8,7 +8,13 @@ from pathlib import Path
 import yaml
 
 from splendor.config import config_path_for, default_config, load_config, write_config
-from splendor.layout import INDEX_TEMPLATE, LOG_TEMPLATE, required_directories, resolve_layout
+from splendor.layout import (
+    INDEX_TEMPLATE,
+    LOG_TEMPLATE,
+    ResolvedLayout,
+    required_directories,
+    resolve_layout,
+)
 from splendor.utils.fs import ensure_directory, write_if_missing
 
 KEEP_FILES = [
@@ -42,10 +48,18 @@ KEEP_FILES = [
 
 
 @dataclass(frozen=True)
+class InitReviewGroup:
+    label: str
+    paths: list[str]
+    note: str
+
+
+@dataclass(frozen=True)
 class InitResult:
     root: Path
     created_directories: list[Path]
     created_files: list[Path]
+    review_groups: list[InitReviewGroup]
 
 
 def initialize_workspace(root: Path) -> InitResult:
@@ -80,5 +94,42 @@ def initialize_workspace(root: Path) -> InitResult:
             created_files.append(keep_path)
 
     return InitResult(
-        root=root, created_directories=created_directories, created_files=created_files
+        root=root,
+        created_directories=created_directories,
+        created_files=created_files,
+        review_groups=_init_review_groups(layout),
     )
+
+
+def _init_review_groups(layout: ResolvedLayout) -> list[InitReviewGroup]:
+    return [
+        InitReviewGroup(
+            label="configuration",
+            paths=["splendor.yaml"],
+            note="project defaults and configurable state locations",
+        ),
+        InitReviewGroup(
+            label="human workspace",
+            paths=[
+                layout.wiki_dir.relative_to(layout.root).as_posix(),
+                layout.planning_dir.relative_to(layout.root).as_posix(),
+            ],
+            note="reviewed wiki and planning markdown",
+        ),
+        InitReviewGroup(
+            label="source and derived state",
+            paths=[
+                layout.raw_dir.relative_to(layout.root).as_posix(),
+                layout.derived_dir.relative_to(layout.root).as_posix(),
+            ],
+            note="imported sources and generated parsed artifacts",
+        ),
+        InitReviewGroup(
+            label="runtime state",
+            paths=[
+                layout.state_dir.relative_to(layout.root).as_posix(),
+                layout.reports_dir.relative_to(layout.root).as_posix(),
+            ],
+            note="machine-readable manifests, queues, runs, and reports",
+        ),
+    ]

@@ -90,6 +90,10 @@ The repo now contains:
 - `state/` with source manifests plus queue/run/query state
 - `reports/` with timestamped lint and health reports
 
+`splendor init` prints deterministic state review groups for the generated configuration, human
+workspace, source/derived state, and runtime state paths. In cold-start repositories, use those
+groups as the first review/commit checklist before seeding sources or opening generated-state PRs.
+
 For a fuller walkthrough, see [docs/guides/quickstart.md](docs/guides/quickstart.md).
 
 ## Example Workspace
@@ -323,12 +327,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M19-P6.1`
-- Current planned slice: `M19 handoff breadth and policy-cited implementation surfacing`
-- Current PR sub-slice: `M19-P7.1`
+- Previous completed PR sub-slice: `M19-P7.1`
+- Current planned slice: `M19 cold-start adoption and PATH-safe git lookup`
+- Current PR sub-slice: `M19-P8.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 cold-start adoption and PATH-safe git lookup`
-- Next planned PR sub-slice: `M19-P8.1`
+- Next planned slice: `M20 advanced semantic search or vector index`
+- Next planned PR sub-slice: `M20-P1.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -652,3 +656,5 @@ next ordered slice.
 parent/sibling issues, and read-first files get deterministic boosts from implementation/test paths
 cited by surfaced authority docs while keeping maintenance actions in the separate maintenance
 block.
+`M19-P8.1` is in progress: it focuses the final M19 durability slice on cold-start state review
+groups and PATH-safe git lookup without starting M20 vector search or mutating web workflow bets.

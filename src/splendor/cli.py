@@ -979,6 +979,10 @@ def handle_init(args: argparse.Namespace) -> int:
     print(f"Initialized Splendor workspace at {result.root}")
     print(f"Created directories: {len(result.created_directories)}")
     print(f"Created files: {len(result.created_files)}")
+    print("State review groups:")
+    for group in result.review_groups:
+        paths = ", ".join(group.paths)
+        print(f"- {group.label}: {paths} ({group.note})")
     return 0
 
 
