@@ -18,6 +18,7 @@ from splendor.schemas import (
     QuerySnapshot,
     SourceRecord,
 )
+from splendor.state.paths import resolve_workspace_path
 from splendor.state.query_snapshot import last_query_path_for
 from splendor.state.source_compat import canonical_source_ref
 from splendor.utils.planning import (
@@ -1986,6 +1987,10 @@ def _fetch_referenced_open_issue_threads(
             warnings.append(f"Could not run gh issue view {number}: {exc}")
             continue
         if result.returncode != 0:
+            message = (
+                result.stderr.strip() or result.stdout.strip() or f"gh issue view {number} failed"
+            )
+            warnings.append(f"gh issue view {number} failed: {message}")
             continue
         try:
             payload = json.loads(result.stdout or "{}")
@@ -2168,13 +2173,13 @@ def _is_existing_read_first_path(root: Path, path: str) -> bool:
 
 
 def _safe_existing_repo_file(root: Path, path: str) -> Path | None:
-    candidate = Path(path)
-    if candidate.is_absolute() or ".." in candidate.parts:
+    try:
+        resolved = resolve_workspace_path(root, path, context="Authority document")
+    except ValueError:
         return None
-    absolute = root / candidate
-    if not absolute.is_file():
+    if not resolved.is_file():
         return None
-    return absolute
+    return resolved
 
 
 def _recent_sources(sources: list[SourceRecord]) -> list[BriefSourceItem]:

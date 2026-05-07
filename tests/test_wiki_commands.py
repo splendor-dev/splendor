@@ -2232,11 +2232,59 @@ def test_agent_context_skips_non_repo_authority_paths_for_read_first(
         supersedes=[],
         superseded_by=None,
     )
+    symlink = tmp_path / "docs" / "outside-policy-link.md"
+    symlink.parent.mkdir(parents=True)
+    symlink.symlink_to(outside)
+    symlinked = brief_module.AuthorityBrief(
+        rank=3,
+        path="docs/outside-policy-link.md",
+        title="Symlinked outside policy",
+        role="current-authority",
+        freshness="current",
+        lifecycle="current",
+        score=500,
+        reason="Synthetic symlinked non-repo authority path.",
+        origin="configured-authority",
+        curation_state="configured",
+        curation_commands=[],
+        issue_refs=[],
+        pr_refs=[],
+        supersedes=[],
+        superseded_by=None,
+    )
 
     assert (
-        brief_module._authority_cited_read_first_paths(tmp_path, [traversal, absolute], "policy")
+        brief_module._authority_cited_read_first_paths(
+            tmp_path, [traversal, absolute, symlinked], "policy"
+        )
         == {}
     )
+
+
+def test_referenced_issue_fetch_warning_includes_failed_view(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_gh(tmp_path, monkeypatch, issues=[], prs=[])
+    active_thread = brief_module.GitThreadBrief(
+        kind="issue",
+        number=91,
+        title="M17 ASR active thread",
+        url="https://github.com/SynthBanshee/SynthBanshee/issues/91",
+        state="open",
+        summary="Continue ASR work and keep #87 visible.",
+        relevance_score=90,
+        promoted=True,
+        related_to=None,
+    )
+
+    fetched, warnings = brief_module._fetch_referenced_open_issue_threads(
+        tmp_path,
+        "SynthBanshee/SynthBanshee",
+        [(active_thread, "Continue ASR work and keep #87 visible.")],
+        {"asr"},
+        "asr",
+    )
+
+    assert fetched == []
+    assert warnings == ["gh issue view 87 failed: issue not found"]
 
 
 def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(
