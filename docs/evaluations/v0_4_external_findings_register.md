@@ -37,6 +37,29 @@ now affect the accepted M19 sequence because they expose generated-state correct
 | V04-F13 | Generated Evidence/Contradictions text can leak control bytes. | SynthBanshee follow-up issue #165 reports UTF-8 punctuation from clean source docs becoming BEL, partial UTF-8 bytes, digit substitutions, and YAML `\xNN` escapes in generated wiki pages and review tasks. | Ingest generation, evidence extraction, wiki/task markdown, YAML frontmatter | P1 | Fix the encoding/sanitization path and add regression coverage proving generated markdown/YAML contains no control bytes. Treat as an immediate bugfix before broader handoff work. |
 | V04-F14 | Manifest `pipeline_version` provenance can stay stale after path repair plus ingest. | SynthBanshee follow-up issue #164 reports manifests retaining old `pipeline_version` values after `source update-path` and ingest rewrite `last_run_id`, while run records and wiki pages reflect the newer Splendor version. | Source manifests, ingest provenance, source path repair | P1 | Refresh manifest `pipeline_version` whenever ingest/source refresh rewrites manifest provenance, or document immutable semantics with a migration path. Include this in `M19-P5.2` with V04-F13. |
 
+## Post-v0.5 Disposition
+
+The v0.5 SynthBanshee integrated-use review closes the M19 blocker loop and turns this register into
+historical evidence plus follow-up triage. The original recommended actions below are no longer the
+active implementation queue unless the disposition says a follow-up issue remains open.
+
+| ID | v0.5 disposition | Current tracking |
+| --- | --- | --- |
+| V04-F1 | Implemented by `M19-P5.1`: legacy mutating maintenance/workflow verbs now preview by default and require explicit `--apply` for writes. | Closed M19 work. |
+| V04-F2 | Implemented by `M19-P6.1`: handoff inference reconciles stale dynamic planning docs with ordered roadmap and recent mainline evidence. | Closed M19 work. |
+| V04-F3 | Implemented by `M19-P7.1`: bounded related parent/sibling work threads now surface; issue #156 is closed. | Closed M19 work. |
+| V04-F4 | Implemented by `M19-P8.1` through first-run state location/review clarity. The v0.5 integrated-use reviewer accepted this from release notes and local coverage, but did not rerun a fresh cold-directory test. | Closed M19 blocker; no new issue unless fresh cold-start use reproduces churn. |
+| V04-F5 | Implemented by `M19-P8.1`: PATH-safe git lookup no longer crashes on empty or malformed PATH probes, and regression coverage exists. | Closed M19 work. |
+| V04-F6 | Materially improved by `M19-P7.1`, but goal phrasing can still displace authority-cited paths from the top read-first slots. | Follow-up #160 under Milestone 20. |
+| V04-F7 | Materially improved by `M19-P7.1`, but one `splendor wiki suggest <source-id>` maintenance action still leaks into the work footer. | Follow-up #161 under Milestone 20. |
+| V04-F8 | Partially improved for JSON, but human no-diff `pr-summary` output still needs a louder short-circuit. | Follow-up #162 under Milestone 20. |
+| V04-F9 | Partially improved: `mutation` is now present, but `queue clean --json` still emits redundant legacy aliases. | Follow-up #163 under Milestone 20. |
+| V04-F10 | Not addressed by M19; still acceptable polish. | Open only if first-run scan ranking becomes relevant to a later slice. |
+| V04-F11 | Not addressed by M19; still acceptable polish. | Open only if ingest progress becomes relevant to a later slice. |
+| V04-F12 | Not addressed by M19; still acceptable polish. | Open only if lint link resolution is reproduced. |
+| V04-F13 | Implemented by `M19-P5.2`: generated text integrity checks and sanitization cover control-byte leakage. | Closed M19 work. |
+| V04-F14 | Implemented by `M19-P5.2`: manifest `pipeline_version` provenance is refreshed when ingest rewrites manifest provenance. | Closed M19 work. |
+
 ## Validated Improvements
 
 | ID | Improvement | Evidence | Follow-up |
@@ -46,10 +69,11 @@ now affect the accepted M19 sequence because they expose generated-state correct
 | V04-S3 | Maintenance separation is materially better. | SynthBanshee and hocrgen saw maintenance state separated from primary work more clearly than v0.3. | Avoid regressing this when adding more issue/context signals. |
 | V04-S4 | Provisional uncurated context is useful. | Partners noticed relevant uncurated docs appearing with curation hints. | Keep provisional labels clear and avoid silently promoting unreviewed sources to authority. |
 
-## Suggested Sequencing
+## Historical M19 Sequencing
 
-The review round set the original M19 order. The post-round follow-up findings above insert one
-generated-state safety slice before completion-aware handoff inference resumes:
+The review round set the original M19 order. The post-round follow-up findings above inserted one
+generated-state safety slice before completion-aware handoff inference resumed. This sequence is now
+complete as of v0.5.0:
 
 1. **`M19-P5.1` safety first:** address V04-F1, because mixed mutation semantics can destroy
    exploratory handoff safety.
@@ -61,11 +85,13 @@ generated-state safety slice before completion-aware handoff inference resumes:
 4. **`M19-P7.1` handoff breadth third:** address V04-F3 and V04-F6 together if scope allows.
 5. **`M19-P8.1` cold-start adoption fourth:** address V04-F4 plus the narrower V04-F5 robustness
    bug.
-6. **Polish later:** address V04-F7 through V04-F12 as scoped follow-ups or opportunistic fixes.
+6. **Polish later:** V04-F7 through V04-F12 remain scoped follow-ups only where the post-v0.5
+   disposition table names an active issue.
 
 ## Non-Decisions
 
-- This register records the accepted M19 sequencing but does not implement any of those slices.
-- This register does not update product or roadmap commitments.
+- This register records the historical M19 sequencing and the post-v0.5 disposition; it is still not
+  itself a committed roadmap.
+- This register does not implement product behavior.
 - This register does not change the v0.4.0 release notes.
 - This register does not decide whether raw external notes should remain unedited long term.

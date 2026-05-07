@@ -16,8 +16,10 @@ Raw inputs:
 
 The v0.5.0 review accepts the M19 blocker loop as closed. Legacy mutating preview/apply safety,
 generated-text integrity, completion-aware handoff inference, broader related work-thread
-surfacing, cold-start/PATH hardening, and the main policy-cited read-first behavior are materially
-better than v0.4.0. No v0.5.x patch loop is justified by this review.
+surfacing, PATH-safe git lookup, and the main policy-cited read-first behavior are materially better
+than v0.4.0. The reviewer did not independently exercise cold-start/custom-layout behavior in a
+fresh directory; that part of M19-P8.1 is accepted here from release notes and local implementation
+coverage rather than external cold-dir validation. No v0.5.x patch loop is justified by this review.
 
 The remaining items are polish follow-ups that can ride with Milestone 20 work:
 
@@ -43,7 +45,7 @@ work threads instead of a single open issue.
 
 ## Planning Impact
 
-The review supports moving the active roadmap state from the final M19 durability slice to the first
-M20 product bet. M20 should start with `M20-P1.1` advanced semantic search or vector index work,
-while keeping #160-#163 visible as bounded polish follow-ups that should not reopen the M19 cleanup
-loop.
+The review supports closing the final M19 durability slice, recording this intake as `M20-P0.1`,
+and then moving to the first M20 product bet. After this intake, M20 should start with `M20-P1.1`
+advanced semantic search or vector index work while keeping #160-#163 visible as bounded polish
+follow-ups that should not reopen the M19 cleanup loop.

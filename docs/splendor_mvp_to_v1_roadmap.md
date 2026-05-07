@@ -335,11 +335,11 @@ annotations plus linked review tasks for explicit conflicts, richer query metada
 deterministic lint/health validation for those cross-links.
 
 - Previous completed PR sub-slice: `M19-P8.1`
-- Current planned slice: `M20 advanced semantic search or vector index`
-- Current PR sub-slice: `M20-P1.1`
+- Current planned slice: `M20 review intake and planning handoff`
+- Current PR sub-slice: `M20-P0.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 mutating web review workflows`
-- Next planned PR sub-slice: `M20-P2.1`
+- Next planned slice: `M20 advanced semantic search or vector index`
+- Next planned PR sub-slice: `M20-P1.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1349,19 +1349,23 @@ The completed M19 sequence is therefore:
 
 The v0.5 SynthBanshee integrated-use review in
 `docs/evaluations/v0_5_synthbanshee_integrated_use/summary.md` accepts the M19 blocker loop as
-closed. It leaves four bounded polish issues for later work: #160 goal-sensitive policy-cited
-read-first ranking, #161 one maintenance line leaking into the work footer, #162 too-quiet no-diff
-human `pr-summary`, and #163 mutation JSON compatibility aliases.
+closed. It exercised the PATH-safe git lookup fix directly, while treating the cold-start layout
+changes as accepted from release notes and local implementation coverage rather than from a fresh
+cold-directory retest. It leaves four bounded polish issues for later work: #160 goal-sensitive
+policy-cited read-first ranking, #161 one maintenance line leaking into the work footer, #162
+too-quiet no-diff human `pr-summary`, and #163 mutation JSON compatibility aliases.
 
 ## Milestone 20 — post-v1 product bets
 
 ### Goal
 Start larger product bets now that the v0.5 integrated-use review accepts the M19 durability loop
-as closed. The first M20 slice should focus on semantic retrieval or vector-index quality without
-absorbing mutating web workflows or reopening the closed M19 blocker sequence. Remaining M19 polish
-issues can ride along only when they are directly relevant to the selected M20 implementation.
+as closed. After the `M20-P0.1` intake handoff, the first M20 product slice should focus on semantic
+retrieval or vector-index quality without absorbing mutating web workflows or reopening the closed
+M19 blocker sequence. Remaining M19 polish issues can ride along only when they are directly
+relevant to the selected M20 implementation.
 
 ### Candidate PR slices
+- `M20-P0.1` Record v0.5 SynthBanshee integrated-use review intake and M20 issue disposition.
 - `M20-P1.1` Add advanced semantic search or a vector index (#118).
 - `M20-P2.1` Explore mutating web review workflows (#119).
 - Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
