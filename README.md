@@ -324,7 +324,7 @@ the source manifest, and kept separate from parsed PDF artifacts.
 ## What Comes Next
 
 - Previous completed PR sub-slice: `M19-P5.1`
-- Current planned slice: `M19 generated artifact integrity and provenance hygiene`
+- Current planned slice: `M19 post-v0.4 generated-state safety follow-ups`
 - Current PR sub-slice: `M19-P5.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M19 completion-aware current-state handoff inference`
