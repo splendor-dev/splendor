@@ -257,6 +257,60 @@ def test_run_query_finds_extracted_ocr_source_summary_text(tmp_path: Path) -> No
     assert "Extracted OCR diagram evidence" in result.matches[0].snippet
 
 
+def test_run_query_m20_retrieval_fixture_prefers_exact_phrase_over_alias_only(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-rich-evidence.md",
+        title="Automatic speech recognition retry gates",
+        page_id="topic-asr-rich-evidence",
+        body=(
+            "# Automatic speech recognition retry gates\n\n"
+            "The hocrsyngen handoff fixture requires automatic speech recognition evidence, "
+            "WER retry bars, renderer paths, and test coverage before the next agent retry.\n"
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-alias-only.md",
+        title="ASR shorthand memo",
+        page_id="topic-asr-alias-only",
+        body=(
+            "# ASR shorthand memo\n\n"
+            "ASR is mentioned here as an acronym-only alias without the richer retry evidence.\n"
+        ),
+    )
+
+    result = run_query(tmp_path, "automatic speech recognition")
+
+    assert [match.path for match in result.matches[:2]] == [
+        "wiki/topics/asr-rich-evidence.md",
+        "wiki/topics/asr-alias-only.md",
+    ]
+    assert result.matches[0].score > result.matches[1].score
+
+
+def test_run_query_m20_retrieval_fixture_recovers_full_phrase_from_shorthand(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "full-phrase-only.md",
+        title="Automatic speech recognition policy",
+        page_id="topic-full-phrase-only",
+        body=(
+            "# Automatic speech recognition policy\n\n"
+            "The policy names automatic speech recognition validation and never uses the "
+            "shorthand acronym in its body.\n"
+        ),
+    )
+
+    result = run_query(tmp_path, "ASR")
+
+    assert result.match_count == 1
+    assert result.matches[0].path == "wiki/topics/full-phrase-only.md"
+
+
 def test_run_query_rejects_unknown_source_filter(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
 
