@@ -277,6 +277,11 @@ Implemented fields:
   shared mutation object. Without `--apply`, actionable jobs are reported as planned and no queue,
   source-summary, run, index, or log state is written. `--apply` drains eligible jobs and reports
   actual written records in `mutation.written`.
+- Successful ingest rewrites the touched source manifest's run provenance as a current
+  materialization: when `last_run_id`, generated run IDs, linked generated pages, derived
+  artifacts, or provenance links are refreshed, `pipeline_version` is refreshed to the current
+  Splendor pipeline version. Generated markdown and YAML frontmatter preserve readable UTF-8
+  punctuation and must not emit ASCII control bytes other than tab/newline/carriage return.
 - `splendor wiki compile <source-id|title|path>` remains non-mutating unless a maintained target
   page is selected and `--apply --proposal-hash <hash>` is supplied. Without `--page`, it reports
   the review-gated contract plus ranked maintained-page suggestions and ready-to-run

@@ -395,7 +395,10 @@ Used for:
 - source summary pages
 - architecture pages
 
-These remain markdown-first, but include standardized frontmatter for discoverability and provenance.
+These remain markdown-first, but include standardized frontmatter for discoverability and
+provenance. Generated page bodies and YAML frontmatter should preserve readable UTF-8 punctuation
+from source material and generated review evidence; control bytes are not valid generated text
+except for normal whitespace.
 
 ## 11. Core Object Schemas
 
@@ -428,6 +431,10 @@ Suggested fields:
 
 Field meanings:
 
+- `pipeline_version`
+  - The Splendor pipeline version that last materialized or refreshed the source manifest's
+    generated-state provenance. Ingest refreshes this field whenever it writes a new `last_run_id`
+    or generated-page/run provenance for an existing source record.
 - `source_ref`
   - Canonical identifier for the source the user registered.
   - For in-repo files this should usually be a repo-relative path.

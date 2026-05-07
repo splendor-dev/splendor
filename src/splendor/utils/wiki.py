@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from splendor.layout import ResolvedLayout
 from splendor.schemas import KnowledgePageFrontmatter
 from splendor.utils.fs import write_text_atomic
+from splendor.utils.text_integrity import sanitize_generated_text, sanitize_generated_value
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,8 @@ class ParsedWikiPage:
 
 
 def render_frontmatter(record: KnowledgePageFrontmatter) -> str:
-    return yaml.safe_dump(record.model_dump(mode="json"), sort_keys=False).strip()
+    payload = sanitize_generated_value(record.model_dump(mode="json"))
+    return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True).strip()
 
 
 def parse_wiki_markdown(path: Path) -> ParsedWikiPage:
@@ -57,6 +59,7 @@ def parse_wiki_markdown(path: Path) -> ParsedWikiPage:
 
 
 def _fenced_extract_block(extract: str) -> str:
+    extract = sanitize_generated_text(extract)
     max_backtick_run = 0
     current_run = 0
     for char in extract:
@@ -80,12 +83,16 @@ def render_source_summary_page(
     contradictions: list[str] | None = None,
     provenance: list[str],
 ) -> str:
+    source_section = sanitize_generated_text(source_section)
+    summary = sanitize_generated_text(summary)
+    key_facts = [sanitize_generated_text(line) for line in key_facts]
     key_fact_lines = "\n".join(f"- {line}" for line in key_facts)
     contradiction_section = ""
     if contradictions:
+        contradictions = [sanitize_generated_text(line) for line in contradictions]
         contradiction_lines = "\n".join(f"- {line}" for line in contradictions)
         contradiction_section = f"## Contradictions\n\n{contradiction_lines}\n\n"
-    provenance_lines = "\n".join(f"- {line}" for line in provenance)
+    provenance_lines = "\n".join(f"- {sanitize_generated_text(line)}" for line in provenance)
     extract_section = ""
     if extract is not None:
         extract_section = f"## Extract\n\n{_fenced_extract_block(extract)}\n\n"

@@ -786,7 +786,13 @@ def _mark_attempt_failed(
         next_attempt_at=next_attempt_at,
     )
     if manifest_path is not None and source is not None and run_id is not None:
-        failed_source = source.model_copy(update={"status": "failed", "last_run_id": run_id})
+        failed_source = source.model_copy(
+            update={
+                "status": "failed",
+                "last_run_id": run_id,
+                "pipeline_version": __version__,
+            }
+        )
         write_source_record(manifest_path, failed_source)
 
 
@@ -1275,6 +1281,7 @@ def run_ingest_job(root: Path, queue_path: Path) -> IngestResult:
             update={
                 "status": "ingested",
                 "last_run_id": run_id,
+                "pipeline_version": __version__,
                 "generated_by_run_ids": sorted(set([*source.generated_by_run_ids, run_id])),
                 "linked_pages": sorted(set([*source.linked_pages, page_relpath])),
                 "derived_artifacts": sorted(set([*source.derived_artifacts, *derived_artifacts])),
