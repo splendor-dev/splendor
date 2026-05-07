@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -3171,9 +3172,13 @@ def test_agent_context_git_lookup_ignores_path_file_entries(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
     initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    git_path = shutil.which("git")
+    assert git_path is not None
     path_entry = tmp_path / "not-a-directory"
     path_entry.write_text("not a search directory\n", encoding="utf-8")
-    monkeypatch.setenv("PATH", str(path_entry))
+    monkeypatch.setenv("PATH", f"{path_entry}{os.pathsep}{Path(git_path).parent}")
     capsys.readouterr()
 
     exit_code = main(["--root", str(tmp_path), "brief", "--agent-context", "handoff", "--json"])
@@ -3181,8 +3186,9 @@ def test_agent_context_git_lookup_ignores_path_file_entries(
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["git_context"]["enabled"] is True
-    assert payload["git_context"]["available"] is False
-    assert payload["git_context"]["warnings"] == ["Not inside a git worktree."]
+    assert payload["git_context"]["available"] is True
+    assert payload["git_context"]["branch"] == "main"
+    assert payload["git_context"]["repository"] == "example/project"
 
 
 def test_agent_context_explicit_since_empty_range_does_not_fallback_to_head(

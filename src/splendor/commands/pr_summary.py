@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -14,7 +13,7 @@ from splendor.schemas import SourceRecord
 from splendor.schemas.maintenance import MaintenanceReport
 from splendor.state.source_compat import canonical_source_ref, effective_logical_id
 from splendor.state.source_registry import load_source_record
-from splendor.utils.git import git_command
+from splendor.utils.git import run_git
 
 
 @dataclass(frozen=True)
@@ -200,18 +199,7 @@ def _merge_base(root: Path, *, since: str) -> str:
 
 
 def _git_text(root: Path, args: list[str], *, required: bool = True) -> str | None:
-    command = git_command(*args)
-    if command is None:
-        if required:
-            raise ValueError("git executable not found")
-        return None
-    result = subprocess.run(
-        command,
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    result = run_git(root, args)
     if result.returncode != 0:
         if required:
             message = result.stderr.strip() or result.stdout.strip() or "git command failed"

@@ -24,7 +24,7 @@ def test_initialize_workspace_creates_layout(tmp_path: Path) -> None:
         "source and derived state",
         "runtime state",
     ]
-    assert result.review_groups[-1].paths == ["state", "reports"]
+    assert result.review_groups[-1].paths == ["state", "state/manifests/sources", "reports"]
 
 
 def test_initialize_workspace_is_idempotent(tmp_path: Path) -> None:
@@ -33,6 +33,47 @@ def test_initialize_workspace_is_idempotent(tmp_path: Path) -> None:
 
     assert second.created_directories == []
     assert second.created_files == []
+
+
+def test_initialize_workspace_uses_configured_layout_for_keep_files(tmp_path: Path) -> None:
+    (tmp_path / "splendor.yaml").write_text(
+        "\n".join(
+            [
+                "schema_version: '1'",
+                "project_name: custom",
+                "layout:",
+                "  raw_dir: .splendor/raw",
+                "  raw_sources_dir: .splendor/raw/sources",
+                "  raw_assets_dir: .splendor/raw/assets",
+                "  raw_imports_dir: .splendor/raw/imports",
+                "  derived_dir: .splendor/derived",
+                "  derived_ocr_dir: .splendor/derived/ocr",
+                "  derived_parsed_dir: .splendor/derived/parsed",
+                "  derived_metadata_dir: .splendor/derived/metadata",
+                "  derived_summaries_dir: .splendor/derived/summaries",
+                "  wiki_dir: .splendor/wiki",
+                "  planning_dir: .splendor/planning",
+                "  state_dir: .splendor/state",
+                "  reports_dir: .splendor/reports",
+                "  source_records_dir: .splendor/state/manifests/sources",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = initialize_workspace(tmp_path)
+
+    assert (tmp_path / ".splendor" / "state" / "manifests" / "sources" / ".gitkeep").exists()
+    assert (tmp_path / ".splendor" / "wiki" / "index.md").exists()
+    assert not (tmp_path / "state").exists()
+    assert not (tmp_path / "wiki").exists()
+    assert not (tmp_path / "reports").exists()
+    assert result.review_groups[-1].paths == [
+        ".splendor/state",
+        ".splendor/state/manifests/sources",
+        ".splendor/reports",
+    ]
 
 
 def test_initialize_workspace_repairs_blank_project_name(tmp_path: Path) -> None:

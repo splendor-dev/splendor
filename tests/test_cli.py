@@ -59,7 +59,7 @@ def test_cli_init_command(tmp_path: Path, capsys) -> None:
     captured = capsys.readouterr()
     assert "Initialized Splendor workspace" in captured.out
     assert "State review groups:" in captured.out
-    assert "- runtime state: state, reports" in captured.out
+    assert "- runtime state: state, state/manifests/sources, reports" in captured.out
 
 
 def test_cli_version_flag_prints_package_version(capsys) -> None:

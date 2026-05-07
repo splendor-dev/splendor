@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,7 +22,7 @@ from splendor.schemas import (
 from splendor.state.paths import resolve_workspace_path
 from splendor.state.source_compat import canonical_source_ref, logical_source_id_for_ref
 from splendor.state.source_registry import load_source_record
-from splendor.utils.git import git_command
+from splendor.utils.git import run_git
 from splendor.utils.planning import iter_planning_paths, parse_planning_document, planning_directory
 from splendor.utils.wiki import parse_wiki_markdown
 
@@ -853,19 +852,7 @@ def _current_main_head_slice(root: Path) -> str | None:
 
 
 def _git_output(root: Path, *args: str) -> str | None:
-    command = git_command(*args)
-    if command is None:
-        return None
-    try:
-        result = subprocess.run(
-            command,
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return None
+    result = run_git(root, args)
     if result.returncode != 0:
         return None
     return result.stdout.strip()

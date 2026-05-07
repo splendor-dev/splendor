@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Iterable
 from os import PathLike
 from pathlib import Path
 from shutil import which
@@ -21,22 +22,42 @@ def git_command(*args: str | PathLike[str]) -> list[str] | None:
     return [executable, *(str(arg) for arg in args)]
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    command = git_command(*args)
+def run_git(
+    root: Path,
+    args: Iterable[str | PathLike[str]],
+    *,
+    input: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    args_list = list(args)
+    fallback_command = ["git", *(str(arg) for arg in args_list)]
+    command = git_command(*args_list)
     if command is None:
         return subprocess.CompletedProcess(
-            ["git", *args],
+            fallback_command,
             returncode=127,
             stdout="",
             stderr="git executable not found",
         )
-    return subprocess.run(
-        command,
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        return subprocess.run(
+            command,
+            cwd=root,
+            input=input,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        return subprocess.CompletedProcess(
+            fallback_command,
+            returncode=127,
+            stdout="",
+            stderr=str(exc),
+        )
+
+
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return run_git(root, args)
 
 
 def captured_source_commit(root: Path, source_path: Path) -> str | None:
