@@ -176,28 +176,29 @@ and prints exact `source refresh`/`ingest --pending` next commands for stale pat
 the same preview for machine handoff, and `--report PATH` writes only an explicit freshness report.
 Relative report paths use the current working directory.
 `splendor workspace refresh --changed` composes that freshness view with the existing
-supersession-aware refresh path for changed curated workspace-backed sources. Add `--ingest` to
-ingest only queue jobs created or reused for the refreshed sources; unrelated pending ingest jobs
-remain queued. `--rebuild-index`, `--prune-superseded`, and `--update-topic-refs` can run
-standalone or in the same maintenance invocation. A one-pass changed-source cleanup can use
-`workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index`;
-pruning still reports skipped candidates when successor source-summary pages do not exist yet, so
-interrupted workflows can rerun `workspace refresh --prune-superseded` after successors are
-ingested. JSON output reports both initial and final freshness counts, skipped unresolved curated
-sources, failed changed-source refreshes, targeted ingest results, index rebuilds, pruning, and
-topic-ref migrations. The command does not discover or register uncurated files or mutate
-maintained synthesis content beyond explicit source-ref migration.
+supersession-aware refresh path for changed curated workspace-backed sources. It now previews by
+default and requires `--apply` before writing manifests, queue records, source summaries, index/log
+state, pruning changes, or maintained topic-ref migrations. Add `--ingest` to plan/apply ingest
+only for queue jobs created or reused for refreshed sources; unrelated pending ingest jobs remain
+queued. `--rebuild-index`, `--prune-superseded`, and `--update-topic-refs` can run standalone or in
+the same maintenance invocation. A one-pass changed-source cleanup can use
+`workspace refresh --changed --ingest --prune-superseded --update-topic-refs --rebuild-index
+--apply`; without `--apply`, the same command reports planned writes only. JSON output reports
+both initial/final freshness counts, skipped unresolved curated sources, failed changed-source
+refreshes, targeted ingest results, index rebuilds, pruning, topic-ref migrations, and a
+`mutation` object with planned or written paths. The command does not discover or register
+uncurated files or mutate maintained synthesis content beyond explicit source-ref migration.
 `splendor source update-path <source-id|logical-id|title|path> <new-path>` is the explicit repair
 path for moved active curated workspace sources. By default it requires the old workspace path to
 be missing; `--force` is available for deliberate reparenting while the old file still exists. It
 validates that the new path is a supported file inside the workspace, rejects targets already
-curated by another active source, updates the source manifest's workspace ref and compatibility
-path fields, preserves the stable logical ID and old path alias, adds the new path alias, and
-reports manifest/current checksums plus next commands. Same-byte moves queue a re-ingest so
-generated source-summary provenance can refresh. Changed-byte moves are
-reported as partial repairs with a non-zero exit and an explicit `source refresh` next command. The
-command does not discover/register uncurated files, rewrite historical run records, or mutate
-maintained synthesis pages.
+curated by another active source, and reports the source manifest/queue writes it would perform.
+Add `--apply` to update the manifest's workspace ref and compatibility path fields, preserve the
+stable logical ID and old path alias, add the new path alias, and queue same-byte re-ingest so
+generated source-summary provenance can refresh. Changed-byte moves are reported as partial repairs
+with a non-zero exit and an explicit `source refresh` next command. The command does not
+discover/register uncurated files, rewrite historical run records, or mutate maintained synthesis
+pages.
 
 `splendor source forget` is the explicit polluted-registry recovery path. It previews by default
 and requires `--apply` before deleting anything. Single-source cleanup accepts exact source IDs,
@@ -223,11 +224,11 @@ provided, and reports the manifest lifecycle edits needed to complete one-way or
 active versions as superseded by the selected current version. Cross-canonical selections and
 ambiguous `--current` selectors are rejected without rewriting manifests.
 
-`splendor ingest --pending --json` emits machine-readable pending-drain results with queue totals,
-processed/succeeded/failed/skipped counts, per-item outcomes, and deterministic next actions so
-agents do not need to parse human queue-drain text. This is still a direct drain verb in v0.4: it
-mutates queue, run, wiki, and index/log state when work is due. The post-v0.4 review findings make
-preview/apply harmonization for this and other legacy mutating verbs the next planned safety work.
+`splendor ingest --pending` previews actionable queue work by default. Human and JSON output list
+planned queue/run/source-summary/index/log writes with `mutation.mode: preview`; add `--apply` to
+drain the queue and write the reported runtime and wiki state. JSON output includes queue totals,
+processed/succeeded/failed/skipped counts, per-item outcomes, deterministic next actions, and the
+shared mutation object so agents do not need to parse human queue-drain text.
 
 `splendor ingest --changed` is the narrower stale-ingest repair path for checksum-drifted curated
 workspace-backed sources when old ingest queue records are already `done`. It refreshes changed
@@ -322,12 +323,12 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `v0.4.0-release-prep`
-- Current planned slice: `M19 post-v0.4 external review response`
-- Current PR sub-slice: `M19-P4.1`
+- Previous completed PR sub-slice: `M19-P4.1`
+- Current planned slice: `M19 legacy mutation safety`
+- Current PR sub-slice: `M19-P5.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M19 legacy mutation safety`
-- Next planned PR sub-slice: `M19-P5.1`
+- Next planned slice: `M19 completion-aware current-state handoff inference`
+- Next planned PR sub-slice: `M19-P6.1`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
@@ -633,7 +634,10 @@ ingest queue records, with additive cleanup state in queue inspection and mainte
 raw hocrgen, SynthBanshee, and hocrsyngen trial materials are preserved under `docs/evaluations/`,
 with a review-round summary and findings register that identify the next durability gaps. The
 review round keeps M20 vector/search and mutating-web bets visible, but defers them until the
-remaining M19 workflow-safety and handoff-correctness issues are closed. The next planned
-implementation slice is `M19-P5.1`: legacy preview/apply harmonization for mutating maintenance and
-workflow commands such as `ingest --pending`, `source refresh`, `source update-path`, and
-`workspace refresh`.
+remaining M19 workflow-safety and handoff-correctness issues are closed.
+
+`M19-P5.1` implements legacy preview/apply harmonization for mutating maintenance and workflow
+commands. `ingest --pending`, `source refresh`, `source update-path`, and `workspace refresh` now
+preview by default, report planned writes through the shared mutation contract, and require
+explicit `--apply` before draining queue jobs or writing manifests, source summaries, queue/run
+records, index/log state, pruning changes, or topic-ref migrations.

@@ -6,7 +6,12 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from splendor.commands.ingest import DrainItemResult, DrainResult, run_ingest_job
+from splendor.commands.ingest import (
+    DrainItemResult,
+    DrainResult,
+    pending_ingest_planned_records,
+    run_ingest_job,
+)
 from splendor.commands.mutation import dedupe_mutation_records, mutation_contract, mutation_record
 from splendor.commands.source import (
     SourceFreshnessItem,
@@ -16,7 +21,11 @@ from splendor.commands.source import (
     scan_source_freshness,
     source_refresh_written_records,
 )
-from splendor.commands.wiki import WikiIndexRebuildResult, rebuild_wiki_index
+from splendor.commands.wiki import (
+    WikiIndexRebuildResult,
+    plan_wiki_index_rebuild,
+    rebuild_wiki_index,
+)
 from splendor.config import load_config
 from splendor.layout import resolve_layout
 from splendor.schemas import SourceRecord
@@ -48,6 +57,7 @@ class PruneSupersededResult:
     candidates: int
     pruned: list[PrunedSourceSummary]
     skipped: list[SkippedPruneSourceSummary]
+    applied: bool = True
 
 
 @dataclass(frozen=True)
@@ -60,6 +70,7 @@ class TopicRefMigration:
 class TopicRefMigrationResult:
     candidates: int
     updated: list[TopicRefMigration]
+    applied: bool = True
 
 
 @dataclass(frozen=True)
@@ -84,6 +95,7 @@ class WorkspaceRefreshResult:
     index: WikiIndexRebuildResult | None
     pruning: PruneSupersededResult | None
     topic_ref_migration: TopicRefMigrationResult | None
+    applied: bool = True
 
 
 def refresh_workspace(
@@ -94,6 +106,7 @@ def refresh_workspace(
     rebuild_index: bool = False,
     prune_superseded: bool = False,
     update_topic_refs: bool = False,
+    apply: bool = True,
 ) -> WorkspaceRefreshResult:
     if ingest and not changed:
         msg = "workspace refresh --ingest requires --changed"
@@ -110,15 +123,19 @@ def refresh_workspace(
     changed_items = (
         [item for item in initial_freshness.sources if item.status == "changed"] if changed else []
     )
-    refreshed, failed_sources = _refresh_changed_items(root, changed_items)
+    refreshed, failed_sources = _refresh_changed_items(root, changed_items, apply=apply)
 
-    ingest_result = _drain_refreshed_ingest_jobs(root, refreshed) if ingest else None
-    topic_ref_migration_result = migrate_superseded_topic_refs(root) if update_topic_refs else None
-    pruning_result = prune_superseded_source_summaries(root) if prune_superseded else None
+    ingest_result = _drain_refreshed_ingest_jobs(root, refreshed, apply=apply) if ingest else None
+    topic_ref_migration_result = (
+        migrate_superseded_topic_refs(root, apply=apply) if update_topic_refs else None
+    )
+    pruning_result = (
+        prune_superseded_source_summaries(root, apply=apply) if prune_superseded else None
+    )
     index_result = None
     if rebuild_index and (ingest_result is None or ingest_result.failed == 0):
-        index_result = rebuild_wiki_index(root)
-    final_freshness = scan_source_freshness(root)
+        index_result = rebuild_wiki_index(root) if apply else plan_wiki_index_rebuild(root)
+    final_freshness = scan_source_freshness(root) if apply else initial_freshness
 
     return WorkspaceRefreshResult(
         initial_freshness=initial_freshness,
@@ -130,10 +147,11 @@ def refresh_workspace(
         index=index_result,
         pruning=pruning_result,
         topic_ref_migration=topic_ref_migration_result,
+        applied=apply,
     )
 
 
-def prune_superseded_source_summaries(root: Path) -> PruneSupersededResult:
+def prune_superseded_source_summaries(root: Path, *, apply: bool = True) -> PruneSupersededResult:
     layout = resolve_layout(root, load_config(root))
     sources = _load_sources_by_id(layout)
     pruned: list[PrunedSourceSummary] = []
@@ -220,8 +238,9 @@ def prune_superseded_source_summaries(root: Path) -> PruneSupersededResult:
             )
             continue
 
-        _remove_pruned_page_links(manifest_path, source, page_relpath)
-        page_path.unlink()
+        if apply:
+            _remove_pruned_page_links(manifest_path, source, page_relpath)
+            page_path.unlink()
         pruned.append(
             PrunedSourceSummary(
                 path=page_relpath,
@@ -231,17 +250,22 @@ def prune_superseded_source_summaries(root: Path) -> PruneSupersededResult:
             )
         )
 
-    return PruneSupersededResult(candidates=candidates, pruned=pruned, skipped=skipped)
+    return PruneSupersededResult(
+        candidates=candidates,
+        pruned=pruned,
+        skipped=skipped,
+        applied=apply,
+    )
 
 
-def migrate_superseded_topic_refs(root: Path) -> TopicRefMigrationResult:
+def migrate_superseded_topic_refs(root: Path, *, apply: bool = True) -> TopicRefMigrationResult:
     layout = resolve_layout(root, load_config(root))
     sources = _load_sources_by_id(layout)
     replacements = _superseded_source_replacements(sources)
     updated: list[TopicRefMigration] = []
     candidates = 0
     if not replacements:
-        return TopicRefMigrationResult(candidates=0, updated=[])
+        return TopicRefMigrationResult(candidates=0, updated=[], applied=apply)
 
     for page_path in sorted(layout.wiki_dir.rglob("*.md")):
         if page_path.name == ".gitkeep" or page_path in {layout.index_file, layout.log_file}:
@@ -276,7 +300,8 @@ def migrate_superseded_topic_refs(root: Path) -> TopicRefMigrationResult:
             update={"source_refs": _dedupe_preserve_order(migrated_refs)}
         )
         content = f"---\n{render_frontmatter(frontmatter)}\n---\n{body}"
-        write_text_atomic(page_path, content)
+        if apply:
+            write_text_atomic(page_path, content)
         updated.append(
             TopicRefMigration(
                 path=page_path.relative_to(root).as_posix(),
@@ -284,10 +309,11 @@ def migrate_superseded_topic_refs(root: Path) -> TopicRefMigrationResult:
             )
         )
 
-    return TopicRefMigrationResult(candidates=candidates, updated=updated)
+    return TopicRefMigrationResult(candidates=candidates, updated=updated, applied=apply)
 
 
 def render_workspace_refresh_json(root: Path, result: WorkspaceRefreshResult) -> str:
+    mutation_records = workspace_refresh_written_records(root, result)
     return json.dumps(
         {
             "initial_freshness": _freshness_counts(result.initial_freshness),
@@ -304,8 +330,9 @@ def render_workspace_refresh_json(root: Path, result: WorkspaceRefreshResult) ->
                 None if result.topic_ref_migration is None else asdict(result.topic_ref_migration)
             ),
             "mutation": mutation_contract(
-                mode="apply",
-                written=workspace_refresh_written_records(root, result),
+                mode="apply" if result.applied else "preview",
+                planned=[] if result.applied else mutation_records,
+                written=mutation_records if result.applied else [],
             ),
         },
         indent=2,
@@ -457,18 +484,22 @@ def _dedupe_preserve_order(values: list[str]) -> list[str]:
     return deduped
 
 
-def _refresh_changed_item(root: Path, item: SourceFreshnessItem) -> SourceRefreshResult:
-    return refresh_source(root, item.canonical_path)
+def _refresh_changed_item(
+    root: Path, item: SourceFreshnessItem, *, apply: bool = True
+) -> SourceRefreshResult:
+    if apply:
+        return refresh_source(root, item.canonical_path)
+    return refresh_source(root, item.canonical_path, apply=False)
 
 
 def _refresh_changed_items(
-    root: Path, items: list[SourceFreshnessItem]
+    root: Path, items: list[SourceFreshnessItem], *, apply: bool = True
 ) -> tuple[list[SourceRefreshResult], list[FailedWorkspaceRefreshSource]]:
     refreshed: list[SourceRefreshResult] = []
     failed: list[FailedWorkspaceRefreshSource] = []
     for item in items:
         try:
-            refreshed.append(_refresh_changed_item(root, item))
+            refreshed.append(_refresh_changed_item(root, item, apply=apply))
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             failed.append(_failed_refresh_source(root, item=item, reason=str(exc)))
     return refreshed, failed
@@ -499,7 +530,9 @@ def _failed_refresh_source(
     )
 
 
-def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult]) -> DrainResult:
+def _drain_refreshed_ingest_jobs(
+    root: Path, refreshed: list[SourceRefreshResult], *, apply: bool = True
+) -> DrainResult:
     queue_paths = [
         result.queue_path for result in refreshed if result.queued and result.queue_path is not None
     ]
@@ -511,6 +544,17 @@ def _drain_refreshed_ingest_jobs(root: Path, refreshed: list[SourceRefreshResult
 
     for queue_path in queue_paths:
         source_id = queue_path.stem.removeprefix("ingest-")
+        if not apply:
+            item_results.append(
+                DrainItemResult(
+                    source_id=source_id,
+                    queue_path=queue_path,
+                    outcome="planned",
+                    message="would run refreshed ingest job with --apply",
+                    written_records=[],
+                )
+            )
+            continue
         try:
             result = run_ingest_job(root, queue_path)
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
@@ -635,7 +679,10 @@ def workspace_refresh_written_records(
     for refresh in result.refreshed:
         records.extend(source_refresh_written_records(root, refresh))
     if result.ingest is not None:
-        records.extend(_ingest_written_records(root, result.ingest))
+        if result.applied:
+            records.extend(_ingest_written_records(root, result.ingest))
+        else:
+            records.extend(pending_ingest_planned_records(root, result.ingest))
     if result.index is not None:
         records.append(mutation_record(action="write", path=result.index.path, kind="wiki_index"))
     if result.pruning is not None:

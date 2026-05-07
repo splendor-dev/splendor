@@ -7,7 +7,13 @@ import shlex
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from splendor.commands.ingest import enqueue_ingest_job, is_ingest_current, run_ingest_job
+from splendor import __version__
+from splendor.commands.ingest import (
+    enqueue_ingest_job,
+    is_ingest_current,
+    preflight_enqueue_ingest_job,
+    run_ingest_job,
+)
 from splendor.commands.mutation import mutation_contract, mutation_record
 from splendor.config import load_config
 from splendor.ingest_dispatch import SUPPORTED_SOURCE_TYPES
@@ -23,14 +29,18 @@ from splendor.state.source_compat import (
     effective_storage_mode,
     logical_source_id_for_ref,
 )
+from splendor.state.source_pointer import pointer_artifact_path
 from splendor.state.source_registry import (
     RegisteredSource,
     load_source_record,
+    manifest_original_path,
     register_source,
     resolve_manifest_storage_path,
     write_source_record,
 )
 from splendor.utils.hashing import sha256_file
+from splendor.utils.ids import stable_source_id
+from splendor.utils.time import utc_now_iso
 
 
 @dataclass(frozen=True)
@@ -48,6 +58,7 @@ class SourceRefreshResult:
     queued: bool
     queue_path: Path | None
     message: str
+    applied: bool = True
 
 
 @dataclass(frozen=True)
@@ -63,6 +74,8 @@ class SourcePathUpdateResult:
     updated: bool
     queue_path: Path | None
     next_commands: list[str]
+    applied: bool = True
+    selector: str | None = None
 
 
 @dataclass(frozen=True)
@@ -295,13 +308,49 @@ def source_commit_capture_intent(source: SourceRecord) -> bool | None:
     return None
 
 
-def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
+def refresh_source(root: Path, source_query: str, *, apply: bool = True) -> SourceRefreshResult:
     requested_match = resolve_source_query(root, source_query)
 
     requested = requested_match.source
     current_path = _refreshable_source_path(root, requested)
     current_checksum = sha256_file(current_path)
     changed = current_checksum != requested.checksum
+    layout = resolve_layout(root, load_config(root))
+
+    if not apply:
+        refreshed = _preview_refreshed_registration(
+            root,
+            layout=layout,
+            requested_match=requested_match,
+            current_path=current_path,
+            current_checksum=current_checksum,
+            changed=changed,
+        )
+        queued = not is_ingest_current(root, layout, refreshed.record)
+        queue_path = (
+            preflight_enqueue_ingest_job(
+                root,
+                refreshed.record.source_id,
+                require_manifest=refreshed.manifest_path.exists(),
+            )
+            if queued
+            else None
+        )
+        message = (
+            "would queue ingest with --apply"
+            if queued
+            else "source is already ingested for the current pipeline version"
+        )
+        return SourceRefreshResult(
+            requested=requested,
+            requested_manifest_path=requested_match.manifest_path,
+            refreshed=refreshed,
+            changed=changed,
+            queued=queued,
+            queue_path=queue_path,
+            message=message,
+            applied=False,
+        )
 
     if changed:
         refreshed = register_source(
@@ -328,7 +377,6 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
             already_registered=True,
         )
 
-    layout = resolve_layout(root, load_config(root))
     if is_ingest_current(root, layout, refreshed.record):
         return SourceRefreshResult(
             requested=requested,
@@ -338,6 +386,7 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
             queued=False,
             queue_path=None,
             message="source is already ingested for the current pipeline version",
+            applied=True,
         )
 
     queue_path = enqueue_ingest_job(root, refreshed.record.source_id)
@@ -349,11 +398,106 @@ def refresh_source(root: Path, source_query: str) -> SourceRefreshResult:
         queued=True,
         queue_path=queue_path,
         message="queued ingest",
+        applied=True,
+    )
+
+
+def _preview_refreshed_registration(
+    root: Path,
+    *,
+    layout,
+    requested_match: SourceLookupResult,
+    current_path: Path,
+    current_checksum: str,
+    changed: bool,
+) -> RegisteredSource:
+    requested = requested_match.source
+    if not changed:
+        return RegisteredSource(
+            record=requested,
+            manifest_path=requested_match.manifest_path,
+            stored_path=_existing_materialized_path(root, requested),
+            storage_mode=effective_storage_mode(requested),
+            source_ref=canonical_source_ref(requested),
+            copied=False,
+            already_registered=True,
+        )
+
+    source_id = stable_source_id(current_checksum)
+    manifest_path = layout.source_records_dir / f"{source_id}.json"
+    if manifest_path.exists():
+        existing = load_source_record(manifest_path)
+        record = existing
+        if existing.source_id != requested.source_id:
+            supersedes = _dedupe_aliases([*existing.supersedes, requested.source_id])
+            update_fields: dict[str, object] = {"supersedes": supersedes}
+            if existing.superseded_by is not None:
+                update_fields["superseded_by"] = None
+            record = SourceRecord.model_validate(existing.model_dump(mode="json") | update_fields)
+        return RegisteredSource(
+            record=record,
+            manifest_path=manifest_path,
+            stored_path=_existing_materialized_path(root, record),
+            storage_mode=effective_storage_mode(record),
+            source_ref=canonical_source_ref(record),
+            copied=False,
+            already_registered=True,
+        )
+
+    try:
+        source_ref = current_path.relative_to(root.resolve()).as_posix()
+        source_ref_kind = "workspace_path"
+    except ValueError:
+        source_ref = str(current_path)
+        source_ref_kind = "external_path"
+    storage_mode = effective_storage_mode(requested)
+    stored_path = None
+    if storage_mode in {"copy", "symlink"}:
+        stored_path = layout.raw_sources_dir / source_id / current_path.name
+    elif storage_mode == "pointer":
+        stored_path = pointer_artifact_path(layout, source_id)
+
+    stored_ref = None if stored_path is None else stored_path.relative_to(root).as_posix()
+    record = SourceRecord(
+        source_id=source_id,
+        title=current_path.stem.replace("_", " ").replace("-", " ").strip() or current_path.name,
+        source_type=current_path.suffix.lstrip(".") or "file",
+        path=stored_ref or source_ref,
+        checksum=current_checksum,
+        added_at=utc_now_iso(),
+        pipeline_version=__version__,
+        original_path=manifest_original_path(root, current_path),
+        source_ref=source_ref,
+        source_ref_kind=source_ref_kind,
+        storage_mode=storage_mode,
+        storage_path=stored_ref,
+        materialized_at=utc_now_iso() if stored_ref is not None else None,
+        logical_id=effective_logical_id(requested),
+        aliases=_dedupe_aliases([*requested.aliases, source_ref]),
+        supersedes=[requested.source_id] if requested.source_id != source_id else [],
+        source_commit_capture=source_commit_capture_intent(requested),
+        source_class=requested.source_class,
+        source_labels=list(requested.source_labels),
+        discovered_by=requested.discovered_by,
+    )
+    return RegisteredSource(
+        record=record,
+        manifest_path=manifest_path,
+        stored_path=stored_path,
+        storage_mode=storage_mode,
+        source_ref=source_ref,
+        copied=storage_mode == "copy",
+        already_registered=False,
     )
 
 
 def update_source_path(
-    root: Path, source_query: str, new_path: Path, *, force: bool = False
+    root: Path,
+    source_query: str,
+    new_path: Path,
+    *,
+    force: bool = False,
+    apply: bool = True,
 ) -> SourcePathUpdateResult:
     source_match = resolve_source_query_exact(root, source_query)
     source = source_match.source
@@ -427,19 +571,34 @@ def update_source_path(
 
     updated_source = SourceRecord.model_validate(source.model_dump(mode="json") | updated_fields)
     updated = updated_source != source
-    if updated:
+    if updated and apply:
         write_source_record(source_match.manifest_path, updated_source)
 
-    queue_path = enqueue_ingest_job(root, updated_source.source_id) if checksum_matches else None
+    queue_path = None
+    if checksum_matches:
+        queue_path = (
+            enqueue_ingest_job(root, updated_source.source_id)
+            if apply
+            else preflight_enqueue_ingest_job(root, updated_source.source_id)
+        )
     status = "repaired" if checksum_matches else "partial"
-    next_commands = [
-        "splendor ingest --pending",
-        "splendor source freshness",
-    ]
-    if not checksum_matches:
+    if not apply:
+        command = (
+            "splendor source update-path "
+            f"{shlex.quote(source_query)} {shlex.quote(new_ref)} --apply"
+        )
+        if force:
+            command += " --force"
+        next_commands = [command]
+    elif not checksum_matches:
         next_commands = [
             f"splendor source refresh {shlex.quote(new_ref)}",
-            "splendor ingest --pending",
+            "splendor ingest --pending --apply",
+            "splendor source freshness",
+        ]
+    else:
+        next_commands = [
+            "splendor ingest --pending --apply",
             "splendor source freshness",
         ]
     return SourcePathUpdateResult(
@@ -454,6 +613,8 @@ def update_source_path(
         updated=updated,
         queue_path=queue_path,
         next_commands=next_commands,
+        applied=apply,
+        selector=source_query,
     )
 
 
@@ -838,6 +999,7 @@ def render_source_lookup_json(root: Path, results: list[SourceLookupResult]) -> 
 
 
 def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
+    mutation_records = source_refresh_written_records(root, result)
     return json.dumps(
         {
             "requested_source_id": result.requested.source_id,
@@ -861,8 +1023,9 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
             ),
             "message": result.message,
             "mutation": mutation_contract(
-                mode="apply",
-                written=source_refresh_written_records(root, result),
+                mode="apply" if result.applied else "preview",
+                planned=[] if result.applied else mutation_records,
+                written=mutation_records if result.applied else [],
             ),
         },
         indent=2,
@@ -870,8 +1033,10 @@ def render_source_refresh_json(root: Path, result: SourceRefreshResult) -> str:
 
 
 def render_source_path_update_json(root: Path, result: SourcePathUpdateResult) -> str:
+    mutation_records = source_path_update_mutation_records(root, result)
     return json.dumps(
         {
+            "applied": result.applied,
             "source_id": result.source.source_id,
             "logical_id": effective_logical_id(result.source),
             "old_path": result.old_path,
@@ -888,6 +1053,11 @@ def render_source_path_update_json(root: Path, result: SourcePathUpdateResult) -
             if result.queue_path is None
             else result.queue_path.relative_to(root).as_posix(),
             "next_commands": result.next_commands,
+            "mutation": mutation_contract(
+                mode="apply" if result.applied else "preview",
+                planned=[] if result.applied else mutation_records,
+                written=mutation_records if result.applied else [],
+            ),
         },
         indent=2,
     )
@@ -941,7 +1111,10 @@ def source_reconcile_next_commands(result: SourceReconcileResult) -> list[str]:
 def source_refresh_written_records(root: Path, result: SourceRefreshResult) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     if result.changed:
-        if result.refreshed.copied and result.refreshed.stored_path is not None:
+        if (
+            result.refreshed.storage_mode in {"copy", "pointer", "symlink"}
+            and result.refreshed.stored_path is not None
+        ):
             records.append(
                 mutation_record(
                     action="write",
@@ -974,6 +1147,31 @@ def source_refresh_written_records(root: Path, result: SourceRefreshResult) -> l
                 path=result.queue_path.relative_to(root).as_posix(),
                 kind="queue_record",
                 source_id=result.refreshed.record.source_id,
+            )
+        )
+    return sorted(records, key=lambda item: (item["kind"], item["path"], item["action"]))
+
+
+def source_path_update_mutation_records(
+    root: Path, result: SourcePathUpdateResult
+) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    if result.updated:
+        records.append(
+            mutation_record(
+                action="write",
+                path=result.manifest_path.relative_to(root).as_posix(),
+                kind="source_manifest",
+                source_id=result.source.source_id,
+            )
+        )
+    if result.queue_path is not None:
+        records.append(
+            mutation_record(
+                action="write",
+                path=result.queue_path.relative_to(root).as_posix(),
+                kind="queue_record",
+                source_id=result.source.source_id,
             )
         )
     return sorted(records, key=lambda item: (item["kind"], item["path"], item["action"]))
@@ -1227,7 +1425,8 @@ def _workspace_freshness_items(
                 message="canonical workspace source differs from latest manifest checksum",
                 next_commands=[
                     _source_refresh_command(source_ref),
-                    "splendor ingest --pending",
+                    f"{_source_refresh_command(source_ref)} --apply",
+                    "splendor ingest --pending --apply",
                 ],
             )
         )

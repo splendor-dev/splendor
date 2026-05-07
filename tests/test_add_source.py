@@ -6,6 +6,7 @@ import pytest
 from splendor.commands.add_source import add_source, expand_source_paths
 from splendor.commands.init import initialize_workspace
 from splendor.commands.materialize_source import materialize_source
+from splendor.config import load_config, write_config
 from splendor.state.source_pointer import load_source_pointer
 from splendor.state.source_registry import (
     _effective_storage_mode,
@@ -236,6 +237,25 @@ def test_add_source_supports_pointer_for_workspace_sources(tmp_path: Path) -> No
     assert pointer.source_ref_kind == "workspace_path"
     assert pointer.checksum == manifest.checksum
     assert pointer.created_at == manifest.materialized_at
+
+
+def test_add_source_pointer_respects_custom_raw_sources_layout(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.layout.raw_sources_dir = "custom/source-artifacts"
+    write_config(tmp_path, config)
+    source = tmp_path / "note.md"
+    source.write_text("# note\n", encoding="utf-8")
+
+    result = add_source(tmp_path, source, storage_mode="pointer")
+
+    manifest = load_source_record(result.manifest_path)
+    expected_path = tmp_path / "custom" / "source-artifacts" / result.source_id / "pointer.json"
+    assert result.stored_path == expected_path
+    assert expected_path.exists()
+    assert manifest.path == f"custom/source-artifacts/{result.source_id}/pointer.json"
+    assert manifest.storage_path == manifest.path
+    assert not (tmp_path / "raw" / "sources" / result.source_id / "pointer.json").exists()
 
 
 def test_add_source_rejects_pointer_for_external_sources(tmp_path: Path) -> None:

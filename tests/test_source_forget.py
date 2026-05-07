@@ -23,7 +23,7 @@ def test_source_forget_keeps_run_record_referenced_by_remaining_source(
     forgotten_path = tmp_path / "forgotten.md"
     forgotten_path.write_text("# Forgotten\n\nHas a run.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(forgotten_path)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     forgotten_manifest = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
     forgotten = load_source_record(forgotten_manifest)
     assert forgotten.last_run_id is not None
@@ -101,7 +101,7 @@ def test_source_forget_reports_run_id_residuals_from_wiki_and_run_records(
     source_path = tmp_path / "brief.md"
     source_path.write_text("# Brief\n\nRun references.\n", encoding="utf-8")
     main(["--root", str(tmp_path), "add-source", str(source_path)])
-    main(["--root", str(tmp_path), "ingest", "--pending"])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
     manifest = next((tmp_path / "state" / "manifests" / "sources").glob("*.json"))
     source = load_source_record(manifest)
     assert source.last_run_id is not None

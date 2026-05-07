@@ -19,7 +19,7 @@ from splendor.state.source_compat import (
     is_legacy_copied_manifest,
     logical_source_id_for_ref,
 )
-from splendor.state.source_pointer import pointer_artifact_relpath, write_source_pointer
+from splendor.state.source_pointer import pointer_artifact_path, write_source_pointer
 from splendor.utils.fs import (
     copy_file_atomic,
     copy_file_if_missing,
@@ -206,7 +206,7 @@ def _materialized_path_for(
     if storage_mode in {"copy", "symlink"}:
         return _stored_path_for(layout, source_id, candidate)
     if storage_mode == "pointer":
-        return layout.root / pointer_artifact_relpath(source_id)
+        return pointer_artifact_path(layout, source_id)
     return None
 
 

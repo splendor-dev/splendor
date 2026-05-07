@@ -180,25 +180,26 @@ Implemented fields:
   IDs, exact logical IDs, exact path aliases/source refs, or exact unambiguous titles; substring
   matches remain limited to read-only lookup surfaces.
 - `splendor source refresh <source-id|logical-id|title|path>` resolves the tracked workspace or
-  external path, compares current bytes to the manifest checksum, registers changed content as a
-  new canonical source version, preserves `source_commit_capture` intent, links the old and new
-  versions with `supersedes` / `superseded_by`, and queues ingest through the same queue handoff
-  used by `add-source`.
+  external path, compares current bytes to the manifest checksum, and previews the manifest,
+  source-artifact, and queue writes needed for changed or stale content. It requires `--apply` to
+  register changed content as a new canonical source version, preserve `source_commit_capture`
+  intent, link the old and new versions with `supersedes` / `superseded_by`, and queue ingest
+  through the same queue handoff used by `add-source`.
 - `splendor source update-path <source-id|logical-id|title|path> <new-path>` repairs the manifest
   for an active curated workspace-backed source after an intentional file move. The first
   implementation supports `storage_mode: none` and `storage_mode: copy` workspace sources. By
   default it requires the old workspace path to be missing; `--force` allows explicit reparenting
   while the old path still exists. It validates that the target is a supported file inside the
   workspace, rejects paths already curated by another active source, preserves the stable
-  `logical_id` and original-path alias, adds the new path alias, updates `source_ref`, and updates
-  the compatibility `path` field for `storage_mode: none`, then validates and rewrites the
-  schema-bound manifest. Same-byte repairs
-  mark previously ingested source records as needing ingest and queue the existing source ID so
-  generated source-summary provenance can refresh. Changed-byte repairs return `status: partial`,
-  do not queue ingest, and point operators to `splendor source refresh <new-path>`. Human and JSON
-  output report source ID, old path, new path, status, manifest/current checksums, checksum match
-  status, manifest path, queue path when present, and next commands. It does not discover or
-  register uncurated files, rewrite historical run records, or mutate maintained synthesis pages.
+  `logical_id` and original-path alias, adds the new path alias, and previews the `source_ref` and
+  compatibility `path` field changes. `--apply` validates and rewrites the schema-bound manifest.
+  Same-byte repairs mark previously ingested source records as needing ingest and queue the existing
+  source ID so generated source-summary provenance can refresh. Changed-byte repairs return
+  `status: partial`, do not queue ingest, and point operators to `splendor source refresh
+  <new-path>`. Human and JSON output report source ID, old path, new path, status,
+  manifest/current checksums, checksum match status, manifest path, queue path when present, next
+  commands, and a preview/apply mutation object. It does not discover or register uncurated files,
+  rewrite historical run records, or mutate maintained synthesis pages.
 - `splendor source forget <source-id|logical-id|title|path>` and
   `splendor source forget --matching <workspace-relative-glob>` provide preview-first registry
   cleanup for polluted source manifests. The command requires exactly one selection mode, previews
@@ -238,14 +239,15 @@ Implemented fields:
   artifacts, queue records, run records, or reports.
 - Refresh uses the queue ledger directly, so active leases remain protected and dead-lettered jobs
   still require `splendor queue retry <job-id>` or `splendor repair ingest <source-id>`.
-- `splendor workspace refresh --changed` is the safe workspace-level mutating path over curated
-  workspace-backed source manifests. It uses `source freshness` to select changed active manifests,
-  reports missing or unsupported active curated workspace sources as skipped unresolved diagnostics,
-  refreshes each changed source through the supersession-aware source refresh path, records
-  per-source refresh failures instead of aborting the whole command, and can ingest only the queue
-  records created or reused for successful refreshed sources with `--ingest`. The command exits
-  non-zero when unresolved skipped sources, failed source refreshes, or targeted ingest failures
-  remain, while preserving successful refresh and ingest work.
+- `splendor workspace refresh --changed` is the safe workspace-level preview/apply path over
+  curated workspace-backed source manifests. It uses `source freshness` to select changed active
+  manifests, reports missing or unsupported active curated workspace sources as skipped unresolved
+  diagnostics, previews each changed source through the supersession-aware source refresh path,
+  records per-source refresh failures instead of aborting the whole command, and can plan ingest
+  only for queue records created or reused for successful refreshed sources with `--ingest`.
+  `--apply` writes the planned refresh, targeted ingest, index, pruning, and topic-ref migration
+  changes. The command exits non-zero when unresolved skipped sources, failed source refreshes, or
+  targeted ingest failures remain, while preserving successful apply work.
 - `splendor workspace refresh --rebuild-index` rebuilds `wiki/index.md` as standalone maintenance
   or after any requested changed-source refresh, targeted ingest, pruning, or topic-ref migration.
   `--changed --ingest` drains only refreshed-source queue records, not unrelated pending ingest
@@ -269,13 +271,12 @@ Implemented fields:
   reports a clean no-op when no curated workspace-backed source bytes changed. `--json` emits
   initial and final freshness counts, missing-source diagnostics, refreshed source IDs, targeted
   queue outcomes, and summary counts.
-- `splendor ingest --pending --json` emits the same pending queue drain contract as human output in
+- `splendor ingest --pending --json` emits the same pending queue contract as human output in
   structured form: queue total, processed/succeeded/failed/skipped summary counts, per-item source
-  IDs, workspace-relative queue paths, outcomes, messages, and deterministic next actions.
-  As of the v0.4 external review, this remains a legacy direct-drain command: it mutates queue,
-  source-summary, run, and index/log state when work is available. The planned durability contract
-  is to give this flow the same agent-safe preview/apply clarity as newer cleanup commands, or to
-  expose an explicitly named destructive drain form so inspection and mutation cannot be confused.
+  IDs, workspace-relative queue paths, outcomes, messages, deterministic next actions, and the
+  shared mutation object. Without `--apply`, actionable jobs are reported as planned and no queue,
+  source-summary, run, index, or log state is written. `--apply` drains eligible jobs and reports
+  actual written records in `mutation.written`.
 - `splendor wiki compile <source-id|title|path>` remains non-mutating unless a maintained target
   page is selected and `--apply --proposal-hash <hash>` is supplied. Without `--page`, it reports
   the review-gated contract plus ranked maintained-page suggestions and ready-to-run
@@ -297,11 +298,11 @@ Implemented fields:
   deterministic planned write/delete records for preview mode, and `mutation.written` lists
   deterministic write/delete records for apply or direct-write mode. Records include `action`,
   `path`, `kind`, and `source_id` when source-scoped.
-- Post-v0.4 contract debt: legacy mutating commands must not rely on agents remembering bespoke
-  safety semantics. `ingest --pending`, `source refresh`, `source update-path`, and
-  `workspace refresh` should either become preview-first with explicit `--apply`, or expose
-  deterministic mutation objects and human output that make direct writes unmistakable before the
-  command is run from handoff guidance.
+- `M19-P5.1` closes the V04-F1 contract debt for legacy mutating workflow commands:
+  `ingest --pending`, `source refresh`, `source update-path`, and `workspace refresh` are
+  preview-first surfaces with explicit `--apply`, deterministic mutation objects, and human output
+  that labels preview versus apply state before agents run destructive maintenance from handoff
+  guidance.
 - `splendor pr-summary --since main` is a read-only PR handoff view over local git diff/status and
   existing report files. It diffs from the merge base between `HEAD` and the base ref, respects
   configured workspace layout directories, and groups curated source manifests, generated

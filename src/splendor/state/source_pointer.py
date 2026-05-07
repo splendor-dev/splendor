@@ -15,6 +15,10 @@ def pointer_artifact_relpath(source_id: str) -> str:
     return f"raw/sources/{source_id}/pointer.json"
 
 
+def pointer_artifact_path(layout, source_id: str) -> Path:
+    return layout.raw_sources_dir / source_id / "pointer.json"
+
+
 def load_source_pointer(path: Path) -> SourcePointerArtifact:
     try:
         raw = path.read_text(encoding="utf-8")

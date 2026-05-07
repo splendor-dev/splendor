@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+import splendor.commands.wiki as wiki_module
 from splendor.cli import main
 from splendor.commands import brief as brief_module
 from splendor.commands.add_source import add_source
@@ -286,6 +287,33 @@ def test_rebuild_wiki_index_includes_pages_in_deterministic_sections(tmp_path: P
     assert "[Source A](sources/src-a.md)" in first_index
 
 
+def test_rebuild_wiki_index_loads_pages_once(tmp_path: Path, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "zeta.md",
+        kind="topic",
+        title="Zeta Topic",
+        page_id="topic-zeta",
+    )
+    load_calls = 0
+    original_load_wiki_pages = wiki_module.load_wiki_pages
+
+    def counted_load_wiki_pages(*args, **kwargs):
+        nonlocal load_calls
+        load_calls += 1
+        return original_load_wiki_pages(*args, **kwargs)
+
+    monkeypatch.setattr(wiki_module, "load_wiki_pages", counted_load_wiki_pages)
+
+    result = rebuild_wiki_index(tmp_path)
+
+    assert result.page_count == 1
+    assert load_calls == 1
+    assert "[Zeta Topic](topics/zeta.md)" in (tmp_path / "wiki" / "index.md").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_wiki_rebuild_index_cli_reports_invalid_frontmatter(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     bad_page = tmp_path / "wiki" / "topics" / "bad.md"
@@ -315,7 +343,7 @@ def test_add_source_queues_pending_ingest_for_cli_handoff(tmp_path: Path, capsys
     assert "Queued ingest:" in out
     assert "Next: splendor ingest --pending" in out
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert exit_code == 0
     out = capsys.readouterr().out
@@ -336,7 +364,7 @@ def test_pending_ingest_multiple_sources_points_back_to_status(tmp_path: Path, c
     main(["--root", str(tmp_path), "add-source", str(second)])
     capsys.readouterr()
 
-    exit_code = main(["--root", str(tmp_path), "ingest", "--pending"])
+    exit_code = main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
 
     assert exit_code == 0
     out = capsys.readouterr().out
