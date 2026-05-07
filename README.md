@@ -296,6 +296,13 @@ workflow terms. This improves query and agent-context handoff recall for cases s
 matches and without adding a persisted vector store, external service, database, or background
 worker.
 
+`M20-P1.2` closes the first retrieval acceptance gap with deterministic fixture-backed regression
+coverage rather than new infrastructure. The fixtures use competing records to assert that richer
+full-phrase evidence beats acronym-only evidence, shorthand queries still recover full-phrase
+records in non-empty corpora, query-backed agent handoff exposes that recovery, current planning
+authority outranks stale review material, and completed slices advance handoff to the next planned
+slice before mutating web workflows begin.
+
 `M17-P4.1` reduces issue #117 contradiction-review task noise without weakening contradiction
 evidence. Ingest-created contradiction-review tasks are classified as generated planning records,
 hidden from default active planning handoff, and managed intentionally through task-list, resolve,
@@ -336,9 +343,9 @@ the source manifest, and kept separate from parsed PDF artifacts.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M20-P0.1`
+- Previous completed PR sub-slice: `M20-P1.1`
 - Current planned slice: `M20 advanced semantic search or vector index`
-- Current PR sub-slice: `M20-P1.1`
+- Current PR sub-slice: `M20-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M20 mutating web review workflows`
 - Next planned PR sub-slice: `M20-P2.1`

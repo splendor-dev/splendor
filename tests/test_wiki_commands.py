@@ -2581,6 +2581,193 @@ def test_agent_context_advances_stale_current_slice_after_main_merge(
     assert "Continue F4c after completed F3b" in out
 
 
+def test_agent_context_m20_fixture_advances_retrieval_closeout_after_merged_slice(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path=".agent-plan.md",
+            role="current-authority",
+            purpose="Current M20 retrieval planning state.",
+            applies_to=["M20 retrieval handoff"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/splendor_mvp_to_v1_roadmap.md",
+            role="roadmap",
+            purpose="Ordered M20 retrieval and mutating-web sequence.",
+            applies_to=["M20 retrieval handoff"],
+        ),
+        AuthorityDocumentConfig(
+            path="docs/stale_external_review.md",
+            role="historical-review",
+            freshness="historical",
+            applies_to=["M20 retrieval M20-P1.1"],
+        ),
+    ]
+    write_config(tmp_path, config)
+    _init_git_repo(tmp_path, repo="splendor-dev/splendor")
+    _commit_all(tmp_path, "Initial Splendor workspace")
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `M20-P0.1`\n"
+        "- Current planned slice: `M20 advanced semantic search or vector index`\n"
+        "- Current PR sub-slice: `M20-P1.1`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `M20 mutating web review workflows`\n"
+        "- Next planned PR sub-slice: `M20-P2.1`\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "splendor_mvp_to_v1_roadmap.md").write_text(
+        "# Roadmap\n\n"
+        "The remaining M20 sequence is therefore:\n\n"
+        "- `M20-P1.1` adds conservative runtime acronym phrase expansion.\n"
+        "- `M20-P1.2` closes the retrieval evaluation and handoff retry fixture gap.\n"
+        "- `M20-P2.1` explores mutating web review workflows later.\n",
+        encoding="utf-8",
+    )
+    (docs / "stale_external_review.md").write_text(
+        "# Historical retrieval review\n\n"
+        "Historical notes still mention M20-P1.1 and advanced semantic search, but they are "
+        "background context after the runtime expansion slice merges.\n",
+        encoding="utf-8",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "historical-m20-p1-1.md",
+        title="M20-P1.1 historical retrieval note",
+        page_id="topic-historical-m20-p1-1",
+        kind="topic",
+        body="M20-P1.1 advanced semantic search appears in stale review material.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "automatic-speech-recognition-closeout.md",
+        title="Automatic speech recognition closeout fixture",
+        page_id="topic-automatic-speech-recognition-closeout",
+        kind="topic",
+        body=(
+            "# Automatic speech recognition closeout fixture\n\n"
+            "The retrieval handoff should recover this full-phrase record for shorthand agent "
+            "goals even though the acronym itself is absent from this page.\n"
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-shorthand-competitor.md",
+        title="ASR shorthand competitor",
+        page_id="topic-asr-shorthand-competitor",
+        kind="topic",
+        body=(
+            "# ASR shorthand competitor\n\n"
+            "ASR appears here as a direct acronym match and competes with richer full-phrase "
+            "retrieval evidence.\n"
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "speech-recognition-background.md",
+        title="Speech recognition background",
+        page_id="topic-speech-recognition-background",
+        kind="topic",
+        body=(
+            "# Speech recognition background\n\n"
+            "General speech recognition background should not satisfy the shorthand fixture by "
+            "itself.\n"
+        ),
+    )
+    implementation = tmp_path / "src" / "splendor" / "commands" / "query.py"
+    implementation.parent.mkdir(parents=True, exist_ok=True)
+    implementation.write_text("SEMANTIC_EXPANSION_READY = True\n", encoding="utf-8")
+    _commit_all(tmp_path, "M20-P1.1: Advanced semantic search or vector index")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[
+            {
+                "number": 118,
+                "title": "M20-P1.1 Add advanced semantic search or vector index",
+                "url": "https://github.com/splendor-dev/splendor/issues/118",
+                "body": "Keep open until retrieval evaluation fixtures close the handoff gap.",
+                "state": "open",
+                "labels": [],
+            }
+        ],
+        prs=[
+            {
+                "number": 173,
+                "title": "M20-P1.1: Advanced semantic search or vector index",
+                "url": "https://github.com/splendor-dev/splendor/pull/173",
+                "body": "Merged runtime acronym phrase expansion. Follow with M20-P1.2 fixtures.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-07T22:37:25Z",
+                "labels": [],
+            }
+        ],
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "close",
+            "out",
+            "M20",
+            "retrieval",
+            "handoff",
+            "after",
+            "M20-P1.1",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = payload["handoff_current_state"]
+    assert state["current_slice"] == "M20-P1.1"
+    assert state["inferred_slice"] == "M20-P1.2"
+    assert any("M20-P1.1" in item for item in state["evidence"])
+    current_state_actions = [
+        action
+        for action in payload["work_context"]["actions"]
+        if action["category"] == "current-state"
+    ]
+    assert len(current_state_actions) == 1
+    assert current_state_actions[0]["rank"] == 1
+    assert "M20-P1.2" in current_state_actions[0]["title"]
+    authority_paths = [item["path"] for item in payload["authority_briefs"]]
+    assert authority_paths[:2] == [
+        ".agent-plan.md",
+        "docs/splendor_mvp_to_v1_roadmap.md",
+    ]
+    assert authority_paths.index("docs/stale_external_review.md") > authority_paths.index(
+        "docs/splendor_mvp_to_v1_roadmap.md"
+    )
+
+    query_backed_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "ASR",
+            "--json",
+        ]
+    )
+    query_backed_payload = json.loads(capsys.readouterr().out)
+    query_match_paths = [match["path"] for match in query_backed_payload["matches"]]
+
+    assert query_backed_exit == 0
+    assert "wiki/topics/asr-shorthand-competitor.md" in query_match_paths
+    assert "wiki/topics/automatic-speech-recognition-closeout.md" in query_match_paths
+    assert "wiki/topics/speech-recognition-background.md" not in query_match_paths
+
+
 def test_agent_context_accepts_single_line_remaining_sequence(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:

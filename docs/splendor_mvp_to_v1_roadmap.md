@@ -334,9 +334,9 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P0.1`
+- Previous completed PR sub-slice: `M20-P1.1`
 - Current planned slice: `M20 advanced semantic search or vector index`
-- Current PR sub-slice: `M20-P1.1`
+- Current PR sub-slice: `M20-P1.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M20 mutating web review workflows`
 - Next planned PR sub-slice: `M20-P2.1`
@@ -1367,6 +1367,7 @@ relevant to the selected M20 implementation.
 ### Candidate PR slices
 - `M20-P0.1` Record v0.5 SynthBanshee integrated-use review intake and M20 issue disposition.
 - `M20-P1.1` Add advanced semantic search or a vector index (#118).
+- `M20-P1.2` Retrieval evaluation and handoff retry fixtures (#118).
 - `M20-P2.1` Explore mutating web review workflows (#119).
 - Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
 
@@ -1377,6 +1378,18 @@ services, background workers, databases, or persisted vector-index state. This i
 improvement, not a full vector-search implementation: exact lexical evidence still ranks ahead of
 expansion-only matches, and broader retrieval evaluation remains part of the M20 search track.
 Mutating web review workflows stay deferred to `M20-P2.1`.
+
+`M20-P1.2` closes the first retrieval acceptance gap with deterministic fixture-backed regression
+coverage instead of new index infrastructure. The fixtures cover hocrgen/hocrsyngen-style retry
+bars where exact full-phrase evidence must beat acronym-only evidence under competition, shorthand
+queries must still recover full-phrase records in non-empty corpora, query-backed agent handoff
+must expose that recovery, current planning authority must outrank stale historical review
+material, and completed-slice evidence must advance handoff to the next planned slice. The ordered
+M20 retrieval sequence is therefore:
+
+- `M20-P1.1` runtime semantic expansion for deterministic query and query-backed handoff recall.
+- `M20-P1.2` retrieval evaluation and handoff retry fixture closeout.
+- `M20-P2.1` mutating web review workflows after the retrieval closeout.
 
 ---
 
