@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P7.1`
-- Current planned slice: `M19 cold-start adoption and PATH-safe git lookup`
-- Current PR sub-slice: `M19-P8.1`
+- Previous completed PR sub-slice: `M19-P8.1`
+- Current planned slice: `M20 advanced semantic search or vector index`
+- Current PR sub-slice: `M20-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 advanced semantic search or vector index`
-- Next planned PR sub-slice: `M20-P1.1`
+- Next planned slice: `M20 mutating web review workflows`
+- Next planned PR sub-slice: `M20-P2.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1330,11 +1330,11 @@ state by themselves.
 thread to a bounded set of related open parent/sibling issues and boosts implementation/test files
 explicitly named by surfaced authority docs in read-first file ranking.
 
-`M19-P8.1` is the active cold-start robustness slice. It keeps M19 focused on first-run state
-location/review clarity and PATH-safe git lookup regression coverage before any M20 vector-search
-or mutating-web bets begin.
+`M19-P8.1` is implemented on `main`. It completed the final M19 durability pass by adding
+first-run state location/review clarity and PATH-safe git lookup regression coverage before any M20
+vector-search or mutating-web bets began.
 
-The remaining M19 sequence is therefore:
+The completed M19 sequence is therefore:
 
 - `M19-P5.2` Generated text integrity and manifest provenance fixes: eliminate control-byte
   corruption from generated Evidence/Contradictions output and keep source-manifest
@@ -1347,13 +1347,19 @@ The remaining M19 sequence is therefore:
 - `M19-P8.1` Cold-start adoption and focused robustness: make first-run state location/review
   explicit and fix the PATH-safe git lookup failure seen in the hocrsyngen trial.
 
+The v0.5 SynthBanshee integrated-use review in
+`docs/evaluations/v0_5_synthbanshee_integrated_use/summary.md` accepts the M19 blocker loop as
+closed. It leaves four bounded polish issues for later work: #160 goal-sensitive policy-cited
+read-first ranking, #161 one maintenance line leaking into the work footer, #162 too-quiet no-diff
+human `pr-summary`, and #163 mutation JSON compatibility aliases.
+
 ## Milestone 20 — post-v1 product bets
 
 ### Goal
-Keep larger product bets visible without treating them as the next blocker. Current external
-feedback points to handoff shape and workflow safety before search infrastructure. After the v0.4
-external review round, Milestone 20 remains deferred until the remaining M19 durability sequence is
-closed or explicitly reprioritized.
+Start larger product bets now that the v0.5 integrated-use review accepts the M19 durability loop
+as closed. The first M20 slice should focus on semantic retrieval or vector-index quality without
+absorbing mutating web workflows or reopening the closed M19 blocker sequence. Remaining M19 polish
+issues can ride along only when they are directly relevant to the selected M20 implementation.
 
 ### Candidate PR slices
 - `M20-P1.1` Add advanced semantic search or a vector index (#118).
