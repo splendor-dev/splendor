@@ -1118,6 +1118,13 @@ pages, sections such as `Core Claims`, `Design Implications`, `Product Experienc
 source extract should outrank frontmatter-derived facts, provenance boilerplate, and generic
 machine-generated labels.
 
+Current query ranking includes a bounded deterministic acronym phrase expansion layer. It derives
+inspectable in-memory signals from document text through a small built-in map for common
+code/research workflow terms such as ASR, CLI, OCR, PR, and UI. These signals can match `ASR`
+against `automatic speech recognition` and flow into `brief --agent-context` query matches, but
+expansion-only matches are capped below direct lexical evidence. The feature does not write
+persisted index state, call external services, or change source/wiki schemas.
+
 Current query output includes any active deterministic filters. `splendor query --tag <tag>`
 restricts matches to wiki pages carrying all requested tags, and
 `splendor query --source <source-id|title|path>` resolves the source filter to canonical source
@@ -1249,7 +1256,9 @@ work-first default for implementation and planning goals.
 
 ### 18.1 Early search
 
-Early versions should use deterministic local search over markdown/filesystem metadata plus the wiki index.
+Early versions should use deterministic local search over markdown/filesystem metadata plus the wiki
+index. The first M20 retrieval improvement stays in that shape by adding runtime-only semantic
+expansion to the lexical scorer instead of introducing a mandatory vector database.
 
 ### 18.2 Future search
 

@@ -51,6 +51,14 @@ _BOILERPLATE_TERMS = {
     "source",
     "version",
 }
+_SEMANTIC_ALIASES = {
+    "asr": ("automatic", "speech", "recognition"),
+    "ci": ("continuous", "integration"),
+    "cli": ("command", "line", "interface"),
+    "ocr": ("optical", "character", "recognition"),
+    "pr": ("pull", "request"),
+    "ui": ("user", "interface"),
+}
 
 
 class QueryValidationError(ValueError):
@@ -127,6 +135,7 @@ class _QueryDocument:
     record_id_tokens: list[str]
     keyword_tokens: list[str]
     body_tokens: list[str]
+    semantic_tokens: list[str]
     snippet_source: str
 
 
@@ -318,6 +327,18 @@ def _iter_wiki_documents(root: Path, layout: ResolvedLayout) -> list[_QueryDocum
                     " ".join([frontmatter.kind, frontmatter.status, *frontmatter.tags])
                 ),
                 body_tokens=_content_tokens(parsed.body),
+                semantic_tokens=_semantic_tokens(
+                    " ".join(
+                        [
+                            frontmatter.title,
+                            frontmatter.page_id,
+                            frontmatter.kind,
+                            frontmatter.status,
+                            " ".join(frontmatter.tags),
+                            parsed.body,
+                        ]
+                    )
+                ),
                 snippet_source=parsed.body,
             )
         )
@@ -375,6 +396,9 @@ def _iter_planning_documents(root: Path, layout: ResolvedLayout) -> list[_QueryD
                     record_id_tokens=_content_tokens(record_id),
                     keyword_tokens=_content_tokens(" ".join(keyword_values)),
                     body_tokens=_content_tokens(search_body),
+                    semantic_tokens=_semantic_tokens(
+                        " ".join([record.title, record_id, " ".join(keyword_values), search_body])
+                    ),
                     snippet_source=parsed.body,
                 )
             )
@@ -403,14 +427,40 @@ def _content_tokens(text: str) -> list[str]:
     return _TOKEN_PATTERN.findall(text.lower())
 
 
+def _semantic_tokens(text: str) -> list[str]:
+    tokens = _content_tokens(text)
+    semantic: list[str] = []
+    for token in tokens:
+        semantic.extend(_SEMANTIC_ALIASES.get(token, ()))
+
+    for alias, phrase in _SEMANTIC_ALIASES.items():
+        if _contains_token_sequence(tokens, phrase):
+            semantic.append(alias)
+    return semantic
+
+
+def _contains_token_sequence(tokens: list[str], phrase: tuple[str, ...]) -> bool:
+    if not phrase or len(phrase) > len(tokens):
+        return False
+    phrase_len = len(phrase)
+    return any(
+        tuple(tokens[index : index + phrase_len]) == phrase
+        for index in range(len(tokens) - phrase_len + 1)
+    )
+
+
 def _score_document(document: _QueryDocument, query_tokens: list[str]) -> int:
-    score = 0
+    lexical_score = 0
     for token in query_tokens:
-        score += 5 * document.title_tokens.count(token)
-        score += 4 * document.record_id_tokens.count(token)
-        score += 3 * document.keyword_tokens.count(token)
-        score += document.body_tokens.count(token)
-    return score
+        lexical_score += 5 * document.title_tokens.count(token)
+        lexical_score += 4 * document.record_id_tokens.count(token)
+        lexical_score += 3 * document.keyword_tokens.count(token)
+        lexical_score += document.body_tokens.count(token)
+    semantic_score = sum(document.semantic_tokens.count(token) for token in query_tokens)
+    semantic_boost = min(1, semantic_score)
+    if lexical_score <= 0:
+        return semantic_boost
+    return lexical_score + semantic_boost + 1
 
 
 def _best_snippet(text: str, query_tokens: list[str]) -> str:
@@ -454,15 +504,20 @@ def _default_snippet(text: str) -> str:
 
 def _candidate_score(candidate: str, query_tokens: list[str]) -> int:
     candidate_tokens = _content_tokens(candidate)
+    semantic_tokens = _semantic_tokens(candidate)
     token_score = sum(candidate_tokens.count(token) for token in query_tokens)
-    if token_score == 0:
+    semantic_score = sum(semantic_tokens.count(token) for token in query_tokens)
+    if token_score == 0 and semantic_score == 0:
         return 0
     heading = _candidate_heading(candidate)
     heading_bonus = 0
     if heading in _CLAIM_SECTION_HEADINGS:
         heading_bonus = 3
     boilerplate_penalty = _boilerplate_score(candidate)
-    return token_score + heading_bonus - boilerplate_penalty
+    semantic_boost = min(1, semantic_score)
+    if token_score == 0:
+        return semantic_boost - boilerplate_penalty
+    return token_score + semantic_boost + heading_bonus - boilerplate_penalty
 
 
 def _candidate_segments(text: str) -> list[str]:

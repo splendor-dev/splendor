@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M19-P8.1`
-- Current planned slice: `M20 review intake and planning handoff`
-- Current PR sub-slice: `M20-P0.1`
+- Previous completed PR sub-slice: `M20-P0.1`
+- Current planned slice: `M20 advanced semantic search or vector index`
+- Current PR sub-slice: `M20-P1.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 advanced semantic search or vector index`
-- Next planned PR sub-slice: `M20-P1.1`
+- Next planned slice: `M20 mutating web review workflows`
+- Next planned PR sub-slice: `M20-P2.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1369,6 +1369,14 @@ relevant to the selected M20 implementation.
 - `M20-P1.1` Add advanced semantic search or a vector index (#118).
 - `M20-P2.1` Explore mutating web review workflows (#119).
 - Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
+
+`M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
+first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
+query-backed parts of `brief --agent-context`, using a small built-in map instead of external
+services, background workers, databases, or persisted vector-index state. This is a bounded recall
+improvement, not a full vector-search implementation: exact lexical evidence still ranks ahead of
+expansion-only matches, and broader retrieval evaluation remains part of the M20 search track.
+Mutating web review workflows stay deferred to `M20-P2.1`.
 
 ---
 

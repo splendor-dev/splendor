@@ -5,6 +5,7 @@ import yaml
 
 from conftest import write_text_pdf
 from splendor.commands.add_source import add_source
+from splendor.commands.brief import build_project_brief
 from splendor.commands.ingest import ingest_source
 from splendor.commands.init import initialize_workspace
 from splendor.commands.planning import create_question, create_task
@@ -405,6 +406,112 @@ def test_run_query_uses_best_matching_snippet_and_truncates(tmp_path: Path) -> N
     assert result.matches[0].snippet == (
         "The retrieval snippet should include the ranking evidence line exactly once."
     )
+
+
+def test_run_query_matches_acronym_phrase_expansion(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-policy.md",
+        title="Speech milestone policy",
+        page_id="topic-speech-milestone-policy",
+        body=(
+            "# Speech milestone policy\n\n"
+            "Automatic speech recognition validation must keep renderer and tests together.\n"
+        ),
+    )
+
+    result = run_query(tmp_path, "ASR")
+
+    assert result.match_count == 1
+    assert result.matches[0].path == "wiki/topics/asr-policy.md"
+    assert result.matches[0].score > 0
+    assert result.matches[0].snippet == (
+        "Automatic speech recognition validation must keep renderer and tests together."
+    )
+
+
+def test_run_query_expands_known_acronyms_back_to_full_phrases(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-gate.md",
+        title="ASR acceptance gate",
+        page_id="topic-asr-acceptance-gate",
+        body="# ASR acceptance gate\n\nThe ASR gate owns renderer validation.\n",
+    )
+
+    result = run_query(tmp_path, "automatic speech recognition")
+
+    assert result.match_count == 1
+    assert result.matches[0].path == "wiki/topics/asr-gate.md"
+    assert result.matches[0].snippet == "The ASR gate owns renderer validation."
+
+
+def test_run_query_keeps_exact_phrase_above_acronym_only_match(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "full-asr.md",
+        title="Full speech recognition notes",
+        page_id="topic-full-asr",
+        body="Automatic speech recognition is the exact retrieval target.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "short-asr.md",
+        title="Short ASR note",
+        page_id="topic-short-asr",
+        body="ASR is mentioned here with less detail.",
+    )
+
+    result = run_query(tmp_path, "automatic speech recognition")
+
+    assert [match.path for match in result.matches] == [
+        "wiki/topics/full-asr.md",
+        "wiki/topics/short-asr.md",
+    ]
+    assert result.matches[0].score > result.matches[1].score
+
+
+def test_run_query_keeps_minimal_lexical_hit_above_semantic_only_match(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "lexical.md",
+        title="Lexical evidence",
+        page_id="topic-lexical-evidence",
+        body="recognition appears as direct lexical evidence.",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "semantic.md",
+        title="Semantic shorthand",
+        page_id="topic-semantic-shorthand",
+        body="ASR appears only as shorthand.",
+    )
+
+    result = run_query(tmp_path, "recognition")
+
+    assert [match.path for match in result.matches] == [
+        "wiki/topics/lexical.md",
+        "wiki/topics/semantic.md",
+    ]
+    assert result.matches[0].score > result.matches[1].score
+
+
+def test_brief_agent_context_uses_semantic_query_matches_for_handoff(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "asr-work.md",
+        title="Speech work handoff",
+        page_id="topic-speech-work-handoff",
+        body=(
+            "# Speech work handoff\n\n"
+            "Automatic speech recognition work should start from renderer tests and policy notes.\n"
+        ),
+    )
+
+    brief = build_project_brief(tmp_path, "pick up ASR work", include_git=False)
+
+    assert [match.path for match in brief.matches] == ["wiki/topics/asr-work.md"]
+    assert brief.matches[0].score > 0
 
 
 def test_run_query_prefers_claim_sections_over_source_summary_boilerplate(
