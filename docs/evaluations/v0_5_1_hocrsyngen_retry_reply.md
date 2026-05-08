@@ -1,7 +1,7 @@
 **Verdict**
 No. I would still not use Splendor v0.5.1 as a day-to-day hocrsyngen handoff tool. The [v0.5.1 release](https://github.com/splendor-dev/splendor/releases/tag/v0.5.1) explicitly targets this retry pattern, but the actual run failed the core handoff test.
 
-One important caveat: current `main` is no longer at the old post-S4c state. It is clean at `S6h`, and current repo docs say the real next item is `S7a`, not `S4d`: [docs/roadmap.md](/Users/shaypalachy/clones/hocrsyngen/docs/roadmap.md:15), [README.md](/Users/shaypalachy/clones/hocrsyngen/README.md:132). The old ground truth is stale against today’s main, but Splendor still failed both interpretations: it did not select historical `S4d`, and it also did not recognize current `S7a`.
+One important caveat: current `main` is no longer at the old post-S4c state. It is clean at `S6h`, and current repo docs say the real next item is `S7a`, not `S4d`: `hocrsyngen/docs/roadmap.md:15`, `hocrsyngen/README.md:132`. The old ground truth is stale against today’s main, but Splendor still failed both interpretations: it did not select historical `S4d`, and it also did not recognize current `S7a`.
 
 **Commands Run**
 ```bash
@@ -25,7 +25,7 @@ rm -rf reports state
 Starting state: `## main...origin/main`, clean. Head was `1ebb277 (HEAD -> main, origin/main, origin/HEAD) S6h: Close S6 and activate S7 script abstraction (#55)`. The 12-commit window ran from S6h back through S5b.
 
 **Baseline Answer Without Splendor**
-Direct repo reading says: current main’s next work is `S7a`, not `S4d`. The roadmap records `S4c` and `S4d` as both done in PRs #37 and #38: [docs/roadmap.md](/Users/shaypalachy/clones/hocrsyngen/docs/roadmap.md:305). The active phase is S7 and `S7a` is the active current planning item: [docs/roadmap.md](/Users/shaypalachy/clones/hocrsyngen/docs/roadmap.md:467). `.agent-plan.md` also says `S7a`, though it still has stale PR-branch wording from S6h: [.agent-plan.md](/Users/shaypalachy/clones/hocrsyngen/.agent-plan.md:3).
+Direct repo reading says: current main’s next work is `S7a`, not `S4d`. The roadmap records `S4c` and `S4d` as both done in PRs #37 and #38: `hocrsyngen/docs/roadmap.md:305`. The active phase is S7 and `S7a` is the active current planning item: `hocrsyngen/docs/roadmap.md:467`. `.agent-plan.md` also says `S7a`, though it still has stale PR-branch wording from S6h: `hocrsyngen/.agent-plan.md:3`.
 
 **Splendor Handoff Summary**
 `splendor --version` returned `splendor 0.5.1`.

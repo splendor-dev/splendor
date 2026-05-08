@@ -119,7 +119,7 @@ PATH=/tmp/splendor-0.5.1-hocrsyngen-trial/bin:$PATH splendor init
 ```
 
 ```text
-Initialized Splendor workspace at /Users/shaypalachy/clones/hocrsyngen
+Initialized Splendor workspace at <hocrsyngen-repo>
 Created directories: 30
 Created files: 29
 State review groups:
@@ -137,9 +137,9 @@ PATH=/tmp/splendor-0.5.1-hocrsyngen-trial/bin:$PATH splendor add-source .agent-p
 Source ref: .agent-plan.md
 Logical ID: source:.agent-plan.md
 Registered source src-f28a2fcdedd6fb327c7016d8d555a17325373368b77dbc8f6784eae8cf2eccb9
-Manifest: /Users/shaypalachy/clones/hocrsyngen/state/manifests/sources/src-f28a2fcdedd6fb327c7016d8d555a17325373368b77dbc8f6784eae8cf2eccb9.json
+Manifest: <hocrsyngen-repo>/state/manifests/sources/src-f28a2fcdedd6fb327c7016d8d555a17325373368b77dbc8f6784eae8cf2eccb9.json
 Storage mode: none
-Queued ingest: /Users/shaypalachy/clones/hocrsyngen/state/queue/ingest-src-f28a2fcdedd6fb327c7016d8d555a17325373368b77dbc8f6784eae8cf2eccb9.json
+Queued ingest: <hocrsyngen-repo>/state/queue/ingest-src-f28a2fcdedd6fb327c7016d8d555a17325373368b77dbc8f6784eae8cf2eccb9.json
 Next: splendor ingest --pending
 ```
 
@@ -151,9 +151,9 @@ PATH=/tmp/splendor-0.5.1-hocrsyngen-trial/bin:$PATH splendor add-source README.m
 Source ref: README.md
 Logical ID: source:README.md
 Registered source src-83c7e75457ba4b9137c42a5df3aa1fda3a5db2bf91eca70ecd0a6bbb30aabe73
-Manifest: /Users/shaypalachy/clones/hocrsyngen/state/manifests/sources/src-83c7e75457ba4b9137c42a5df3aa1fda3a5db2bf91eca70ecd0a6bbb30aabe73.json
+Manifest: <hocrsyngen-repo>/state/manifests/sources/src-83c7e75457ba4b9137c42a5df3aa1fda3a5db2bf91eca70ecd0a6bbb30aabe73.json
 Storage mode: none
-Queued ingest: /Users/shaypalachy/clones/hocrsyngen/state/queue/ingest-src-83c7e75457ba4b9137c42a5df3aa1fda3a5db2bf91eca70ecd0a6bbb30aabe73.json
+Queued ingest: <hocrsyngen-repo>/state/queue/ingest-src-83c7e75457ba4b9137c42a5df3aa1fda3a5db2bf91eca70ecd0a6bbb30aabe73.json
 Next: splendor ingest --pending
 ```
 
@@ -165,9 +165,9 @@ PATH=/tmp/splendor-0.5.1-hocrsyngen-trial/bin:$PATH splendor add-source docs/roa
 Source ref: docs/roadmap.md
 Logical ID: source:docs/roadmap.md
 Registered source src-7443c1bcd1427986ba7861563e0b25d7abe3448536127a1b110b5893a41fb95b
-Manifest: /Users/shaypalachy/clones/hocrsyngen/state/manifests/sources/src-7443c1bcd1427986ba7861563e0b25d7abe3448536127a1b110b5893a41fb95b.json
+Manifest: <hocrsyngen-repo>/state/manifests/sources/src-7443c1bcd1427986ba7861563e0b25d7abe3448536127a1b110b5893a41fb95b.json
 Storage mode: none
-Queued ingest: /Users/shaypalachy/clones/hocrsyngen/state/queue/ingest-src-7443c1bcd1427986ba7861563e0b25d7abe3448536127a1b110b5893a41fb95b.json
+Queued ingest: <hocrsyngen-repo>/state/queue/ingest-src-7443c1bcd1427986ba7861563e0b25d7abe3448536127a1b110b5893a41fb95b.json
 Next: splendor ingest --pending
 ```
 

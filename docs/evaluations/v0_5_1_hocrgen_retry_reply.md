@@ -2,7 +2,7 @@
 
 No. I would not use Splendor v0.5.1 first or early for hocrgen day-to-day planning. It is better than nothing as a stale-index diagnostic, but it is not good enough to choose the next roadmap handoff.
 
-Important baseline mismatch: current hocrgen `main` is no longer at the post-`F3b` state. A human reading current `main` would pick `F6f`, not `F4c`: [`.agent-plan.md`](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:146), [`README.md`](/Users/shaypalachy/clones/hocrgen/README.md:116), and [`docs/HeOCR_hocrgen_long_term_roadmap.md`](/Users/shaypalachy/clones/hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:203) all point there. For the historical v0.4 test snapshot after `F3b`, yes, the expected answer was `F4c`.
+Important baseline mismatch: current hocrgen `main` is no longer at the post-`F3b` state. A human reading current `main` would pick `F6f`, not `F4c`: `hocrgen/.agent-plan.md:146`, `hocrgen/README.md:116`, and `hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:203` all point there. For the historical v0.4 test snapshot after `F3b`, yes, the expected answer was `F4c`.
 
 **Commands Run**
 
@@ -61,7 +61,7 @@ Current `main` says `F4c` is already complete and the next planned implementatio
 - It treats merged PRs and commits as “next actions” instead of predecessor context.
 - It does not reliably extract the current planned item from `.agent-plan.md` / roadmap / README.
 - It ranks stale machine-generated external review/amendment material too highly.
-- Provider-gate implementation evidence is not surfaced well enough; the right files are things like [`src/hocrgen/fetchers/hocrsyngen_manifest.py`](/Users/shaypalachy/clones/hocrgen/src/hocrgen/fetchers/hocrsyngen_manifest.py:52), [`src/hocrgen/source_ops.py`](/Users/shaypalachy/clones/hocrgen/src/hocrgen/source_ops.py:989), and [`tests/test_hocrsyngen_manifest.py`](/Users/shaypalachy/clones/hocrgen/tests/test_hocrsyngen_manifest.py:71).
+- Provider-gate implementation evidence is not surfaced well enough; the right files are things like `hocrgen/src/hocrgen/fetchers/hocrsyngen_manifest.py:52`, `hocrgen/src/hocrgen/source_ops.py:989`, and `hocrgen/tests/test_hocrsyngen_manifest.py:71`.
 
 **Top Recommended Fixes**
 
