@@ -165,7 +165,7 @@ For a fuller command overview, see [docs/guides/cli_overview.md](docs/guides/cli
 - [Roadmap](docs/splendor_mvp_to_v1_roadmap.md)
 - [CI and repo automation](docs/operations/ci_and_repo_automation.md)
 - [Release artifact operations](docs/operations/release_artifacts.md)
-- [v0.5.1 release notes](docs/releases/v0_5_1_release_notes.md)
+- [v0.5.2 release notes](docs/releases/v0_5_2_release_notes.md)
 
 Evaluation reports, design responses, and historical planning notes are kept under `docs/` for
 contributors who need them, but they are not the primary path for learning the tool.
