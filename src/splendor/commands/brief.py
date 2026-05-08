@@ -1421,12 +1421,16 @@ def _is_history_review_goal(goal_tokens: set[str]) -> bool:
     )
 
 
-def _is_current_work_goal(goal_tokens: set[str]) -> bool:
+def _is_current_work_goal(goal_tokens: set[str], goal: str | None) -> bool:
     if not goal_tokens or _is_history_review_goal(goal_tokens):
         return False
     if goal_tokens & _CURRENT_WORK_GOAL_TOKENS:
         return True
-    return any(any(character.isdigit() for character in token) for token in goal_tokens)
+    return _goal_mentions_roadmap_slice(goal)
+
+
+def _goal_mentions_roadmap_slice(goal: str | None) -> bool:
+    return re.search(_ROADMAP_SLICE_INNER_PATTERN, goal or "", re.IGNORECASE) is not None
 
 
 def _flatten_handoff_values(value) -> list[str]:
@@ -1596,19 +1600,19 @@ def _current_planned_work(
     handoff_current_state: HandoffCurrentState | None,
 ) -> CurrentPlannedWork | None:
     goal_tokens = _tokens(goal or "")
-    if handoff_current_state is not None or not _is_current_work_goal(goal_tokens):
+    if handoff_current_state is not None or not _is_current_work_goal(goal_tokens, goal):
         return None
 
-    structured = _structured_current_planned_work(root, git_context)
+    structured = _structured_current_planned_work(root, git_context, authority_briefs)
     if structured is not None:
         return structured
     return _line_inferred_current_planned_work(root, authority_briefs)
 
 
 def _structured_current_planned_work(
-    root: Path, git_context: GitContext
+    root: Path, git_context: GitContext, authority_briefs: list[AuthorityBrief]
 ) -> CurrentPlannedWork | None:
-    states = _planning_state_by_path(root)
+    states = _planning_state_by_path(root, authority_briefs)
     if not states:
         return None
     combined, disagreements = _reconciled_planning_state(states)
@@ -1712,9 +1716,11 @@ def _reconciled_planning_state(
     return combined, disagreements
 
 
-def _planning_state_by_path(root: Path) -> list[tuple[str, dict[str, str]]]:
+def _planning_state_by_path(
+    root: Path, authority_briefs: list[AuthorityBrief] | None = None
+) -> list[tuple[str, dict[str, str]]]:
     states: list[tuple[str, dict[str, str]]] = []
-    for relpath in _current_work_authority_paths(root):
+    for relpath in _current_work_authority_paths(root, authority_briefs):
         path = root / relpath
         if not path.is_file():
             continue
@@ -1745,17 +1751,19 @@ def _current_work_fallback_paths(root: Path, authority_briefs: list[AuthorityBri
     return paths
 
 
-def _current_work_authority_paths(root: Path) -> list[str]:
+def _current_work_authority_paths(
+    root: Path, authority_briefs: list[AuthorityBrief] | None = None
+) -> list[str]:
     paths = [".agent-plan.md", "README.md", "docs/splendor_mvp_to_v1_roadmap.md"]
-    docs_dir = root / "docs"
-    if docs_dir.is_dir():
-        for path in sorted(docs_dir.rglob("*.md")):
-            relative = path.relative_to(root).as_posix()
-            name = path.name.lower()
-            if relative in paths:
-                continue
-            if "roadmap" in name or "plan" in name:
-                paths.append(relative)
+    for authority in authority_briefs or []:
+        if authority.lifecycle in {"historical", "superseded", "archived"}:
+            continue
+        if authority.role not in {"current-authority", "roadmap"}:
+            continue
+        if _safe_existing_repo_file(root, authority.path) is None:
+            continue
+        if authority.path not in paths:
+            paths.append(authority.path)
     return paths
 
 
@@ -2651,7 +2659,7 @@ def _suggestion_candidates(snapshot: BriefStateSnapshot) -> list[SuggestedAction
     actions: list[SuggestedAction] = []
     goal_tokens = _tokens(snapshot.goal or "")
     goal_phrase = _normalize_goal_phrase(snapshot.goal or "")
-    current_work_goal = _is_current_work_goal(goal_tokens)
+    current_work_goal = _is_current_work_goal(goal_tokens, snapshot.goal)
 
     def add(priority: str, category: str, title: str, reason: str, command: str | None, **kwargs):
         relevance_score = kwargs.pop(
@@ -3013,7 +3021,7 @@ def _first_command(commands: list[str]) -> str | None:
 
 def _open_thread_covers_current_work(threads: list[GitThreadBrief], slice_id: str) -> bool:
     for thread in threads:
-        if not thread.promoted or thread.state != "open":
+        if thread.state != "open":
             continue
         if _thread_mentions_slice(thread, slice_id):
             return True

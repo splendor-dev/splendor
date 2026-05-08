@@ -3403,6 +3403,62 @@ def test_agent_context_keeps_matching_open_work_thread_ahead_of_current_authorit
     }
 
 
+def test_agent_context_keeps_unpromoted_matching_open_thread_ahead_of_current_authority(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `M20-P1.3`\n"
+        "- Current planned slice: `M20 current-work handoff ranking`\n"
+        "- Current PR sub-slice: `M20-P1.4`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `M20 mutating web review workflows`\n"
+        "- Next planned PR sub-slice: `M20-P2.1`\n",
+        encoding="utf-8",
+    )
+    _init_git_repo(tmp_path, repo="splendor-dev/splendor")
+    _commit_all(tmp_path, "M20-P1.3: Record retry findings")
+    _git(tmp_path, "switch", "-c", "codex/m20-p1-4-current-work-handoff-ranking")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[
+            {
+                "number": 177,
+                "title": "Implementation tracker",
+                "url": "https://github.com/splendor-dev/splendor/issues/177",
+                "body": "M20-P1.4 is the live implementation slice.",
+                "state": "open",
+                "labels": [],
+            }
+        ],
+        prs=[],
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "Start",
+            "current",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "M20-P1.4"
+    assert payload["work_context"]["actions"][0]["category"] == "work-thread"
+    assert payload["work_context"]["actions"][0]["url"].endswith("/issues/177")
+    assert "current-state" not in {
+        action["category"] for action in payload["work_context"]["actions"]
+    }
+
+
 def test_agent_context_reconciles_structured_planning_state_majority(
     tmp_path: Path, capsys
 ) -> None:
@@ -3554,6 +3610,43 @@ def test_agent_context_review_current_work_goal_still_uses_current_authority(
     assert payload["work_context"]["actions"][0]["category"] == "current-state"
 
 
+def test_agent_context_issue_number_goal_does_not_trigger_current_authority(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `M20-P1.3`\n"
+        "- Current planned slice: `M20 current-work handoff ranking`\n"
+        "- Current PR sub-slice: `M20-P1.3`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `M20 current-work handoff ranking`\n"
+        "- Next planned PR sub-slice: `M20-P1.4`\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "review",
+            "issue",
+            "177",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"] is None
+    assert "current-state" not in {
+        action["category"] for action in payload["work_context"]["actions"]
+    }
+
+
 def test_agent_context_fallback_current_work_follows_authority_ranking(
     tmp_path: Path, capsys
 ) -> None:
@@ -3577,6 +3670,57 @@ def test_agent_context_fallback_current_work_follows_authority_ranking(
     )
     (docs / "roadmap.md").write_text(
         "# hocrsyngen Roadmap\n\nCurrent roadmap work: `S7a`.\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "Continue",
+            "hocrsyngen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "S7a"
+    assert payload["current_planned_work"]["authority_paths"] == ["docs/roadmap.md"]
+
+
+def test_agent_context_structured_current_work_ignores_unconfigured_plan_docs(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/roadmap.md",
+            role="roadmap",
+            purpose="Current hocrsyngen roadmap authority.",
+            applies_to=["hocrsyngen roadmap work"],
+        )
+    ]
+    write_config(tmp_path, config)
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "allograph_plan.md").write_text(
+        "# Allograph Plan\n\n"
+        "- Current planned slice: `S1 allograph work`\n"
+        "- Current PR sub-slice: `S1a`\n",
+        encoding="utf-8",
+    )
+    (docs / "roadmap.md").write_text(
+        "# hocrsyngen Roadmap\n\n"
+        "- Current planned slice: `S7 script abstraction`\n"
+        "- Current PR sub-slice: `S7a`\n",
         encoding="utf-8",
     )
     capsys.readouterr()
