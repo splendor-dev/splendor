@@ -1110,7 +1110,7 @@ recoverability, source-registration hygiene, and trustworthy validation.
 
 ### Input signal
 The sanitized evaluation intake lives in `docs/evaluations/v0_2_synthbanshee_evaluation.md`. A fixture archive
-is preserved outside the repository under an operator-local archive path with SHA-256
+is preserved outside the repository in an operator-local archive. Its SHA-256 checksum is
 `8b2fea5e3cd04c99d52d79398347ff7a38b41a30c410a3a1ab1985fbe63b162c`.
 
 ### Planned PR slices
