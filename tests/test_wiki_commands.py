@@ -2447,7 +2447,13 @@ def test_agent_context_hocrgen_retry_bar_ranks_current_planning_before_history(
     assert suggest_exit == 0
     suggest_payload = json.loads(capsys.readouterr().out)
     suggest_categories = [action["category"] for action in suggest_payload["actions"]]
-    assert suggest_categories[0] in {"work-thread", "git-context", "authority", "planning"}
+    assert suggest_categories[0] in {
+        "current-state",
+        "work-thread",
+        "git-context",
+        "authority",
+        "planning",
+    }
     if "goal-match" in suggest_categories:
         assert suggest_categories.index("authority") < suggest_categories.index("goal-match")
 
@@ -3111,10 +3117,290 @@ def test_agent_context_preserves_non_stale_current_slice(
     assert suggest_exit == 0
     assert brief_payload["handoff_current_state"] is None
     assert suggest_payload["handoff_current_state"] is None
+    for payload in (brief_payload, suggest_payload):
+        assert payload["current_planned_work"]["slice_id"] == "S4d"
+        current_state_actions = [
+            action
+            for action in payload["work_context"]["actions"]
+            if action["category"] == "current-state"
+        ]
+        assert len(current_state_actions) == 1
+        assert current_state_actions[0]["rank"] == 1
+        assert "S4d" in current_state_actions[0]["title"]
+
+
+def test_agent_context_hocrsyngen_current_authority_leads_after_applied_ingest(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `S6h`\n"
+        "- Current planned slice: `S7 script abstraction`\n"
+        "- Current PR sub-slice: `S6h`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S7 script abstraction`\n"
+        "- Next planned PR sub-slice: `S7a`\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrsyngen\n\n"
+        "## What Comes Next\n\n"
+        "- Previous completed PR sub-slice: `S6h`\n"
+        "- Current planned slice: `S7 script abstraction`\n"
+        "- Current PR sub-slice: `S6h`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S7 script abstraction`\n"
+        "- Next planned PR sub-slice: `S7a`\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "roadmap.md").write_text(
+        "# hocrsyngen Roadmap\n\n"
+        "S6h is complete in PR #55. The active current planning item is `S7a`.\n",
+        encoding="utf-8",
+    )
+    _init_git_repo(tmp_path, repo="HeOCR/hocrsyngen")
+    _commit_all(tmp_path, "S6h: Close S6 and activate S7 script abstraction")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[],
+        prs=[
+            {
+                "number": 55,
+                "title": "S6h: Close S6 and activate S7 script abstraction",
+                "url": "https://github.com/HeOCR/hocrsyngen/pull/55",
+                "body": "Merged S6h. Current roadmap authority points at S7a.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-08T10:00:00Z",
+                "labels": [],
+            },
+            {
+                "number": 39,
+                "title": "S0e: Align post-S4d production-readiness roadmap",
+                "url": "https://github.com/HeOCR/hocrsyngen/pull/39",
+                "body": "Historical S4d alignment.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-06T10:00:00Z",
+                "labels": [],
+            },
+        ],
+    )
+    for path in (".agent-plan.md", "README.md", "docs/roadmap.md"):
+        main(["--root", str(tmp_path), "add-source", path])
+    main(["--root", str(tmp_path), "ingest", "--pending", "--apply"])
+    capsys.readouterr()
+
+    brief_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "Continue",
+            "hocrsyngen",
+            "roadmap",
+            "work",
+            "after",
+            "S6h",
+            "--json",
+        ]
+    )
+    brief_payload = json.loads(capsys.readouterr().out)
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "Continue",
+            "hocrsyngen",
+            "roadmap",
+            "work",
+            "after",
+            "S6h",
+            "--json",
+        ]
+    )
+    suggest_payload = json.loads(capsys.readouterr().out)
+
+    assert brief_exit == 0
+    assert suggest_exit == 0
+    for payload in (brief_payload, suggest_payload):
+        assert payload["current_planned_work"]["slice_id"] == "S7a"
+        action = payload["work_context"]["actions"][0]
+        assert action["category"] == "current-state"
+        assert "S7a" in action["title"]
+        titles = [item["title"] for item in payload["work_context"]["actions"]]
+        assert any("S6h" in title for title in titles[1:])
+        assert all("S0e" not in title for title in titles[:1])
+
+
+def test_agent_context_hocrgen_current_authority_beats_merged_pr_and_maintenance(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `F6e`\n"
+        "- Current planned slice: `F6 current public-beta closure`\n"
+        "- Current PR sub-slice: `F6e`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `F6 current public-beta closure`\n"
+        "- Next planned PR sub-slice: `F6f`\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrgen\n\nThe real next item from current main is `F6f`, not F6a or F6e review.\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "HeOCR_hocrgen_long_term_roadmap.md").write_text(
+        "# Roadmap\n\n"
+        "Current roadmap work: `F6f` integrates the larger validated hocrsyngen batch.\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "docs" / "source_depth.md"
+    source.write_text("# Source depth\n\nOriginal readiness evidence.\n", encoding="utf-8")
+    _init_git_repo(tmp_path, repo="HeOCR/hocrgen")
+    _commit_all(tmp_path, "F6e: Close source-depth readiness evidence")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[],
+        prs=[
+            {
+                "number": 72,
+                "title": "F6a: Define post-F5 public beta closure roadmap",
+                "url": "https://github.com/HeOCR/hocrgen/pull/72",
+                "body": "Historical F6a roadmap context.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-07T10:00:00Z",
+                "labels": [],
+            },
+            {
+                "number": 76,
+                "title": "F6e: Close source-depth and composition readiness",
+                "url": "https://github.com/HeOCR/hocrgen/pull/76",
+                "body": "Merged F6e. F6f follows.",
+                "state": "merged",
+                "isDraft": False,
+                "mergedAt": "2026-05-08T10:00:00Z",
+                "labels": [],
+            },
+        ],
+    )
+    added = add_source(tmp_path, source)
+    main(["--root", str(tmp_path), "ingest", added.source_id])
+    source.write_text("# Source depth\n\nChanged readiness evidence.\n", encoding="utf-8")
+    capsys.readouterr()
+
+    brief_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "Continue",
+            "hocrgen",
+            "roadmap",
+            "work",
+            "from",
+            "current",
+            "main",
+            "--json",
+        ]
+    )
+    brief_payload = json.loads(capsys.readouterr().out)
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "Continue",
+            "hocrgen",
+            "roadmap",
+            "work",
+            "from",
+            "current",
+            "main",
+            "--json",
+        ]
+    )
+    suggest_payload = json.loads(capsys.readouterr().out)
+
+    assert brief_exit == 0
+    assert suggest_exit == 0
+    for payload in (brief_payload, suggest_payload):
+        assert payload["current_planned_work"]["slice_id"] == "F6f"
+        assert payload["work_context"]["actions"][0]["category"] == "current-state"
+        assert "F6f" in payload["work_context"]["actions"][0]["title"]
+        work_titles = [action["title"] for action in payload["work_context"]["actions"]]
+        assert work_titles.index(payload["work_context"]["actions"][0]["title"]) == 0
+        assert any("F6e" in title or "F6a" in title for title in work_titles[1:])
+        assert payload["maintenance_context"]["actions"][0]["category"] == "source-freshness"
+
+
+def test_agent_context_keeps_matching_open_work_thread_ahead_of_current_authority(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `M20-P1.3`\n"
+        "- Current planned slice: `M20 current-work handoff ranking`\n"
+        "- Current PR sub-slice: `M20-P1.4`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `M20 mutating web review workflows`\n"
+        "- Next planned PR sub-slice: `M20-P2.1`\n",
+        encoding="utf-8",
+    )
+    _init_git_repo(tmp_path, repo="splendor-dev/splendor")
+    _commit_all(tmp_path, "M20-P1.3: Record retry findings")
+    _git(tmp_path, "switch", "-c", "codex/m20-p1-4-current-work-handoff-ranking")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[
+            {
+                "number": 177,
+                "title": "M20-P1.4 Current-work handoff ranking from planning authority",
+                "url": "https://github.com/splendor-dev/splendor/issues/177",
+                "body": "Implement M20-P1.4 and keep M20-P2.1 out of scope.",
+                "state": "open",
+                "labels": [],
+            }
+        ],
+        prs=[],
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "Start",
+            "M20-P1.4",
+            "current",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "M20-P1.4"
+    assert payload["work_context"]["actions"][0]["category"] == "work-thread"
+    assert payload["work_context"]["actions"][0]["url"].endswith("/issues/177")
     assert "current-state" not in {
-        action["category"] for action in brief_payload["suggested_actions"]
+        action["category"] for action in payload["work_context"]["actions"]
     }
-    assert "current-state" not in {action["category"] for action in suggest_payload["actions"]}
 
 
 def test_agent_context_hocrgen_retry_bar_uses_provisional_uncurated_authority(

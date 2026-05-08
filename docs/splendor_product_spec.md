@@ -1255,6 +1255,11 @@ v0.4 direction from external trials:
   planning authority for those goals. If no indexed sources are available, cold-start handoff
   should either use clearly labeled provisional authority well enough to name the current slice or
   clearly say that applied ingest is required before indexed retrieval can answer.
+- Current-work handoff ranking is runtime-only. `brief --agent-context` and `suggest-next` may
+  extract a `current_planned_work` candidate from `.agent-plan.md`, README, and roadmap authority
+  conventions, then rank it ahead of merged PRs, commits, and maintenance actions for
+  current/next-roadmap goals. Open issues or PRs that directly match that current work remain the
+  leading work-thread signal.
 - First-run adoption should be explicit about state churn. `splendor init` may create a
   repository-local workspace, but the CLI and docs should make the state location, review burden,
   and local/throwaway-worktree strategy clear before a first-time agent creates many visible
