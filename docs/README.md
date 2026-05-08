@@ -10,6 +10,7 @@ workflow.
 - [Schema contracts](schema_contracts.md)
 - [Source-resolution refactor plan](source_resolution_refactor_plan.md)
 - [Issue #70 design response](issue_70_design_response.md)
+- [Current-work authority model](current_work_authority_model.md)
 - [Mutating web review workflows proposal](mutating_web_review_workflows.md)
 
 ## Guides

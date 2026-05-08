@@ -359,6 +359,13 @@ Implemented fields:
   and rank the successor as the next work item. Stale `.agent-plan.md` or roadmap "current" text is
   still useful evidence, but it should be reconciled against merge state and explicit roadmap order
   before becoming the top suggested action.
+- Planned current-work authority classification is additive and runtime-only. Future
+  `current_planned_work` JSON should preserve existing action fields while exposing enough
+  classified evidence for agents to distinguish the selected current action from gated follow-ons,
+  blocker/prerequisite context, completed predecessor work, and historical or generated
+  maintenance context. The classification contract is defined in
+  `docs/current_work_authority_model.md`; it must not require persisted index state, schema-version
+  bumps, databases, background workers, hosted services, or mandatory external APIs.
 - Work-thread surfacing preserves breadth. JSON and human handoff lead with the best open issue or
   PR, and promoted open issues can pull in a bounded set of referenced open parent/sibling issue
   threads, including referenced open issues fetched by number when they were outside the initial

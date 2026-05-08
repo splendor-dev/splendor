@@ -150,6 +150,57 @@ hocrsyngen still found the source setup path awkward: `ingest --pending --apply`
 sources were manually added, and generated contested/review-needed state looked scarier than it was.
 That does not invalidate the S8b handoff pass, but it remains adoption friction.
 
+## Design And Roadmap Impact
+
+The v0.5.2 retry feedback changes the roadmap more than the architecture.
+
+### Product Design
+
+Splendor needs to treat "current work" as a typed handoff concept, not just the highest-ranking
+text match. `brief --agent-context` and `suggest-next` should classify planning evidence before
+ranking it:
+
+- active or unchecked `.agent-plan.md` work;
+- current or next roadmap status;
+- gated follow-on work;
+- blocker or prerequisite context;
+- completed predecessor work;
+- historical, superseded, generated, or maintenance context.
+
+That distinction is the difference between the correct hocrgen answer, `F6f2`, and the stale
+answer Splendor produced, `F1c`.
+
+### Architecture
+
+No broad architecture change is justified. The fix should stay local-first, deterministic,
+runtime-only, and filesystem-backed. It should not introduce a database, background worker,
+mandatory external API, hosted service, or broad agent-memory layer.
+
+The expected implementation shape is a narrow current-work authority classifier used by handoff
+ranking. It should sit on top of existing local planning, roadmap, git, and optional read-only
+GitHub signals.
+
+### Specification
+
+The product contract should distinguish handoff from retrieval:
+
+- `brief --agent-context` and `suggest-next` are handoff surfaces and should promote classified
+  current-work authority into the top action for current/next-roadmap goals.
+- `query` is still search and retrieval. It is not required to synthesize a final handoff answer
+  unless a future answer mode is explicitly designed.
+- any future `current_planned_work` JSON should explain which evidence class selected the current
+  action and which related evidence is only blocker, gated, predecessor, or historical context.
+
+### Roadmap
+
+This feedback adds a corrective M20 adoption-trust slice before richer GitHub integration work:
+
+- `M20-P1.5`: record the v0.5.2 hocr retry evidence and define the current-work authority model.
+- `M20-P1.6`: implement current-work authority classification and acceptance coverage.
+
+`M20-P3.1` richer GitHub integrations should remain planned, but should follow this correction so
+more integration surface does not amplify an unresolved handoff-selection failure.
+
 ## Conclusions
 
 `v0.5.2` should not be treated as a general hocr adoption success.
