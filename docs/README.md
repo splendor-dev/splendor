@@ -14,6 +14,7 @@ workflow.
 ## Guides
 
 - [Quickstart](guides/quickstart.md)
+- [CLI overview](guides/cli_overview.md)
 - [Companion repo setup](guides/companion_repo_setup.md)
 - [Dogfooding](guides/dogfooding.md)
 

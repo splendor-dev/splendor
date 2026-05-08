@@ -60,6 +60,20 @@ active implementation queue unless the disposition says a follow-up issue remain
 | V04-F13 | Implemented by `M19-P5.2`: generated text integrity checks and sanitization cover control-byte leakage. | Closed M19 work. |
 | V04-F14 | Implemented by `M19-P5.2`: manifest `pipeline_version` provenance is refreshed when ingest rewrites manifest provenance. | Closed M19 work. |
 
+## Post-v0.5.1 Retry Note
+
+The v0.5.1 hocrgen/hocrsyngen retry findings in
+[`v0_5_1_retry_findings.md`](v0_5_1_retry_findings.md) do not reopen the completed M19 blocker loop,
+but they show that the V04-F2 real-world acceptance bar is not fully satisfied for day-to-day
+partner adoption. The remaining work is now tracked as a Milestone 20 product follow-up rather than
+as an M19 regression:
+
+| Finding | v0.5.1 retry disposition | Current tracking |
+| --- | --- | --- |
+| V04-F2 | M19-P6.1 improved completion-aware inference, and M20-P1.2 added fixture-backed coverage, but live hocrgen/hocrsyngen retries still show `brief --agent-context` and `suggest-next` leading with merged PR review instead of current planned work. | Follow-up #177 under Milestone 20. |
+| V04-F4 | M19-P8.1 improved first-run state disclosure, but hocrsyngen still found normal cold-start evaluation too stateful and indexing requirements too easy to miss. | Keep as secondary acceptance pressure for #177 and later cold-start UX work; do not fold state relocation into #177. |
+| V04-F6 | Policy-cited implementation-file surfacing remains relevant where current authority names the implementation/test files needed for the next slice. | Follow-up #160 remains open; only include minimal path boosts in #177 if required by its handoff fixtures. |
+
 ## Validated Improvements
 
 | ID | Improvement | Evidence | Follow-up |
