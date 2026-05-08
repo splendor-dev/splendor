@@ -2,6 +2,9 @@
 
 Splendor v0.5.2 is not useful again for hocrgen day-to-day handoff yet. It still leads with stale/merged-history-shaped work instead of the actual next slice.
 
+Note: this raw reply intentionally preserves local transcript paths from the reviewer environment.
+They are evidence references, not portable documentation links.
+
 **Evidence**
 
 I installed the published wheel:

@@ -188,8 +188,9 @@ The product contract should distinguish handoff from retrieval:
   current-work authority into the top action for current/next-roadmap goals.
 - `query` is still search and retrieval. It is not required to synthesize a final handoff answer
   unless a future answer mode is explicitly designed.
-- any future `current_planned_work` JSON should explain which evidence class selected the current
-  action and which related evidence is only blocker, gated, predecessor, or historical context.
+- `current_planned_work` JSON should preserve its existing fields and may add optional fields that
+  explain which evidence class selected the current action and which related evidence is only
+  blocker, gated, predecessor, or historical context.
 
 ### Roadmap
 

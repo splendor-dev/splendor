@@ -338,7 +338,7 @@ deterministic lint/health validation for those cross-links.
 - Current planned slice: `M20 current-work authority model from v0.5.2 hocr retries`
 - Current PR sub-slice: `M20-P1.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 current-work authority classifier implementation`
+- Next planned slice: `M20 current-work authority classifier implementation (#182)`
 - Next planned PR sub-slice: `M20-P1.6`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
@@ -1375,7 +1375,8 @@ relevant to the selected M20 implementation.
 - `M20-P2.1` Explore mutating web review workflows (#119).
 - `M20-P1.5` Record v0.5.2 hocrgen/hocrsyngen retry findings and define the current-work
   authority model.
-- `M20-P1.6` Implement current-work authority classification and hocr retry acceptance coverage.
+- `M20-P1.6` Implement current-work authority classification and hocr retry acceptance coverage
+  (#182).
 - `M20-P3.1` Add richer GitHub issue, PR, review-thread, and CI integrations on top of the
   v0.4 handoff model.
 
@@ -1422,7 +1423,7 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P1.4` current-work handoff ranking from planning authority (#177).
 - `M20-P2.1` mutating web review workflows after the first adoption-trust handoff follow-up.
 - `M20-P1.5` v0.5.2 retry evidence intake and current-work authority-model design.
-- `M20-P1.6` current-work authority classification implementation.
+- `M20-P1.6` current-work authority classification implementation (#182).
 - `M20-P3.1` richer GitHub issue, PR, review-thread, and CI integrations after the authority-model
   correction.
 
@@ -1449,13 +1450,13 @@ rather than a slice, gated follow-ons stay behind prerequisites, and merged PRs 
 context for current-work goals. `query` remains retrieval/search, not guaranteed handoff answer
 synthesis.
 
-`M20-P1.6` should be the next implementation slice. It should keep the runtime local-first and
-deterministic while adding the authority classification needed by the captured retry cases. The
-acceptance bar is narrow: hocrgen current-work handoff ranks `F6f2` first, keeps `F6g` gated behind
-it, preserves `F1c` only as blocker/prerequisite context, suppresses merged PRs as top actions for
-current-work goals, and preserves the hocrsyngen `S8b` partial pass. This slice should not broaden
-into query answer synthesis, mutating web workflows, background services, databases, mandatory
-external APIs, or a general agent-memory architecture.
+`M20-P1.6` (#182) should be the next implementation slice. It should keep the runtime local-first
+and deterministic while adding the authority classification needed by the captured retry cases.
+The acceptance bar is narrow: hocrgen current-work handoff ranks `F6f2` first, keeps `F6g` gated
+behind it, preserves `F1c` only as blocker/prerequisite context, suppresses merged PRs as top
+actions for current-work goals, and preserves the hocrsyngen `S8b` partial pass. This slice should
+not broaden into query answer synthesis, mutating web workflows, background services, databases,
+mandatory external APIs, or a general agent-memory architecture.
 
 ---
 

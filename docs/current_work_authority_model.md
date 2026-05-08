@@ -45,6 +45,10 @@ Current-work ranking should classify evidence before scoring it.
 An active task is an explicitly current or in-progress item in `.agent-plan.md`, a synchronized
 planning-state block, or an open live issue/PR that directly owns the requested work.
 
+Direct owner issue/PR threads are part of active-task evidence only when their title/body or
+linked planning state directly names the selected slice or task. Related parent, sibling, or
+historical threads are not active tasks by themselves.
+
 Active tasks are the strongest current-work evidence.
 
 ### Unchecked Next Task
@@ -94,6 +98,83 @@ explicit planning state exists.
 Generated review-needed tasks, source freshness warnings, queue state, missing synthesis follow-up,
 and lint/health drift are maintenance context. They can lead only for maintenance-focused goals.
 
+## Extraction Contract
+
+M20-P1.6 should implement classification through deterministic extraction before relevance
+scoring. The extractor should not treat every matched slice token as an equally valid candidate.
+
+### Source Priority
+
+For current/next-roadmap goals, read candidate sources in this order:
+
+1. `.agent-plan.md` active state and unchecked task sections.
+2. Live open issue/PR state that directly names the goal, selected slice, or linked active
+   planning record.
+3. Synchronized planning-state blocks in README and roadmap docs.
+4. Ordered roadmap or phase tables in roadmap docs.
+5. Configured or inferred current-authority docs.
+6. Local git/GitHub completion evidence used to reconcile candidates and demote completed work.
+7. Generated wiki/source summaries, saved query results, and review transcripts as context only.
+
+Lower-priority sources can explain or corroborate a selected candidate, but they should not
+displace a higher-priority active or unchecked task unless the higher-priority source is explicitly
+stale and completion evidence identifies the successor.
+
+### Section Priority
+
+Within `.agent-plan.md` and roadmap-like files, prefer sections in this order:
+
+1. Current system state or current work sections.
+2. Active task, implementation checklist, or current PR sub-slice sections.
+3. Planned next, candidate PR slice, or ordered roadmap sections.
+4. Status tables that distinguish complete, current, planned, blocked, or gated work.
+5. Retrospective, historical, release-note, review, appendix, or archived sections.
+
+Historical/review/archive sections should not produce current-work candidates unless no active,
+unchecked, current, or planned section yields a candidate and the output clearly reports that the
+candidate is weak.
+
+### Accepted Candidate Patterns
+
+The extractor should accept a candidate only from lines or table rows that carry task status or
+planning intent, such as:
+
+- unchecked markdown checkboxes: `- [ ] F6f2: ...`;
+- explicit current-state lines: `Current PR sub-slice: F6f2`;
+- explicit next-state lines: `Next planned PR sub-slice: F6f2`;
+- status table rows marked `current`, `planned`, `next`, `in progress`, or equivalent;
+- open issue/PR titles or bodies that directly name the selected slice and are not merged/closed;
+- ordered roadmap rows where all prior rows in the same sequence are completed and this row is the
+  first non-complete row.
+
+The extractor should ignore candidate tokens on lines marked or headed as completed, done, merged,
+closed, superseded, archived, historical, retrospective, old blocker, or release notes unless they
+are used only as predecessor or blocker context.
+
+### Tie-Breakers
+
+When multiple candidates remain after classification:
+
+1. Prefer active/in-progress over unchecked next.
+2. Prefer unchecked next over gated follow-on.
+3. Prefer candidates from higher-priority sources.
+4. Prefer the first non-complete item in the nearest ordered sequence.
+5. Prefer candidates directly named by a live open owner issue/PR.
+6. Prefer newer synchronized planning-state values over older generated summaries.
+7. If still tied, keep the first deterministic file-order candidate and report the conflict.
+
+### Conflict Output
+
+When selected evidence conflicts with other plausible candidates, human output and JSON should
+label the conflict instead of hiding it. At minimum, the handoff should name:
+
+- the selected current-work candidate;
+- authority path(s) that selected it;
+- predecessor or completed candidates that were demoted;
+- gated follow-ons;
+- blocker/prerequisite context;
+- lower-priority conflicting candidates and why they did not win.
+
 ## Precedence
 
 For current-work goals, the default precedence is:
@@ -101,8 +182,8 @@ For current-work goals, the default precedence is:
 1. Active task.
 2. Unchecked next task.
 3. Reconciled current status row.
-4. Live open issue or PR that directly owns the selected work.
-5. Gated follow-on context.
+4. Gated follow-on context.
+5. Related live issue or PR context that does not directly own the selected work.
 6. Blocker or prerequisite context.
 7. Completed work and merged PR predecessor context.
 8. Historical, superseded, generated, and maintenance context.
@@ -134,15 +215,22 @@ context should be labeled so a reader can tell the difference between the next a
 follow-on, blocker context, and predecessor history.
 
 JSON output should stay additive and deterministic. Existing action fields should remain stable.
-Any future `current_planned_work` object should identify:
+The current `current_planned_work` object already identifies:
 
 - selected slice or task ID, when available;
-- title;
+- planned slice label, when available;
 - authority paths;
+- predecessor slices;
+- selection reason.
+
+M20-P1.6 may add optional fields, but should not remove or rename the existing fields. Useful
+additive fields include:
+
 - evidence class;
 - predecessor evidence;
 - gated follow-ons;
 - blocker or prerequisite context;
+- lower-priority conflicts;
 - whether the selection was direct or reconciled from stale current-state text.
 
 ## Acceptance Examples
