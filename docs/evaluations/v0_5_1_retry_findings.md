@@ -111,6 +111,17 @@ handoff and authority-ranking failures:
 6. Revisit generated state placement or first-run messaging so a first-time repository does not
    feel polluted after a normal evaluation run.
 
+## Planning Impact
+
+Issue #118 is closed by the M20-P1.1/M20-P1.2 retrieval work, so the remaining external retry gap
+should not be folded back into that issue without a new tracker. The follow-up implementation is
+tracked as #177: `M20-P1.4 Current-work handoff ranking from planning authority`.
+
+This intake PR is `M20-P1.3`. It records the retry evidence and updates the roadmap/spec contract
+only. The next implementation PR should be `M20-P1.4`, and `M20-P2.1` mutating web review
+workflows should stay deferred until the adoption-trust handoff follow-up has landed or been
+explicitly deprioritized.
+
 ## Recommended Acceptance Bar For The Next Fix
 
 The next implementation slice should include fixture-backed and live-shape regression coverage for
@@ -129,8 +140,9 @@ the cases exposed here:
 - completed-slice evidence should remain visible only as predecessor context, not as a default
   next action.
 
-## Out Of Scope For This Intake
+## Out Of Scope For This Planning PR
 
-This document and the raw reviewer replies do not change runtime behavior, add tests, or update
-planning-state lines. They preserve the v0.5.1 external retry evidence so the next implementation
-PR can target the remaining handoff-ranking and current-planning gaps directly.
+This document and the raw reviewer replies do not change runtime behavior, add tests, or implement
+the current-work handoff ranking fix. They preserve the v0.5.1 external retry evidence and define
+the next implementation bar so the following PR can target the remaining handoff-ranking and
+current-planning gaps directly.

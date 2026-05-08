@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P1.1`
-- Current planned slice: `M20 advanced semantic search or vector index`
-- Current PR sub-slice: `M20-P1.2`
+- Previous completed PR sub-slice: `M20-P1.2`
+- Current planned slice: `M20 current-work handoff ranking`
+- Current PR sub-slice: `M20-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 mutating web review workflows`
-- Next planned PR sub-slice: `M20-P2.1`
+- Next planned slice: `M20 current-work handoff ranking`
+- Next planned PR sub-slice: `M20-P1.4`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1359,15 +1359,18 @@ too-quiet no-diff human `pr-summary`, and #163 mutation JSON compatibility alias
 
 ### Goal
 Start larger product bets now that the v0.5 integrated-use review accepts the M19 durability loop
-as closed. After the `M20-P0.1` intake handoff, the first M20 product slice should focus on semantic
-retrieval or vector-index quality without absorbing mutating web workflows or reopening the closed
-M19 blocker sequence. Remaining M19 polish issues can ride along only when they are directly
-relevant to the selected M20 implementation.
+as closed, while treating the v0.5.1 hocrgen/hocrsyngen retry evidence as a new M20 product-scope
+handoff signal rather than a reason to reopen M19. After `M20-P1.2` and the v0.5.1 release, the
+next adoption-trust slice should focus on current-work handoff ranking before mutating web review
+workflows. Remaining M19 polish issues can ride along only when they are directly relevant to the
+selected M20 implementation.
 
 ### Candidate PR slices
 - `M20-P0.1` Record v0.5 SynthBanshee integrated-use review intake and M20 issue disposition.
 - `M20-P1.1` Add advanced semantic search or a vector index (#118).
 - `M20-P1.2` Retrieval evaluation and handoff retry fixtures (#118).
+- `M20-P1.3` Record v0.5.1 hocrgen/hocrsyngen retry findings and current-work handoff plan.
+- `M20-P1.4` Current-work handoff ranking from planning authority (#177).
 - `M20-P2.1` Explore mutating web review workflows (#119).
 - Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
 
@@ -1379,17 +1382,39 @@ improvement, not a full vector-search implementation: exact lexical evidence sti
 expansion-only matches, and broader retrieval evaluation remains part of the M20 search track.
 Mutating web review workflows stay deferred to `M20-P2.1`.
 
-`M20-P1.2` closes the first retrieval acceptance gap with deterministic fixture-backed regression
-coverage instead of new index infrastructure. The fixtures cover hocrgen/hocrsyngen-style retry
-bars where exact full-phrase evidence must beat acronym-only evidence under competition, shorthand
-queries must still recover full-phrase records in non-empty corpora, query-backed agent handoff
-must expose that recovery, current planning authority must outrank stale historical review
-material, and completed-slice evidence must advance handoff to the next planned slice. The ordered
-M20 retrieval sequence is therefore:
+`M20-P1.2` closes the first deterministic retrieval-evaluation acceptance gap with fixture-backed
+regression coverage instead of new index infrastructure. The fixtures cover
+hocrgen/hocrsyngen-style retry bars where exact full-phrase evidence must beat acronym-only
+evidence under competition, shorthand queries must still recover full-phrase records in non-empty
+corpora, query-backed agent handoff must expose that recovery, current planning authority must
+outrank stale historical review material, and completed-slice evidence must advance handoff to the
+next planned slice. The subsequent v0.5.1 hocrgen/hocrsyngen retry round showed that those fixtures
+improved the local acceptance surface but did not yet make Splendor pass the live day-to-day
+handoff bar.
+
+`M20-P1.3` records that v0.5.1 retry evidence in
+`docs/evaluations/v0_5_1_retry_findings.md` and turns it into an implementation plan without
+changing runtime behavior. The key result is that hocrsyngen applied-ingest retrieval can recover
+current `S7a` evidence, but `brief --agent-context` and `suggest-next` still promote merged PR
+review actions above the current slice. hocrgen has the stronger failure: after `ingest --changed`
+repairs stale curated sources, exact `F6f` retrieval still fails and handoff still leads with
+merged PR review or historical/generated summaries. This is now a current-work handoff-ranking and
+authority-priority problem, not a reason to broaden into mutating web workflows.
+
+`M20-P1.4` is the next implementation slice (#177). It should keep the first fix runtime-only and
+file-based: extract current planned work from `.agent-plan.md`, README, and roadmap authority for
+next-roadmap goals; make `brief --agent-context` and `suggest-next` lead with that work; demote
+merged PRs, recent commits, and completed-slice evidence to predecessor context unless the user
+asks to review history; and preserve open work-thread behavior when a live issue or PR is the real
+current work. Broad vector-search infrastructure, cold-start state relocation, general
+provider-gate ranking, and mutating web review workflows stay out of scope for this slice unless
+directly required by the current-work handoff fixtures. The ordered M20 sequence is therefore:
 
 - `M20-P1.1` runtime semantic expansion for deterministic query and query-backed handoff recall.
 - `M20-P1.2` retrieval evaluation and handoff retry fixture closeout.
-- `M20-P2.1` mutating web review workflows after the retrieval closeout.
+- `M20-P1.3` v0.5.1 retry evidence intake and current-work handoff planning.
+- `M20-P1.4` current-work handoff ranking from planning authority (#177).
+- `M20-P2.1` mutating web review workflows after the adoption-trust handoff follow-up.
 
 ---
 

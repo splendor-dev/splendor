@@ -36,6 +36,7 @@ workflow.
 - [v0.4 external review round summary](evaluations/v0_4_external_review_round_summary.md)
 - [v0.4 external findings register](evaluations/v0_4_external_findings_register.md)
 - [v0.5 SynthBanshee integrated-use review](evaluations/v0_5_synthbanshee_integrated_use/summary.md)
+- [v0.5.1 hocrgen/hocrsyngen retry findings](evaluations/v0_5_1_retry_findings.md)
 - [Public mock client acceptance](evaluations/public_mock_client_acceptance.md)
 
 ## Releases

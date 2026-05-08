@@ -1177,6 +1177,12 @@ Current implementation:
   A correct handoff should also reconcile current-state conflicts: when git/GitHub state shows that
   a PR or slice has merged, and an ordered roadmap names the next slice, stale dynamic planning
   docs should not send the agent back to already-completed work.
+- For current-roadmap goals, `brief --agent-context` and `suggest-next` should synthesize the
+  current planned work from `.agent-plan.md`, README, roadmap, and maintained authority docs before
+  ranking merged PRs, recent commits, generated source summaries, maintenance actions, or
+  historical review material as work actions. Merged PRs and commits are predecessor context unless
+  the user explicitly asks to review history or a PR. Open issues and active PRs remain eligible to
+  lead when they are the live work thread for the stated goal.
 - Git-aware `brief --agent-context` and `suggest-next` include the `splendor pr-summary --since
   <base>` command under Splendor maintenance context when a branch has Splendor-specific compact
   review groups or attention diagnostics. This keeps compact committed generated-state review
@@ -1241,6 +1247,14 @@ v0.4 direction from external trials:
   a merge. Git/GitHub merge state, PR titles/bodies, recent commit subjects, and roadmap ordering
   should be considered together before ranking "review recently merged PR" above "start next
   planned slice."
+- Post-v0.5.1 hocrgen and hocrsyngen retries sharpen that target. Retrieval and handoff synthesis
+  are separate obligations: `query` must recover current planning evidence, while `brief
+  --agent-context` and `suggest-next` must promote that evidence into the top work action when the
+  goal asks for current or next roadmap work. Generated source-summary pages, synthetic spinout
+  amendments, external review notes, and other historical summaries should not outrank current
+  planning authority for those goals. If no indexed sources are available, cold-start handoff
+  should either use clearly labeled provisional authority well enough to name the current slice or
+  clearly say that applied ingest is required before indexed retrieval can answer.
 - First-run adoption should be explicit about state churn. `splendor init` may create a
   repository-local workspace, but the CLI and docs should make the state location, review burden,
   and local/throwaway-worktree strategy clear before a first-time agent creates many visible

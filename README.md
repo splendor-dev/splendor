@@ -303,6 +303,21 @@ records in non-empty corpora, query-backed agent handoff exposes that recovery, 
 authority outranks stale review material, and completed slices advance handoff to the next planned
 slice before mutating web workflows begin.
 
+`M20-P1.3` records the v0.5.1 hocrgen and hocrsyngen retry evidence and narrows the next product
+bet before implementation. The retry round showed that applied ingest can make current planning
+evidence retrievable in hocrsyngen, but `brief --agent-context` and `suggest-next` still promoted
+merged PR review above the actual next slice. In hocrgen, stale-source repair completed
+successfully, but exact current-slice retrieval and handoff ranking still failed. The resulting
+plan inserts a focused current-work handoff-ranking slice before mutating web review workflows,
+without adding new index infrastructure or changing runtime behavior in the planning PR.
+
+`M20-P1.4` is the next implementation target: make current planned work from `.agent-plan.md`,
+README, and roadmap authority a first-class handoff candidate for next-roadmap goals, demote
+merged PRs and completed commits to predecessor context, and preserve open work-thread behavior
+where a live issue or PR is the actual current work. Query/retrieval hardening, cold-start state
+layout changes, and mutating web review workflows remain separate follow-ups unless directly
+needed by those handoff fixtures.
+
 `M17-P4.1` reduces issue #117 contradiction-review task noise without weakening contradiction
 evidence. Ingest-created contradiction-review tasks are classified as generated planning records,
 hidden from default active planning handoff, and managed intentionally through task-list, resolve,
@@ -338,18 +353,19 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [v0.4 external review summary](docs/evaluations/v0_4_external_review_round_summary.md)
 - [v0.4 external findings register](docs/evaluations/v0_4_external_findings_register.md)
 - [v0.5 SynthBanshee integrated-use review](docs/evaluations/v0_5_synthbanshee_integrated_use/summary.md)
+- [v0.5.1 hocrgen/hocrsyngen retry findings](docs/evaluations/v0_5_1_retry_findings.md)
 - [v0.4.0 release notes](docs/releases/v0_4_0_release_notes.md)
 - [v0.5.0 release notes](docs/releases/v0_5_0_release_notes.md)
 - [v0.5.1 release notes](docs/releases/v0_5_1_release_notes.md)
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M20-P1.1`
-- Current planned slice: `M20 advanced semantic search or vector index`
-- Current PR sub-slice: `M20-P1.2`
+- Previous completed PR sub-slice: `M20-P1.2`
+- Current planned slice: `M20 current-work handoff ranking`
+- Current PR sub-slice: `M20-P1.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 mutating web review workflows`
-- Next planned PR sub-slice: `M20-P2.1`
+- Next planned slice: `M20 current-work handoff ranking`
+- Next planned PR sub-slice: `M20-P1.4`
 
 `M5-P2` is implemented: the repository now pairs the MVP docs/example slice with
 hardening work for operational edge cases, consistent one-line CLI error output, and source/wheel
