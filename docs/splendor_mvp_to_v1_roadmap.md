@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P1.3`
-- Current planned slice: `M20 current-work handoff ranking`
-- Current PR sub-slice: `M20-P1.4`
+- Previous completed PR sub-slice: `M20-P1.4`
+- Current planned slice: `M20 mutating web review workflows`
+- Current PR sub-slice: `M20-P2.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 mutating web review workflows`
-- Next planned PR sub-slice: `M20-P2.1`
+- Next planned slice: `M20 richer GitHub integrations`
+- Next planned PR sub-slice: `M20-P3.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1371,7 +1371,8 @@ selected M20 implementation.
 - `M20-P1.3` Record v0.5.1 hocrgen/hocrsyngen retry findings and current-work handoff plan.
 - `M20-P1.4` Current-work handoff ranking from planning authority (#177).
 - `M20-P2.1` Explore mutating web review workflows (#119).
-- Add richer GitHub issue, PR, review-thread, and CI integrations on top of the v0.4 handoff model.
+- `M20-P3.1` Add richer GitHub issue, PR, review-thread, and CI integrations on top of the
+  v0.4 handoff model.
 
 `M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
 first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
@@ -1415,6 +1416,19 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P1.3` v0.5.1 retry evidence intake and current-work handoff planning.
 - `M20-P1.4` current-work handoff ranking from planning authority (#177).
 - `M20-P2.1` mutating web review workflows after the adoption-trust handoff follow-up.
+- `M20-P3.1` richer GitHub issue, PR, review-thread, and CI integrations.
+
+`M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
+while defining the narrow first mutation paths worth implementing later: accept one reviewed
+`wiki compile` proposal for a maintained page and resolve or mute generated review tasks. Source
+and queue maintenance remains a later candidate after the single-page compile path proves browser
+acceptance can preserve CLI-equivalent safety. Browser-side acceptance must rerun validation
+against current workspace bytes, use proposal or mutation hashes plus expected input hashes, refuse
+stale proposals rather than merge them, require same-origin POST-only local-intent protections, and
+leave the resulting working-tree diff as the git-native review surface. The detailed proposal lives
+in `docs/mutating_web_review_workflows.md`. Runtime web mutation, source or queue maintenance apply
+buttons, background workers, databases, auth, hosted services, mandatory external APIs, automatic
+GitHub mutation, and broad multi-page editing stay out of scope for this slice.
 
 ---
 
