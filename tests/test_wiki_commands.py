@@ -3369,7 +3369,7 @@ def test_agent_context_keeps_matching_open_work_thread_ahead_of_current_authorit
         issues=[
             {
                 "number": 177,
-                "title": "M20-P1.4 Current-work handoff ranking from planning authority",
+                "title": "Current-work handoff ranking from planning authority",
                 "url": "https://github.com/splendor-dev/splendor/issues/177",
                 "body": "Implement M20-P1.4 and keep M20-P2.1 out of scope.",
                 "state": "open",
@@ -3401,6 +3401,148 @@ def test_agent_context_keeps_matching_open_work_thread_ahead_of_current_authorit
     assert "current-state" not in {
         action["category"] for action in payload["work_context"]["actions"]
     }
+
+
+def test_agent_context_reconciles_structured_planning_state_majority(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `S6h`\n"
+        "- Current planned slice: `S6 stale script boundary`\n"
+        "- Current PR sub-slice: `S6h`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S6 stale script boundary`\n"
+        "- Next planned PR sub-slice: `S6i`\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrsyngen\n\n"
+        "## What Comes Next\n\n"
+        "- Previous completed PR sub-slice: `S6h`\n"
+        "- Current planned slice: `S7 script abstraction`\n"
+        "- Current PR sub-slice: `S6h`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S7 script abstraction`\n"
+        "- Next planned PR sub-slice: `S7a`\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "splendor_mvp_to_v1_roadmap.md").write_text(
+        "# Roadmap\n\n"
+        "- Previous completed PR sub-slice: `S6h`\n"
+        "- Current planned slice: `S7 script abstraction`\n"
+        "- Current PR sub-slice: `S6h`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S7 script abstraction`\n"
+        "- Next planned PR sub-slice: `S7a`\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "Continue",
+            "hocrsyngen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "S7a"
+    assert "majority value 'S7a'" in payload["current_planned_work"]["reason"]
+
+
+def test_agent_context_review_current_work_goal_still_uses_current_authority(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `M20-P1.3`\n"
+        "- Current planned slice: `M20 current-work handoff ranking`\n"
+        "- Current PR sub-slice: `M20-P1.3`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `M20 current-work handoff ranking`\n"
+        "- Next planned PR sub-slice: `M20-P1.4`\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "review",
+            "current",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "M20-P1.4"
+    assert payload["work_context"]["actions"][0]["category"] == "current-state"
+
+
+def test_agent_context_fallback_current_work_follows_authority_ranking(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="docs/roadmap.md",
+            role="roadmap",
+            purpose="Current hocrsyngen roadmap authority.",
+            applies_to=["hocrsyngen roadmap work"],
+        )
+    ]
+    write_config(tmp_path, config)
+    docs = tmp_path / "docs"
+    docs.mkdir(exist_ok=True)
+    (docs / "allograph_plan.md").write_text(
+        "# Allograph Plan\n\nCurrent implementation work: `S1a`.\n",
+        encoding="utf-8",
+    )
+    (docs / "roadmap.md").write_text(
+        "# hocrsyngen Roadmap\n\nCurrent roadmap work: `S7a`.\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "Continue",
+            "hocrsyngen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "S7a"
+    assert payload["current_planned_work"]["authority_paths"] == ["docs/roadmap.md"]
 
 
 def test_agent_context_hocrgen_retry_bar_uses_provisional_uncurated_authority(

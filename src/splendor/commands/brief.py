@@ -6,6 +6,7 @@ import json
 import re
 import shlex
 import subprocess
+from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -278,9 +279,16 @@ _HISTORY_REVIEW_GOAL_TOKENS = {
     "historical",
     "merged",
     "past",
+}
+_PR_REVIEW_GOAL_TOKENS = {
     "pr",
     "prs",
     "pull",
+    "request",
+    "requests",
+}
+_REVIEW_ACTION_GOAL_TOKENS = {
+    "inspect",
     "review",
     "reviews",
 }
@@ -705,6 +713,7 @@ def _collect_brief_state(
         root,
         git_context,
         normalized_goal or None,
+        authority_briefs,
         handoff_current_state=handoff_current_state,
     )
     return BriefStateSnapshot(
@@ -1405,7 +1414,11 @@ def _is_maintenance_goal(goal_tokens: set[str]) -> bool:
 
 
 def _is_history_review_goal(goal_tokens: set[str]) -> bool:
-    return bool(goal_tokens & _HISTORY_REVIEW_GOAL_TOKENS)
+    if goal_tokens & _HISTORY_REVIEW_GOAL_TOKENS:
+        return True
+    return bool(
+        (goal_tokens & _REVIEW_ACTION_GOAL_TOKENS) and (goal_tokens & _PR_REVIEW_GOAL_TOKENS)
+    )
 
 
 def _is_current_work_goal(goal_tokens: set[str]) -> bool:
@@ -1578,6 +1591,7 @@ def _current_planned_work(
     root: Path,
     git_context: GitContext,
     goal: str | None,
+    authority_briefs: list[AuthorityBrief],
     *,
     handoff_current_state: HandoffCurrentState | None,
 ) -> CurrentPlannedWork | None:
@@ -1588,7 +1602,7 @@ def _current_planned_work(
     structured = _structured_current_planned_work(root, git_context)
     if structured is not None:
         return structured
-    return _line_inferred_current_planned_work(root)
+    return _line_inferred_current_planned_work(root, authority_briefs)
 
 
 def _structured_current_planned_work(
@@ -1597,11 +1611,9 @@ def _structured_current_planned_work(
     states = _planning_state_by_path(root)
     if not states:
         return None
-    combined: dict[str, str] = {}
+    combined, disagreements = _reconciled_planning_state(states)
     authority_paths: list[str] = []
     for relpath, values in states:
-        for label, value in values.items():
-            combined.setdefault(label, value)
         if values:
             authority_paths.append(relpath)
 
@@ -1629,6 +1641,8 @@ def _structured_current_planned_work(
             predecessor_slices.append(value)
 
     reason_parts = ["Structured planning-state lines identify the current handoff target."]
+    if disagreements:
+        reason_parts.append("Reconciled disagreement: " + "; ".join(disagreements[:3]) + ".")
     if use_next and current_slice:
         reason_parts.append(f"{current_slice} is predecessor context; lead with {slice_id}.")
     return CurrentPlannedWork(
@@ -1640,8 +1654,10 @@ def _structured_current_planned_work(
     )
 
 
-def _line_inferred_current_planned_work(root: Path) -> CurrentPlannedWork | None:
-    for relpath in _current_work_authority_paths(root):
+def _line_inferred_current_planned_work(
+    root: Path, authority_briefs: list[AuthorityBrief]
+) -> CurrentPlannedWork | None:
+    for relpath in _current_work_fallback_paths(root, authority_briefs):
         path = root / relpath
         try:
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -1669,6 +1685,33 @@ def _line_inferred_current_planned_work(root: Path) -> CurrentPlannedWork | None
     return None
 
 
+def _reconciled_planning_state(
+    states: list[tuple[str, dict[str, str]]],
+) -> tuple[dict[str, str], list[str]]:
+    combined: dict[str, str] = {}
+    disagreements: list[str] = []
+    labels = {label for _relpath, values in states for label in values}
+    for label in sorted(labels):
+        observations = [(relpath, values[label]) for relpath, values in states if label in values]
+        if not observations:
+            continue
+        counts = Counter(value for _relpath, value in observations)
+        if len(counts) == 1:
+            combined[label] = observations[0][1]
+            continue
+        top_value, top_count = counts.most_common(1)[0]
+        tied = [value for value, count in counts.items() if count == top_count]
+        if top_count > 1 and len(tied) == 1:
+            combined[label] = top_value
+            disagreements.append(
+                f"{label} uses majority value {top_value!r} "
+                f"from {top_count}/{len(observations)} docs"
+            )
+            continue
+        disagreements.append(f"{label} has no majority across {len(observations)} authority docs")
+    return combined, disagreements
+
+
 def _planning_state_by_path(root: Path) -> list[tuple[str, dict[str, str]]]:
     states: list[tuple[str, dict[str, str]]] = []
     for relpath in _current_work_authority_paths(root):
@@ -1679,6 +1722,23 @@ def _planning_state_by_path(root: Path) -> list[tuple[str, dict[str, str]]]:
         if values:
             states.append((relpath, values))
     return states
+
+
+def _current_work_fallback_paths(root: Path, authority_briefs: list[AuthorityBrief]) -> list[str]:
+    paths: list[str] = []
+    for authority in authority_briefs:
+        if authority.lifecycle in {"historical", "superseded", "archived"}:
+            continue
+        if authority.role not in {"current-authority", "roadmap"}:
+            continue
+        if _safe_existing_repo_file(root, authority.path) is None:
+            continue
+        if authority.path not in paths:
+            paths.append(authority.path)
+    for path in _current_work_authority_paths(root):
+        if path not in paths:
+            paths.append(path)
+    return paths
 
 
 def _current_work_authority_paths(root: Path) -> list[str]:
@@ -1696,10 +1756,7 @@ def _current_work_authority_paths(root: Path) -> list[str]:
 
 
 def _combined_planning_state(root: Path) -> dict[str, str]:
-    combined: dict[str, str] = {}
-    for _relpath, values in _planning_state_by_path(root):
-        for label, value in values.items():
-            combined.setdefault(label, value)
+    combined, _disagreements = _reconciled_planning_state(_planning_state_by_path(root))
     return combined
 
 
@@ -2954,7 +3011,7 @@ def _open_thread_covers_current_work(threads: list[GitThreadBrief], slice_id: st
     for thread in threads:
         if not thread.promoted or thread.state != "open":
             continue
-        if _text_starts_with_slice(thread.title, slice_id):
+        if _thread_mentions_slice(thread, slice_id):
             return True
     return False
 
@@ -2964,11 +3021,21 @@ def _thread_is_current_work_context(
 ) -> bool:
     if current_work is None:
         return False
-    if _text_starts_with_slice(thread.title, current_work.slice_id):
+    if _thread_mentions_slice(thread, current_work.slice_id):
         return True
     return any(
-        _text_starts_with_slice(thread.title, predecessor)
+        _thread_mentions_slice(thread, predecessor)
         for predecessor in current_work.predecessor_slices
+    )
+
+
+def _thread_mentions_slice(thread: GitThreadBrief, slice_id: str) -> bool:
+    return _text_mentions_slice(" ".join([thread.title, thread.summary]), slice_id)
+
+
+def _text_mentions_slice(text: str, slice_id: str) -> bool:
+    return (
+        re.search(rf"(?<![A-Za-z0-9_.-]){re.escape(slice_id)}(?![A-Za-z0-9_.-])", text) is not None
     )
 
 
