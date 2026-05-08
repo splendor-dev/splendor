@@ -188,11 +188,11 @@ non-draft GitHub PR with labels, milestone, and a clear description.
 ## What Comes Next
 
 - Previous completed PR sub-slice: `M20-P1.4`
-- Current planned slice: `M20 mutating web review workflows`
-- Current PR sub-slice: `M20-P2.1`
+- Current planned slice: `M20 human operator cockpit and wiki navigation`
+- Current PR sub-slice: `M20-P4.0`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 richer GitHub integrations`
-- Next planned PR sub-slice: `M20-P3.1`
+- Next planned slice: `M20 human operator cockpit and wiki navigation`
+- Next planned PR sub-slice: `M20-P4.1`
 
 These planning-state lines are for contributors and agents. The detailed roadmap lives in
 [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md).

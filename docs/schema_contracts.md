@@ -512,6 +512,21 @@ Current runtime behavior:
 - contested pages persist structured contradiction annotations with linked review-task IDs and
   evidence snippets for both sides of the conflict
 
+Human operator web rendering:
+
+- page frontmatter remains the machine-readable/audit contract, but human web detail pages should
+  not render full raw metadata before readable markdown content
+- fields such as `kind`, `status`, `review_state`, `authority_role`, `authority_freshness`,
+  `authority_lifecycle`, and source counts are suitable for compact human badges when present
+- `related_pages`, `tags`, `source_refs`, `generated_by_run_ids`, `provenance_links`, `issue_refs`,
+  `pr_refs`, `supersedes`, `superseded_by`, and `contradictions` are web navigation inputs for
+  related-context sections, provenance trails, backlinks, supersession chains, and contradiction
+  links
+- full parsed metadata should remain available through a collapsed or visually demoted technical
+  section so humans can audit the same fields without having to read them before the page body
+- future operator-cockpit read models should derive attention and relationship items from these
+  local fields first, before adding new schema or durable derived indexes
+
 ## Planning objects
 
 Strict record contracts currently exist for:
