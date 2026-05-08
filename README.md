@@ -340,6 +340,7 @@ the source manifest, and kept separate from parsed PDF artifacts.
 - [v0.5 SynthBanshee integrated-use review](docs/evaluations/v0_5_synthbanshee_integrated_use/summary.md)
 - [v0.4.0 release notes](docs/releases/v0_4_0_release_notes.md)
 - [v0.5.0 release notes](docs/releases/v0_5_0_release_notes.md)
+- [v0.5.1 release notes](docs/releases/v0_5_1_release_notes.md)
 
 ## What Comes Next
 
