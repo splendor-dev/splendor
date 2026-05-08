@@ -3462,6 +3462,62 @@ def test_agent_context_reconciles_structured_planning_state_majority(
     assert "majority value 'S7a'" in payload["current_planned_work"]["reason"]
 
 
+def test_agent_context_skips_unreadable_structured_planning_file(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    agent_plan = tmp_path / ".agent-plan.md"
+    agent_plan.write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `S6h`\n"
+        "- Current planned slice: `S6 stale script boundary`\n"
+        "- Current PR sub-slice: `S6h`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S6 stale script boundary`\n"
+        "- Next planned PR sub-slice: `S6i`\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrsyngen\n\n"
+        "## What Comes Next\n\n"
+        "- Previous completed PR sub-slice: `S6h`\n"
+        "- Current planned slice: `S7 script abstraction`\n"
+        "- Current PR sub-slice: `S6h`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S7 script abstraction`\n"
+        "- Next planned PR sub-slice: `S7a`\n",
+        encoding="utf-8",
+    )
+    original_read_text = Path.read_text
+
+    def read_text_or_fail(path: Path, *args, **kwargs) -> str:
+        if path == agent_plan:
+            raise OSError("simulated transient read failure")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_text_or_fail)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "Continue",
+            "hocrsyngen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "S7a"
+    assert payload["current_planned_work"]["authority_paths"] == ["README.md"]
+
+
 def test_agent_context_review_current_work_goal_still_uses_current_authority(
     tmp_path: Path, capsys
 ) -> None:

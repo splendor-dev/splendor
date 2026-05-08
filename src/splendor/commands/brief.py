@@ -1718,7 +1718,11 @@ def _planning_state_by_path(root: Path) -> list[tuple[str, dict[str, str]]]:
         path = root / relpath
         if not path.is_file():
             continue
-        values = _parse_planning_state_text(path.read_text(encoding="utf-8", errors="replace"))
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        values = _parse_planning_state_text(text)
         if values:
             states.append((relpath, values))
     return states
