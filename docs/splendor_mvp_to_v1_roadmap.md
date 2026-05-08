@@ -1419,15 +1419,16 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P3.1` richer GitHub issue, PR, review-thread, and CI integrations.
 
 `M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
-while defining the narrow mutation paths worth implementing later: accept one reviewed
-`wiki compile` proposal for a maintained page, resolve or mute generated review tasks, and accept
-previewed source/queue maintenance operations through the same CLI preview/apply contracts that
-already produce deterministic mutation records. Browser-side acceptance must rerun validation
+while defining the narrow first mutation paths worth implementing later: accept one reviewed
+`wiki compile` proposal for a maintained page and resolve or mute generated review tasks. Source
+and queue maintenance remains a later candidate after the single-page compile path proves browser
+acceptance can preserve CLI-equivalent safety. Browser-side acceptance must rerun validation
 against current workspace bytes, use proposal or mutation hashes plus expected input hashes, refuse
-stale proposals rather than merge them, and leave the resulting working-tree diff as the git-native
-review surface. The detailed proposal lives in `docs/mutating_web_review_workflows.md`. Runtime
-web mutation, background workers, databases, auth, hosted services, mandatory external APIs,
-automatic GitHub mutation, and broad multi-page editing stay out of scope for this slice.
+stale proposals rather than merge them, require same-origin POST-only local-intent protections, and
+leave the resulting working-tree diff as the git-native review surface. The detailed proposal lives
+in `docs/mutating_web_review_workflows.md`. Runtime web mutation, source or queue maintenance apply
+buttons, background workers, databases, auth, hosted services, mandatory external APIs, automatic
+GitHub mutation, and broad multi-page editing stay out of scope for this slice.
 
 ---
 

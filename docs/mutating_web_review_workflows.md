@@ -13,7 +13,7 @@ authoritative runtime. The CLI remains the primary contract. Browser-side action
 same deterministic filesystem writes that already appear in CLI preview/apply output, so users can
 review the resulting git diff exactly as if they had run the command by hand.
 
-The first mutating web scope should be limited to three workflows:
+The first mutating web scope should be limited to two workflow families:
 
 1. Accept one maintained wiki compile proposal.
    - The browser displays the same target page, source-summary page, unified diff, source hash,
@@ -30,17 +30,40 @@ The first mutating web scope should be limited to three workflows:
    - The action writes only the selected task record and does not rewrite linked wiki pages,
      source summaries, or historical run records.
 
-3. Accept a previewed source or queue maintenance operation.
-   - The browser may render the existing `mutation.planned` records from commands such as
-     `source refresh`, `source update-path`, `source forget`, `source reconcile`, `queue clean`, or
-     `workspace refresh`.
-   - Apply maps to the same command with explicit apply flags.
-   - Bulk or destructive operations must keep the same selectors, large-apply guards, skipped
-     records, and residual-reference reporting as the CLI.
+Source and queue maintenance may become a later workflow family only after the single-page compile
+acceptance path proves the browser can preserve CLI-equivalent safety. Those later source/queue
+actions would have to render the existing `mutation.planned` records from commands such as
+`source refresh`, `source update-path`, `source forget`, `source reconcile`, `queue clean`, or
+`workspace refresh`; map apply to the same command with explicit apply flags; and keep the same
+selectors, large-apply guards, skipped records, and residual-reference reporting as the CLI.
 
 Everything else stays out of the first mutating web track: freeform page editing, multi-page
-synthesis rewrites, background ingestion, hosted collaboration, auth/roles, database-backed state,
-mandatory external providers, and automatic GitHub mutation.
+synthesis rewrites, source or queue maintenance apply buttons, background ingestion, hosted
+collaboration, auth/roles, database-backed state, mandatory external providers, and automatic
+GitHub mutation.
+
+## Browser Trust Boundary
+
+The local web server must treat browser mutations as local operator actions, not as ambient
+authority available to any page that can reach `localhost`.
+
+Before any mutating route exists, the implementation must define and test these controls:
+
+- Mutating routes use POST-only endpoints and never perform writes from GET, link prefetch, image,
+  script, or iframe loads.
+- The server does not enable permissive CORS, JSONP, or cross-origin embedding for mutating
+  endpoints.
+- Every mutation form carries a per-session or per-render local intent token that is checked on
+  apply, in addition to proposal hashes and input hashes.
+- The confirmation page shows affected paths, command-equivalent arguments, mutation mode, and
+  expected writes before the user can apply.
+- The token, proposal, and apply request are scoped to the current workspace root and cannot be
+  replayed across workspaces.
+- Browser apply failures disclose enough local diagnostic detail for repair, but do not expose
+  unrelated file contents or environment values.
+
+These controls are intentionally local and lightweight. They do not imply accounts, roles, hosted
+auth, remote collaboration, or a database-backed session store.
 
 ## Deterministic State Mapping
 
@@ -81,9 +104,12 @@ browser-side merge, collaborative editing session, hidden lock table, or asynchr
 
 ## First Implementation Shape
 
-The next implementation slice should start with one end-to-end path only: accepting a single
-`wiki compile` proposal for a maintained page. That path already has a narrow proposal hash,
-source/target inputs, schema validation, and a deterministic one-page write contract.
+The first implementation slice in this track should be a future `M20-P2.2`-style PR with one
+end-to-end path only: accepting a single `wiki compile` proposal for a maintained page. That path
+already has a narrow proposal hash, source/target inputs, schema validation, and a deterministic
+one-page write contract. This does not change the global planning state in `M20-P2.1`; the next
+planned PR remains `M20-P3.1` richer GitHub integrations unless the roadmap is deliberately
+reordered.
 
 A minimal implementation can add:
 
@@ -92,8 +118,8 @@ A minimal implementation can add:
 - a result page that lists written paths and next CLI/git review commands.
 
 It should not add a general mutation framework before that path proves useful. Source/queue
-maintenance and task review-state actions can follow after the compile path demonstrates that web
-acceptance stays local, deterministic, and git-reviewable.
+maintenance and broader task review-state actions can follow after the compile path demonstrates
+that web acceptance stays local, deterministic, and git-reviewable.
 
 ## Non-Goals
 

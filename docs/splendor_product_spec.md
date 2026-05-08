@@ -1478,13 +1478,15 @@ records and link planning rows back to their markdown detail pages.
 
 Post-v1 mutating web review workflows should begin as thin browser acceptance surfaces over
 existing CLI preview/apply contracts, not as a separate runtime. The first eligible workflows are
-accepting one reviewed `wiki compile` proposal for a maintained page, resolving or muting generated
-review tasks, and accepting previewed source/queue maintenance operations. Each browser action must
-revalidate current workspace bytes, use the same proposal or mutation hashes and affected-path
-records as the CLI, write only deterministic local files owned by the underlying command, and leave
-git diff review outside the web UI. Stale proposals should fail closed and point users back to a
-fresh preview. The current implementation remains read-only until such a path is deliberately
-implemented.
+accepting one reviewed `wiki compile` proposal for a maintained page and resolving or muting
+generated review tasks. Source and queue maintenance can be considered later after the single-page
+compile path proves safe. Each browser action must revalidate current workspace bytes, use the same
+proposal or mutation hashes and affected-path records as the CLI, write only deterministic local
+files owned by the underlying command, and leave git diff review outside the web UI. Mutating
+routes must also be POST-only, same-origin, non-CORS, and guarded by a local intent token or
+equivalent confirmation control so unrelated browser pages cannot exercise localhost write
+authority. Stale proposals should fail closed and point users back to a fresh preview. The current
+implementation remains read-only until such a path is deliberately implemented.
 
 ### Avoid early
 - heavy collaborative editing
