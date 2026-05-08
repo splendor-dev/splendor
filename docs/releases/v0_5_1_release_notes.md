@@ -46,6 +46,7 @@ uv run ruff format --check .
 uv run ruff check .
 uv run pytest
 uv run splendor lint
+uv run splendor health
 uv build
 ```
 
