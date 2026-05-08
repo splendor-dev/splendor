@@ -3020,12 +3020,9 @@ def _first_command(commands: list[str]) -> str | None:
 
 
 def _open_thread_covers_current_work(threads: list[GitThreadBrief], slice_id: str) -> bool:
-    for thread in threads:
-        if thread.state != "open":
-            continue
-        if _thread_mentions_slice(thread, slice_id):
-            return True
-    return False
+    return any(
+        thread.state == "open" and _thread_mentions_slice(thread, slice_id) for thread in threads
+    )
 
 
 def _thread_is_current_work_context(
