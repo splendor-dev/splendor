@@ -6,6 +6,7 @@ import json
 import re
 import shlex
 import subprocess
+from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -134,7 +135,8 @@ _AUTHORITY_ORIGIN_ORDER = {
     "inferred-authority": 1,
 }
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
-_ROADMAP_SLICE_PATTERN = re.compile(r"\b(?:[A-Z][A-Za-z0-9]*-P\d+(?:\.\d+)?|[A-Z]\d+[a-z])\b")
+_ROADMAP_SLICE_INNER_PATTERN = r"(?:[A-Z][A-Za-z0-9]*-P\d+(?:\.\d+)?|[A-Z]\d+[a-z])"
+_ROADMAP_SLICE_PATTERN = re.compile(rf"\b{_ROADMAP_SLICE_INNER_PATTERN}\b")
 _PLANNING_STATE_PATTERN = re.compile(
     r"^\s*-\s+(?P<label>"
     r"Previous completed PR sub-slice|Current planned slice|Current PR sub-slice|"
@@ -258,6 +260,38 @@ _MAINTENANCE_GOAL_FILLER_TOKENS = {
     "would",
     "you",
 }
+_CURRENT_WORK_GOAL_TOKENS = {
+    "continue",
+    "current",
+    "handoff",
+    "next",
+    "pick",
+    "plan",
+    "planned",
+    "planning",
+    "resume",
+    "roadmap",
+    "start",
+    "work",
+}
+_HISTORY_REVIEW_GOAL_TOKENS = {
+    "history",
+    "historical",
+    "merged",
+    "past",
+}
+_PR_REVIEW_GOAL_TOKENS = {
+    "pr",
+    "prs",
+    "pull",
+    "request",
+    "requests",
+}
+_REVIEW_ACTION_GOAL_TOKENS = {
+    "inspect",
+    "review",
+    "reviews",
+}
 _INFERRED_CONTEXT_FILLER_TOKENS = _MAINTENANCE_GOAL_FILLER_TOKENS | {
     "agent",
     "critical",
@@ -278,6 +312,20 @@ _INFERRED_CONTEXT_FILLER_TOKENS = _MAINTENANCE_GOAL_FILLER_TOKENS | {
     "test",
     "tests",
 }
+_CURRENT_WORK_LINE_PATTERNS = (
+    re.compile(
+        r"\b(?:active|current)\b.{0,80}?\b(?:planning\s+)?"
+        r"(?:item|target|work|slice|step|implementation)\b.{0,80}?"
+        rf"`?(?P<slice>{_ROADMAP_SLICE_INNER_PATTERN})`?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:next|real\s+next|next\s+planned)\b.{0,80}?"
+        r"\b(?:item|target|work|slice|step|implementation)\b.{0,80}?"
+        rf"`?(?P<slice>{_ROADMAP_SLICE_INNER_PATTERN})`?",
+        re.IGNORECASE,
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -432,6 +480,15 @@ class HandoffCurrentState:
 
 
 @dataclass(frozen=True)
+class CurrentPlannedWork:
+    slice_id: str
+    planned_slice: str | None
+    authority_paths: list[str]
+    predecessor_slices: list[str]
+    reason: str
+
+
+@dataclass(frozen=True)
 class SuggestNextResult:
     goal: str | None
     actions: list[SuggestedAction]
@@ -446,6 +503,7 @@ class SuggestNextResult:
     git_context: GitContext
     read_first_paths: list[str]
     handoff_current_state: HandoffCurrentState | None
+    current_planned_work: CurrentPlannedWork | None
     work_actions: list[SuggestedAction]
     maintenance_actions: list[SuggestedAction]
     maintenance_commands: list[MaintenanceCommand]
@@ -477,6 +535,7 @@ class BriefStateSnapshot:
     git_context: GitContext
     read_first_paths: list[str]
     handoff_current_state: HandoffCurrentState | None
+    current_planned_work: CurrentPlannedWork | None
     maintenance_goal: bool
 
 
@@ -503,6 +562,7 @@ class ProjectBrief:
     read_first_paths: list[str]
     next_actions: list[str]
     handoff_current_state: HandoffCurrentState | None
+    current_planned_work: CurrentPlannedWork | None
 
 
 def build_project_brief(
@@ -548,6 +608,7 @@ def build_project_brief(
         read_first_paths=snapshot.read_first_paths,
         next_actions=next_actions,
         handoff_current_state=snapshot.handoff_current_state,
+        current_planned_work=snapshot.current_planned_work,
     )
 
 
@@ -576,6 +637,7 @@ def build_suggest_next(
         git_context=snapshot.git_context,
         read_first_paths=snapshot.read_first_paths,
         handoff_current_state=snapshot.handoff_current_state,
+        current_planned_work=snapshot.current_planned_work,
         work_actions=work_actions,
         maintenance_actions=maintenance_actions,
         maintenance_commands=maintenance_commands,
@@ -647,6 +709,13 @@ def _collect_brief_state(
     )
     read_first_paths = _combined_read_first_paths(git_context, authority_read_first_scores)
     handoff_current_state = _handoff_current_state(root, git_context)
+    current_planned_work = _current_planned_work(
+        root,
+        git_context,
+        normalized_goal or None,
+        authority_briefs,
+        handoff_current_state=handoff_current_state,
+    )
     return BriefStateSnapshot(
         root=root,
         goal=normalized_goal or None,
@@ -670,6 +739,7 @@ def _collect_brief_state(
         git_context=git_context,
         read_first_paths=read_first_paths,
         handoff_current_state=handoff_current_state,
+        current_planned_work=current_planned_work,
         maintenance_goal=maintenance_goal,
     )
 
@@ -1343,6 +1413,26 @@ def _is_maintenance_goal(goal_tokens: set[str]) -> bool:
     return len(maintenance_matches) >= 2 and len(maintenance_matches) >= len(non_maintenance_tokens)
 
 
+def _is_history_review_goal(goal_tokens: set[str]) -> bool:
+    if goal_tokens & _HISTORY_REVIEW_GOAL_TOKENS:
+        return True
+    return bool(
+        (goal_tokens & _REVIEW_ACTION_GOAL_TOKENS) and (goal_tokens & _PR_REVIEW_GOAL_TOKENS)
+    )
+
+
+def _is_current_work_goal(goal_tokens: set[str], goal: str | None) -> bool:
+    if not goal_tokens or _is_history_review_goal(goal_tokens):
+        return False
+    if goal_tokens & _CURRENT_WORK_GOAL_TOKENS:
+        return True
+    return _goal_mentions_roadmap_slice(goal)
+
+
+def _goal_mentions_roadmap_slice(goal: str | None) -> bool:
+    return re.search(_ROADMAP_SLICE_INNER_PATTERN, goal or "", re.IGNORECASE) is not None
+
+
 def _flatten_handoff_values(value) -> list[str]:
     if value is None:
         return []
@@ -1501,19 +1591,184 @@ def _handoff_current_state(root: Path, git_context: GitContext) -> HandoffCurren
     )
 
 
-def _combined_planning_state(root: Path) -> dict[str, str]:
+def _current_planned_work(
+    root: Path,
+    git_context: GitContext,
+    goal: str | None,
+    authority_briefs: list[AuthorityBrief],
+    *,
+    handoff_current_state: HandoffCurrentState | None,
+) -> CurrentPlannedWork | None:
+    goal_tokens = _tokens(goal or "")
+    if handoff_current_state is not None or not _is_current_work_goal(goal_tokens, goal):
+        return None
+
+    structured = _structured_current_planned_work(root, git_context, authority_briefs)
+    if structured is not None:
+        return structured
+    return _line_inferred_current_planned_work(root, authority_briefs)
+
+
+def _structured_current_planned_work(
+    root: Path, git_context: GitContext, authority_briefs: list[AuthorityBrief]
+) -> CurrentPlannedWork | None:
+    states = _planning_state_by_path(root, authority_briefs)
+    if not states:
+        return None
+    combined, disagreements = _reconciled_planning_state(states)
+    authority_paths: list[str] = []
+    for relpath, values in states:
+        if values:
+            authority_paths.append(relpath)
+
+    previous_slice = combined.get("Previous completed PR sub-slice")
+    current_slice = combined.get("Current PR sub-slice")
+    next_slice = combined.get("Next planned PR sub-slice")
+    current_lifecycle = (combined.get("Current PR lifecycle") or "").lower()
+    planned_slice = combined.get("Current planned slice")
+    next_planned_slice = combined.get("Next planned slice")
+    branch = git_context.branch or ""
+
+    use_next = False
+    if current_slice and next_slice and previous_slice == current_slice:
+        use_next = True
+    elif current_slice and next_slice and branch == "main" and "main=merged" in current_lifecycle:
+        use_next = True
+
+    slice_id = next_slice if use_next and next_slice else current_slice or next_slice
+    if slice_id is None:
+        return None
+
+    predecessor_slices = []
+    for value in (previous_slice, current_slice if use_next else None):
+        if value and value != slice_id and value not in predecessor_slices:
+            predecessor_slices.append(value)
+
+    reason_parts = ["Structured planning-state lines identify the current handoff target."]
+    if disagreements:
+        reason_parts.append("Reconciled disagreement: " + "; ".join(disagreements[:3]) + ".")
+    if use_next and current_slice:
+        reason_parts.append(f"{current_slice} is predecessor context; lead with {slice_id}.")
+    return CurrentPlannedWork(
+        slice_id=slice_id,
+        planned_slice=next_planned_slice if use_next and next_planned_slice else planned_slice,
+        authority_paths=sorted(dict.fromkeys(authority_paths)),
+        predecessor_slices=predecessor_slices,
+        reason=" ".join(reason_parts),
+    )
+
+
+def _line_inferred_current_planned_work(
+    root: Path, authority_briefs: list[AuthorityBrief]
+) -> CurrentPlannedWork | None:
+    for relpath in _current_work_fallback_paths(root, authority_briefs):
+        path = root / relpath
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            normalized = line.lower()
+            if any(word in normalized for word in ("historical", "completed", "done", "merged")):
+                continue
+            for pattern in _CURRENT_WORK_LINE_PATTERNS:
+                match = pattern.search(line)
+                if match is None:
+                    continue
+                slice_id = match.group("slice")
+                return CurrentPlannedWork(
+                    slice_id=slice_id,
+                    planned_slice=None,
+                    authority_paths=[relpath],
+                    predecessor_slices=[],
+                    reason=(
+                        "Conventional authority text identifies the current handoff target: "
+                        f"{line.strip()}"
+                    ),
+                )
+    return None
+
+
+def _reconciled_planning_state(
+    states: list[tuple[str, dict[str, str]]],
+) -> tuple[dict[str, str], list[str]]:
     combined: dict[str, str] = {}
-    for relpath in (
-        ".agent-plan.md",
-        "README.md",
-        "docs/splendor_mvp_to_v1_roadmap.md",
-    ):
+    disagreements: list[str] = []
+    labels = {label for _relpath, values in states for label in values}
+    for label in sorted(labels):
+        observations = [(relpath, values[label]) for relpath, values in states if label in values]
+        if not observations:
+            continue
+        counts = Counter(value for _relpath, value in observations)
+        if len(counts) == 1:
+            combined[label] = observations[0][1]
+            continue
+        top_value, top_count = counts.most_common(1)[0]
+        tied = [value for value, count in counts.items() if count == top_count]
+        if top_count > 1 and len(tied) == 1:
+            combined[label] = top_value
+            disagreements.append(
+                f"{label} uses majority value {top_value!r} "
+                f"from {top_count}/{len(observations)} docs"
+            )
+            continue
+        disagreements.append(f"{label} has no majority across {len(observations)} authority docs")
+    return combined, disagreements
+
+
+def _planning_state_by_path(
+    root: Path, authority_briefs: list[AuthorityBrief] | None = None
+) -> list[tuple[str, dict[str, str]]]:
+    states: list[tuple[str, dict[str, str]]] = []
+    for relpath in _current_work_authority_paths(root, authority_briefs):
         path = root / relpath
         if not path.is_file():
             continue
-        values = _parse_planning_state_text(path.read_text(encoding="utf-8"))
-        for label, value in values.items():
-            combined.setdefault(label, value)
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        values = _parse_planning_state_text(text)
+        if values:
+            states.append((relpath, values))
+    return states
+
+
+def _current_work_fallback_paths(root: Path, authority_briefs: list[AuthorityBrief]) -> list[str]:
+    paths: list[str] = []
+    for authority in authority_briefs:
+        if authority.lifecycle in {"historical", "superseded", "archived"}:
+            continue
+        if authority.role not in {"current-authority", "roadmap"}:
+            continue
+        if _safe_existing_repo_file(root, authority.path) is None:
+            continue
+        if authority.path not in paths:
+            paths.append(authority.path)
+    for path in _current_work_authority_paths(root):
+        if path not in paths:
+            paths.append(path)
+    return paths
+
+
+def _current_work_authority_paths(
+    root: Path, authority_briefs: list[AuthorityBrief] | None = None
+) -> list[str]:
+    paths = [".agent-plan.md", "README.md", "docs/splendor_mvp_to_v1_roadmap.md"]
+    for authority in authority_briefs or []:
+        if authority.lifecycle in {"historical", "superseded", "archived"}:
+            continue
+        if authority.role not in {"current-authority", "roadmap"}:
+            continue
+        if _safe_existing_repo_file(root, authority.path) is None:
+            continue
+        if authority.path not in paths:
+            paths.append(authority.path)
+    return paths
+
+
+def _combined_planning_state(root: Path) -> dict[str, str]:
+    combined, _disagreements = _reconciled_planning_state(_planning_state_by_path(root))
     return combined
 
 
@@ -2404,6 +2659,7 @@ def _suggestion_candidates(snapshot: BriefStateSnapshot) -> list[SuggestedAction
     actions: list[SuggestedAction] = []
     goal_tokens = _tokens(snapshot.goal or "")
     goal_phrase = _normalize_goal_phrase(snapshot.goal or "")
+    current_work_goal = _is_current_work_goal(goal_tokens, snapshot.goal)
 
     def add(priority: str, category: str, title: str, reason: str, command: str | None, **kwargs):
         relevance_score = kwargs.pop(
@@ -2440,9 +2696,15 @@ def _suggestion_candidates(snapshot: BriefStateSnapshot) -> list[SuggestedAction
 
     if snapshot.git_context.enabled and snapshot.git_context.available:
         for thread in snapshot.git_context.threads:
-            if not thread.promoted:
+            if not thread.promoted and not _thread_is_current_work_context(
+                thread, snapshot.current_planned_work
+            ):
                 continue
             priority = "high" if thread.state == "open" else "medium"
+            relevance_score = thread.relevance_score + (50 if thread.related_to is None else 0)
+            if current_work_goal and thread.state != "open" and snapshot.current_planned_work:
+                priority = "low"
+                relevance_score -= 80
             add(
                 priority,
                 "work-thread",
@@ -2450,17 +2712,49 @@ def _suggestion_candidates(snapshot: BriefStateSnapshot) -> list[SuggestedAction
                 thread.summary,
                 None,
                 url=thread.url,
-                relevance_score=thread.relevance_score + (50 if thread.related_to is None else 0),
+                relevance_score=relevance_score,
             )
+    if snapshot.current_planned_work is not None and not _open_thread_covers_current_work(
+        snapshot.git_context.threads, snapshot.current_planned_work.slice_id
+    ):
+        work = snapshot.current_planned_work
+        authority_paths = ", ".join(work.authority_paths[:3])
+        predecessors = ", ".join(work.predecessor_slices)
+        predecessor_note = (
+            f" Predecessor context remains visible: {predecessors}." if predecessors else ""
+        )
+        planned_note = f" ({work.planned_slice})" if work.planned_slice else ""
+        add(
+            "high",
+            "current-state",
+            f"Continue {work.slice_id}{planned_note} from current planning authority",
+            f"{work.reason} Authority: {authority_paths}.{predecessor_note}",
+            None,
+            record_id=work.slice_id,
+            path=work.authority_paths[0] if work.authority_paths else None,
+            relevance_score=_goal_relevance_score(
+                goal_tokens,
+                goal_phrase=goal_phrase,
+                high_text=" ".join([work.slice_id, work.planned_slice or ""]),
+                medium_text=" ".join(work.authority_paths + work.predecessor_slices),
+            )
+            + 150,
+        )
+    if snapshot.git_context.enabled and snapshot.git_context.available:
         for commit in snapshot.git_context.commits:
+            priority = "medium"
+            relevance_score = commit.relevance_score
+            if current_work_goal and snapshot.current_planned_work:
+                priority = "low"
+                relevance_score -= 80
             add(
-                "medium",
+                priority,
                 "git-context",
                 f"Review commit {commit.short_sha}: {commit.subject}",
                 "Recent git context relevant to the stated goal.",
                 None,
                 record_id=commit.short_sha,
-                relevance_score=commit.relevance_score,
+                relevance_score=relevance_score,
             )
     for path in snapshot.read_first_paths:
         add(
@@ -2725,6 +3019,35 @@ def _first_command(commands: list[str]) -> str | None:
     return commands[0] if commands else None
 
 
+def _open_thread_covers_current_work(threads: list[GitThreadBrief], slice_id: str) -> bool:
+    return any(
+        thread.state == "open" and _thread_mentions_slice(thread, slice_id) for thread in threads
+    )
+
+
+def _thread_is_current_work_context(
+    thread: GitThreadBrief, current_work: CurrentPlannedWork | None
+) -> bool:
+    if current_work is None:
+        return False
+    if _thread_mentions_slice(thread, current_work.slice_id):
+        return True
+    return any(
+        _thread_mentions_slice(thread, predecessor)
+        for predecessor in current_work.predecessor_slices
+    )
+
+
+def _thread_mentions_slice(thread: GitThreadBrief, slice_id: str) -> bool:
+    return _text_mentions_slice(" ".join([thread.title, thread.summary]), slice_id)
+
+
+def _text_mentions_slice(text: str, slice_id: str) -> bool:
+    return (
+        re.search(rf"(?<![A-Za-z0-9_.-]){re.escape(slice_id)}(?![A-Za-z0-9_.-])", text) is not None
+    )
+
+
 def _finalize_suggestions(
     actions: list[SuggestedAction], *, maintenance_goal: bool
 ) -> list[SuggestedAction]:
@@ -2912,6 +3235,9 @@ def render_suggest_next_json(result: SuggestNextResult) -> str:
             "handoff_current_state": (
                 asdict(result.handoff_current_state) if result.handoff_current_state else None
             ),
+            "current_planned_work": (
+                asdict(result.current_planned_work) if result.current_planned_work else None
+            ),
             "status": {
                 "source_total": result.status.source_total,
                 "page_total": result.status.page_total,
@@ -2968,6 +3294,9 @@ def render_project_brief_json(brief: ProjectBrief) -> str:
             "handoff_current_state": (
                 asdict(brief.handoff_current_state) if brief.handoff_current_state else None
             ),
+            "current_planned_work": (
+                asdict(brief.current_planned_work) if brief.current_planned_work else None
+            ),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
             "work_context": {"actions": [asdict(action) for action in brief.work_actions]},
             "maintenance_context": {
@@ -3007,6 +3336,9 @@ def render_agent_context_json(brief: ProjectBrief) -> str:
             "read_first_paths": brief.read_first_paths,
             "handoff_current_state": (
                 asdict(brief.handoff_current_state) if brief.handoff_current_state else None
+            ),
+            "current_planned_work": (
+                asdict(brief.current_planned_work) if brief.current_planned_work else None
             ),
             "suggested_actions": [asdict(action) for action in brief.suggested_actions],
             "work_context": {"actions": [asdict(action) for action in brief.work_actions]},

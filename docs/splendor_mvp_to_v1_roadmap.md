@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P1.2`
+- Previous completed PR sub-slice: `M20-P1.3`
 - Current planned slice: `M20 current-work handoff ranking`
-- Current PR sub-slice: `M20-P1.3`
+- Current PR sub-slice: `M20-P1.4`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 current-work handoff ranking`
-- Next planned PR sub-slice: `M20-P1.4`
+- Next planned slice: `M20 mutating web review workflows`
+- Next planned PR sub-slice: `M20-P2.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1400,14 +1400,15 @@ repairs stale curated sources, exact `F6f` retrieval still fails and handoff sti
 merged PR review or historical/generated summaries. This is now a current-work handoff-ranking and
 authority-priority problem, not a reason to broaden into mutating web workflows.
 
-`M20-P1.4` is the next implementation slice (#177). It should keep the first fix runtime-only and
-file-based: extract current planned work from `.agent-plan.md`, README, and roadmap authority for
-next-roadmap goals; make `brief --agent-context` and `suggest-next` lead with that work; demote
-merged PRs, recent commits, and completed-slice evidence to predecessor context unless the user
-asks to review history; and preserve open work-thread behavior when a live issue or PR is the real
-current work. Broad vector-search infrastructure, cold-start state relocation, general
-provider-gate ranking, and mutating web review workflows stay out of scope for this slice unless
-directly required by the current-work handoff fixtures. The ordered M20 sequence is therefore:
+`M20-P1.4` implements the runtime-only current-work handoff ranking fix (#177). It extracts current
+planned work from `.agent-plan.md`, README, and roadmap authority for current/next-roadmap goals;
+makes `brief --agent-context` and `suggest-next` lead with that work; demotes merged PRs, recent
+commits, and completed-slice evidence to predecessor context unless the user asks to review
+history; and preserves open work-thread behavior when a live issue or PR is the real current work.
+The implementation remains local-first and file-based: it adds no hosted service, background
+worker, mandatory external API, web workflow, or persisted index state. Broad vector-search
+infrastructure, cold-start state relocation, general provider-gate ranking, and mutating web review
+workflows stay out of scope for this slice. The ordered M20 sequence is therefore:
 
 - `M20-P1.1` runtime semantic expansion for deterministic query and query-backed handoff recall.
 - `M20-P1.2` retrieval evaluation and handoff retry fixture closeout.
