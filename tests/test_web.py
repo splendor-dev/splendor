@@ -284,8 +284,8 @@ def test_document_detail_renders_markdown_and_metadata(tmp_path: Path) -> None:
     assert "This page describes local browsing." in response.text
     assert "concept-web-shell" in response.text
     assert "active" in response.text
-    assert response.text.index("<article") < response.text.index("Technical metadata")
     assert '<details class="technical">' in response.text
+    assert response.text.index("<article") < response.text.index('<details class="technical">')
 
 
 def test_document_detail_keeps_human_badges_before_body(tmp_path: Path) -> None:
@@ -306,7 +306,7 @@ def test_document_detail_keeps_human_badges_before_body(tmp_path: Path) -> None:
     assert "<strong>Kind</strong> concept" in response.text
     assert "<strong>Status</strong> active" in response.text
     assert response.text.index('<section class="badges">') < response.text.index("<article")
-    assert response.text.index("<article") < response.text.index("Technical metadata")
+    assert response.text.index("<article") < response.text.index('<details class="technical">')
 
 
 def test_document_detail_preserves_full_metadata_access(tmp_path: Path) -> None:
