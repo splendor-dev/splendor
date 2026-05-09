@@ -66,6 +66,8 @@ _LISTING_FRONTMATTER_LINE_LIMIT = 200
 _LISTING_FRONTMATTER_CHAR_LIMIT = 64 * 1024
 _LISTING_HEADING_LINE_LIMIT = 40
 _LISTING_HEADING_CHAR_LIMIT = 16 * 1024
+_GENERIC_INDEX_TITLE = "Splendor Wiki Index"
+_GENERIC_INDEX_SUMMARY = "This wiki is maintained by Splendor."
 
 
 @dataclass(frozen=True)
@@ -493,9 +495,9 @@ def create_app(root: Path) -> FastAPI:
             "</form>"
             "</section>"
         )
-        if not query:
-            return _page("Search", form, root=workspace_root)
         layout = _layout_for(workspace_root)
+        if not query:
+            return _page("Search", form, root=workspace_root, layout=layout)
         try:
             result = run_query(workspace_root, query)
         except QueryValidationError as exc:
@@ -594,15 +596,22 @@ def _workspace_counts(
 
 def _build_project_identity(root: Path, layout: ResolvedLayout | None = None) -> _ProjectIdentity:
     index_path = layout.index_file if layout is not None else root / "wiki" / "index.md"
-    for path in (index_path, root / "README.md"):
-        identity = _project_identity_from_markdown(path)
-        if identity is not None:
-            return identity
+    index_identity = _project_identity_from_markdown(index_path)
+    if index_identity is not None and not _is_generic_index_identity(index_identity):
+        return index_identity
+
+    readme_identity = _project_identity_from_markdown(root / "README.md")
+    if readme_identity is not None:
+        return readme_identity
 
     basename = root.name.strip()
     if basename:
         return _ProjectIdentity(name=basename, summary=None)
     return _ProjectIdentity(name="Splendor workspace", summary=None)
+
+
+def _is_generic_index_identity(identity: _ProjectIdentity) -> bool:
+    return identity.name == _GENERIC_INDEX_TITLE and identity.summary == _GENERIC_INDEX_SUMMARY
 
 
 def _project_identity_from_markdown(path: Path) -> _ProjectIdentity | None:
@@ -1258,6 +1267,7 @@ def _page(
         "header{border-bottom:1px solid var(--border);padding:18px 28px;background:var(--surface)}"
         ".brand{max-width:1060px;margin:0 auto}.brand p{margin:4px 0 0;color:var(--muted)}"
         ".brand .product{font-size:13px;text-transform:uppercase;letter-spacing:.08em}"
+        ".brand .page-title{color:var(--text);font-weight:600}"
         "main{max-width:1060px;margin:0 auto;padding:28px}"
         "h1{font-size:28px;margin:0}h2{font-size:18px;margin:0 0 6px}"
         "a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}"
@@ -1295,6 +1305,7 @@ def _page(
         "<body>"
         '<header><div class="brand">'
         f"<h1>{escaped_project}</h1>"
+        f'<p class="page-title">{escaped_title}</p>'
         f'<p>{header_summary} <span class="product">Splendor</span></p>'
         "</div></header>"
         f"<main>{body}</main>"

@@ -97,15 +97,41 @@ def test_project_identity_falls_back_to_readme_when_index_is_missing(tmp_path: P
     assert "README summary becomes the local web identity." in response.text
 
 
+def test_project_identity_skips_generic_initialized_index_for_readme(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "README.md").write_text(
+        "# Real Project\n\nREADME has the real project identity.\n",
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "<h1>Real Project</h1>" in response.text
+    assert "README has the real project identity." in response.text
+    assert "Splendor Wiki Index" not in response.text
+
+
 def test_project_identity_falls_back_to_workspace_basename(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
-    (tmp_path / "wiki" / "index.md").unlink()
     client = TestClient(create_app(tmp_path))
 
     response = client.get("/")
 
     assert response.status_code == 200
     assert f"<h1>{tmp_path.name}</h1>" in response.text
+
+
+def test_page_chrome_keeps_visible_route_title(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/browse")
+
+    assert response.status_code == 200
+    assert f"<h1>{tmp_path.name}</h1>" in response.text
+    assert '<p class="page-title">Browse</p>' in response.text
 
 
 def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
@@ -720,6 +746,10 @@ def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> Non
         encoding="utf-8",
     )
     initialize_workspace(tmp_path)
+    (tmp_path / "knowledge" / "index.md").write_text(
+        "# Custom Knowledge\n\nCustom layout identity.\n",
+        encoding="utf-8",
+    )
     write_wiki_page(
         tmp_path / "knowledge" / "concepts" / "web-shell.md",
         title="Custom web shell",
@@ -730,11 +760,15 @@ def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> Non
 
     browse = client.get("/browse")
     detail = client.get("/documents/knowledge/concepts/web-shell.md")
+    empty_search = client.get("/search")
 
     assert browse.status_code == 200
     assert 'href="/documents/knowledge/concepts/web-shell.md"' in browse.text
     assert detail.status_code == 200
     assert "<h1>Custom web shell</h1>" in detail.text
+    assert empty_search.status_code == 200
+    assert "<h1>Custom Knowledge</h1>" in empty_search.text
+    assert '<p class="page-title">Search</p>' in empty_search.text
 
 
 def test_web_routes_reject_layout_roots_that_escape_workspace(tmp_path: Path) -> None:
