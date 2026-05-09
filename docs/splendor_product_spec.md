@@ -592,6 +592,7 @@ Responsibilities:
 - list major pages by section
 - provide one-line summaries
 - expose important top-level navigation
+- provide a project-at-a-glance entry point for the local web operator cockpit
 - remain readable on GitHub
 
 ### 12.2 `wiki/log.md`
@@ -604,10 +605,27 @@ Responsibilities:
 - lint passes
 - repair attempts
 - major planning changes
+- recent insights and other durable human-readable activity entries
 
 ### 12.3 Structured state alongside markdown
 
 The log and index are useful human-facing files, but they should not be the only machine-readable state. Machine workflows should rely on records in `state/`.
+
+### 12.4 Project identity
+
+Splendor workspaces should identify the target project before they identify the Splendor tool. The
+local web UI, generated index surfaces, and future operator-cockpit summaries should resolve a
+project display name through a deterministic cascade:
+
+1. explicit project config, if introduced;
+2. `wiki/index.md` H1 and leading paragraph;
+3. README H1 and leading paragraph;
+4. workspace directory basename;
+5. quiet fallback such as `Splendor workspace`.
+
+Explicit project config is useful as a future precision mechanism, but it should not be required
+before the web UI can present a useful project identity. The local web runtime currently implements
+the file-based portion of this cascade without adding a config schema.
 
 ## 13. Execution Model
 
@@ -634,6 +652,8 @@ Optional component.
 Responsibilities:
 - browse wiki pages
 - search and navigate
+- orient the human operator around the target project
+- surface current work, attention items, recent insights, and knowledge-map entry points
 - inspect planning objects
 - inspect queue/runs
 - add sources through a simple UI
@@ -641,7 +661,29 @@ Responsibilities:
 
 The UI is useful for humans, but not a core dependency.
 
-### 13.3 Optional interface: GitHub Actions
+### 13.3 Human operator cockpit
+
+The local web UI should include a human operator cockpit: a read-only narrative projection over
+current workspace files. It does not introduce new authoritative state, does not replace the CLI,
+and does not become a hidden runtime. Its job is to make existing local records legible to a
+returning human operator.
+
+The cockpit should answer:
+
+- what project is this;
+- where are we in the roadmap;
+- what is active, next, blocked, stale, contested, failed, or review-needed;
+- what changed recently;
+- what knowledge has been accumulated;
+- which pages, sources, planning records, run records, and queue records are connected;
+- what should the operator inspect next.
+
+Every cockpit view should be derived from local files and records. Interpretive claims must be
+traceable to git-visible evidence, such as frontmatter fields, planning records, source manifests,
+run records, queue records, or `wiki/log.md` entries. The cockpit may rank, group, and explain; it
+must not contradict the underlying records.
+
+### 13.4 Optional interface: GitHub Actions
 
 GitHub Actions is a secondary automation surface, not the authoritative runtime.
 
@@ -1488,7 +1530,61 @@ the CLI wiki status/suggest contracts. They expose source/page/queue/run/review 
 manifests, linked source-summary pages, latest ingest run state, and deterministic affected
 synthesis-page suggestions without adding mutating web actions. It also includes read-only
 `/planning`, `/planning/{kind}`, `/runs`, and `/queue` pages that list durable planning and runtime
-records and link planning rows back to their markdown detail pages.
+records and link planning rows back to their markdown detail pages. Page chrome now derives the
+target project identity from local files, and document detail pages lead with compact human badges
+plus readable markdown before collapsed technical metadata.
+
+### Human operator contract
+
+The local web UI should become a human comprehension layer over the same deterministic local state.
+It should not make humans read the machinery first. Counts, IDs, paths, raw frontmatter, run IDs,
+queue payloads, and record files remain available, but they should be secondary to project
+orientation, roadmap comprehension, attention triage, knowledge navigation, and provenance
+inspection.
+
+The root page should be an operator cockpit, not a count-only dashboard. It should identify the
+target project, summarize the workspace, surface current or next work, highlight attention items,
+show recent durable activity or insights, provide a knowledge-map entry point, and link to the next
+places a human should inspect. Sparse workspaces should render quiet empty states with CLI hints.
+
+### Page detail layout
+
+Page detail views must render readable markdown content before full raw metadata. The expected
+layout is:
+
+1. compact human badges for fields such as kind, status, review state, authority role,
+   freshness/last-reviewed, and source count;
+2. page title and rendered markdown body;
+3. related context such as related pages, backlinks, tags, source refs, provenance links,
+   planning refs, issue/PR refs, supersession, and contradictions when present;
+4. full raw metadata in a collapsed or visually demoted technical section.
+
+This is a rendering contract only. Frontmatter remains part of the markdown files and remains
+available for agents, CLI workflows, audit, and debugging.
+
+### Planning, health, and navigation
+
+The default planning view should present records by operator meaning: active/current, next, blocked
+or gated, open decisions, open questions, recently completed, and historical. Raw planning tables
+should remain available for audit and debugging.
+
+Status, runs, and queue pages should explain what the displayed state means for the knowledge
+workflow. They should lead with healthy versus attention-needed summaries and affected artifacts,
+while keeping run IDs, queue payloads, leases, paths, and raw records accessible as technical
+details.
+
+Browse and document-detail views should use existing relationship fields, including `related_pages`,
+`tags`, `source_refs`, `provenance_links`, `supersedes`, `superseded_by`, and `contradictions`, to
+create navigation paths. The first pass should derive these links from local files without adding a
+graph database or hidden index.
+
+### Operator read model
+
+Human operator views should be built from pure read-model functions over existing workspace files.
+Those functions should read local files, sort deterministically, write nothing, avoid network calls,
+avoid background workers, and expose evidence references for interpretive claims where possible.
+Future durable derived indexes, such as backlinks, may be added only through explicit CLI commands
+that produce reviewable filesystem state.
 
 Post-v1 mutating web review workflows should begin as thin browser acceptance surfaces over
 existing CLI preview/apply contracts, not as a separate runtime. The first eligible workflows are
@@ -1513,6 +1609,7 @@ implementation remains read-only until such a path is deliberately implemented.
 Splendor should be configured via a root config file, e.g. `splendor.yaml`.
 
 Likely configuration domains:
+- project identity/operator entrypoint
 - paths/layout
 - model/provider settings
 - ingestion defaults

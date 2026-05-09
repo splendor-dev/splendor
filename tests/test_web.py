@@ -65,6 +65,91 @@ def test_home_page_shows_empty_state_for_initialized_workspace(tmp_path: Path) -
     assert "Source manifests" in response.text
 
 
+def test_project_identity_uses_wiki_index_heading_and_summary(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "wiki" / "index.md").write_text(
+        "# SynthBanshee\n\nLocal code-and-research knowledge workspace.\n",
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "<h1>SynthBanshee</h1>" in response.text
+    assert "Local code-and-research knowledge workspace." in response.text
+    assert "<title>Home · SynthBanshee · Splendor</title>" in response.text
+
+
+def test_project_identity_falls_back_to_readme_when_index_is_missing(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "wiki" / "index.md").unlink()
+    (tmp_path / "README.md").write_text(
+        "# README Project\n\nREADME summary becomes the local web identity.\n",
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/browse")
+
+    assert response.status_code == 200
+    assert "<h1>README Project</h1>" in response.text
+    assert "README summary becomes the local web identity." in response.text
+
+
+def test_project_identity_skips_generic_initialized_index_for_readme(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / "README.md").write_text(
+        "# Real Project\n\nREADME has the real project identity.\n",
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "<h1>Real Project</h1>" in response.text
+    assert "README has the real project identity." in response.text
+    assert "Splendor Wiki Index" not in response.text
+
+
+def test_project_identity_falls_back_to_workspace_basename(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert f"<h1>{tmp_path.name}</h1>" in response.text
+
+
+def test_page_chrome_keeps_visible_route_title(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/browse")
+
+    assert response.status_code == 200
+    assert f"<h1>{tmp_path.name}</h1>" in response.text
+    assert '<h2 class="page-title">Browse</h2>' in response.text
+
+
+def test_project_identity_reads_only_bounded_markdown(tmp_path: Path, monkeypatch) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "# Bounded Project\n\nShort summary.\n\n" + ("extra\n" * 200), encoding="utf-8"
+    )
+
+    def fail_read_text(*args, **kwargs):
+        raise AssertionError("identity parsing should not read the whole markdown file")
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+
+    identity = web._project_identity_from_markdown(readme)
+
+    assert identity == web._ProjectIdentity(name="Bounded Project", summary="Short summary.")
+
+
 def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(
@@ -215,6 +300,47 @@ def test_document_detail_renders_markdown_and_metadata(tmp_path: Path) -> None:
     assert "This page describes local browsing." in response.text
     assert "concept-web-shell" in response.text
     assert "active" in response.text
+    assert '<details class="technical">' in response.text
+    assert response.text.index("<article") < response.text.index('<details class="technical">')
+
+
+def test_document_detail_keeps_human_badges_before_body(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "reviewed.md",
+        title="Reviewed page",
+        page_id="concept-reviewed",
+        body="# Reviewed page\n\nReadable body comes after compact badges.\n",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/documents/wiki/concepts/reviewed.md")
+
+    assert response.status_code == 200
+    assert '<section class="badges">' in response.text
+    assert "<strong>Class</strong> wiki" in response.text
+    assert "<strong>Kind</strong> concept" in response.text
+    assert "<strong>Status</strong> active" in response.text
+    assert response.text.index('<section class="badges">') < response.text.index("<article")
+    assert response.text.index("<article") < response.text.index('<details class="technical">')
+
+
+def test_document_detail_preserves_full_metadata_access(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "metadata.md",
+        title="Metadata page",
+        page_id="concept-metadata",
+        body="# Metadata page\n\nReadable body stays primary.\n",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/documents/wiki/concepts/metadata.md")
+
+    assert response.status_code == 200
+    assert "<summary>Technical metadata</summary>" in response.text
+    assert "&quot;page_id&quot;: &quot;concept-metadata&quot;" in response.text
+    assert "&quot;confidence&quot;: 0.8" in response.text
 
 
 def test_document_detail_renders_planning_task(tmp_path: Path) -> None:
@@ -636,6 +762,10 @@ def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> Non
         encoding="utf-8",
     )
     initialize_workspace(tmp_path)
+    (tmp_path / "knowledge" / "index.md").write_text(
+        "# Custom Knowledge\n\nCustom layout identity.\n",
+        encoding="utf-8",
+    )
     write_wiki_page(
         tmp_path / "knowledge" / "concepts" / "web-shell.md",
         title="Custom web shell",
@@ -646,11 +776,19 @@ def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> Non
 
     browse = client.get("/browse")
     detail = client.get("/documents/knowledge/concepts/web-shell.md")
+    empty_search = client.get("/search")
+    missing_document = client.get("/documents/knowledge/missing.md")
 
     assert browse.status_code == 200
     assert 'href="/documents/knowledge/concepts/web-shell.md"' in browse.text
     assert detail.status_code == 200
     assert "<h1>Custom web shell</h1>" in detail.text
+    assert empty_search.status_code == 200
+    assert "<h1>Custom Knowledge</h1>" in empty_search.text
+    assert '<h2 class="page-title">Search</h2>' in empty_search.text
+    assert missing_document.status_code == 404
+    assert "<h1>Custom Knowledge</h1>" in missing_document.text
+    assert '<h2 class="page-title">Not Found</h2>' in missing_document.text
 
 
 def test_web_routes_reject_layout_roots_that_escape_workspace(tmp_path: Path) -> None:

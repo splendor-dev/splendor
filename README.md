@@ -187,7 +187,7 @@ non-draft GitHub PR with labels, milestone, and a clear description.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M20-P2.1`
+- Previous completed PR sub-slice: `M20-P4.1`
 - Current planned slice: `M20 current-work authority model from v0.5.2 hocr retries`
 - Current PR sub-slice: `M20-P1.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`

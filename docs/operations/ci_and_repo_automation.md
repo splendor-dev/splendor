@@ -407,9 +407,8 @@ should be treated as complete only after:
 - the pull request has intentional labels
 - the pull request is assigned to the appropriate milestone
 
-Prefer repo-specific GitHub MCP tooling for PR metadata updates and use `gh` only for operations
-the MCP surface does not support cleanly, such as creating a missing label or milestone or opening
-the PR itself.
+Use standard `git` and `gh` CLI first for repository and GitHub work. Use git/GitHub MCP tools
+only for CLI gaps, unavailable CLI, or explicit user request.
 
 If any of those publication steps are still missing, the work is still in progress even if the code
 changes are already committed locally.
