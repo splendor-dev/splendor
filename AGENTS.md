@@ -37,8 +37,8 @@
 - Published PRs should carry intentional GitHub metadata:
   apply the appropriate labels, assign the PR to a milestone, and avoid leaving review-ready work
   as draft unless the user explicitly asks for a draft.
-- Prefer repo-specific GitHub MCP tooling for PR metadata and fall back to `gh` only where the MCP
-  surface is missing, such as creating a missing label or milestone or opening the PR itself.
+- Use standard `git` and `gh` CLI first for repository and GitHub work; use git/GitHub MCP tools
+  only for CLI gaps, unavailable CLI, or explicit user request.
 - When finishing feature or PR work, explicitly verify that the published PR exists on GitHub and
   that its labels and milestone are set before treating the task as done.
 - When a PR implements work from a plan, update the versioned planning state in the same PR:
