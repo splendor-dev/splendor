@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P1.4`
+- Previous completed PR sub-slice: `M20-P4.0`
 - Current planned slice: `M20 human operator cockpit and wiki navigation`
-- Current PR sub-slice: `M20-P4.0`
+- Current PR sub-slice: `M20-P4.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
 - Next planned slice: `M20 human operator cockpit and wiki navigation`
-- Next planned PR sub-slice: `M20-P4.1`
+- Next planned PR sub-slice: `M20-P4.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1428,6 +1428,7 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P2.1` mutating web review workflows after the adoption-trust handoff follow-up.
 - `M20-P3.1` richer GitHub issue, PR, review-thread, and CI integrations.
 - `M20-P4.0` human operator cockpit and wiki navigation design/spec contract.
+- `M20-P4.1` human-first page detail layout and deterministic project identity.
 
 `M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
 while defining the narrow first mutation paths worth implementing later: accept one reviewed
@@ -1449,6 +1450,13 @@ keeps the web UI read-only first, and treats operator views as pure read models 
 The first implementation follow-up should be `M20-P4.1`: human-first page detail metadata demotion
 plus deterministic project identity. Broader cockpit home, planning roadmap, attention/health,
 knowledge-map, and recent-insight surfaces remain staged behind that contract.
+
+`M20-P4.1` implements that first narrow runtime follow-up. It resolves deterministic local web
+project identity from `wiki/index.md`, README, workspace basename, or a quiet Splendor fallback;
+makes the target project primary in page chrome; renders compact human page badges above readable
+markdown; and moves full parsed metadata into a collapsed technical section. The cockpit home read
+model, planning roadmap lanes, attention and recent routes, backlinks, browser mutation, config
+schema expansion, databases, background workers, hosted services, and external APIs remain deferred.
 
 ---
 

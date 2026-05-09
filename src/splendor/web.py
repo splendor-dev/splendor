@@ -66,6 +66,10 @@ _LISTING_FRONTMATTER_LINE_LIMIT = 200
 _LISTING_FRONTMATTER_CHAR_LIMIT = 64 * 1024
 _LISTING_HEADING_LINE_LIMIT = 40
 _LISTING_HEADING_CHAR_LIMIT = 16 * 1024
+_IDENTITY_LINE_LIMIT = 80
+_IDENTITY_CHAR_LIMIT = 32 * 1024
+_GENERIC_INDEX_TITLE = "Splendor Wiki Index"
+_GENERIC_INDEX_SUMMARY = "This wiki is maintained by Splendor."
 
 
 @dataclass(frozen=True)
@@ -92,6 +96,12 @@ class _WorkspaceCounts:
             and self.source_manifests == 0
             and self.runs == 0
         )
+
+
+@dataclass(frozen=True)
+class _ProjectIdentity:
+    name: str
+    summary: str | None
 
 
 @dataclass(frozen=True)
@@ -142,7 +152,13 @@ def create_app(root: Path) -> FastAPI:
         if exc.status_code >= 500:
             title = "Workspace Error"
         detail = html.escape(str(exc.detail))
-        return _page(title, f'<p class="empty">{detail}</p>', status_code=exc.status_code)
+        return _page(
+            title,
+            f'<p class="empty">{detail}</p>',
+            root=workspace_root,
+            layout=_identity_layout_for(workspace_root),
+            status_code=exc.status_code,
+        )
 
     @app.exception_handler(WebLayoutError)
     def workspace_layout_error(_, __: WebLayoutError) -> HTMLResponse:
@@ -150,6 +166,8 @@ def create_app(root: Path) -> FastAPI:
         return _page(
             "Workspace Error",
             '<p class="empty">Workspace configuration is invalid.</p>',
+            root=workspace_root,
+            layout=_identity_layout_for(workspace_root),
             status_code=500,
         )
 
@@ -180,7 +198,7 @@ def create_app(root: Path) -> FastAPI:
             f"<div><strong>{counts.runs}</strong><span>Runs</span></div>"
             "</section>"
         )
-        return _page("Splendor", body)
+        return _page("Home", body, root=workspace_root, layout=layout)
 
     @app.get("/status", response_class=HTMLResponse)
     def status() -> HTMLResponse:
@@ -195,6 +213,8 @@ def create_app(root: Path) -> FastAPI:
                 '<p class="empty">'
                 "Status failed because the workspace contains invalid records."
                 "</p>",
+                root=workspace_root,
+                layout=layout,
                 status_code=500,
             )
         if not source_rows:
@@ -239,7 +259,7 @@ def create_app(root: Path) -> FastAPI:
             "<th>Summary page</th><th>Source ref</th></tr></thead>"
             f"<tbody>{source_rows}</tbody></table>"
         )
-        return _page("Status", body)
+        return _page("Status", body, root=workspace_root, layout=layout)
 
     @app.get("/planning", response_class=HTMLResponse)
     def planning() -> HTMLResponse:
@@ -256,6 +276,8 @@ def create_app(root: Path) -> FastAPI:
                 '<p class="empty">'
                 "Planning view failed because the workspace contains invalid planning records."
                 "</p>",
+                root=workspace_root,
+                layout=layout,
                 status_code=500,
             )
         stats = "".join(
@@ -269,7 +291,7 @@ def create_app(root: Path) -> FastAPI:
             f'<section class="stats">{stats}</section>'
             f"{sections}"
         )
-        return _page("Planning", body)
+        return _page("Planning", body, root=workspace_root, layout=layout)
 
     @app.get("/planning/{kind}", response_class=HTMLResponse)
     def planning_kind(kind: str) -> HTMLResponse:
@@ -284,6 +306,8 @@ def create_app(root: Path) -> FastAPI:
                 '<p class="empty">'
                 "Planning view failed because the workspace contains invalid planning records."
                 "</p>",
+                root=workspace_root,
+                layout=layout,
                 status_code=500,
             )
         body = (
@@ -291,7 +315,7 @@ def create_app(root: Path) -> FastAPI:
             f"{html.escape(_planning_label(normalized_kind))}</p>"
             f"{_planning_table(normalized_kind, records)}"
         )
-        return _page(_planning_label(normalized_kind), body)
+        return _page(_planning_label(normalized_kind), body, root=workspace_root, layout=layout)
 
     @app.get("/runs", response_class=HTMLResponse)
     def runs() -> HTMLResponse:
@@ -305,6 +329,8 @@ def create_app(root: Path) -> FastAPI:
                 '<p class="empty">'
                 "Runs view failed because the workspace contains invalid run records."
                 "</p>",
+                root=workspace_root,
+                layout=layout,
                 status_code=500,
             )
         rows = "\n".join(_run_row(run) for run in run_records[:25])
@@ -319,7 +345,7 @@ def create_app(root: Path) -> FastAPI:
             "<th>Record</th></tr></thead>"
             f"<tbody>{rows}</tbody></table>"
         )
-        return _page("Runs", body)
+        return _page("Runs", body, root=workspace_root, layout=layout)
 
     @app.get("/queue", response_class=HTMLResponse)
     def queue() -> HTMLResponse:
@@ -333,6 +359,8 @@ def create_app(root: Path) -> FastAPI:
                 '<p class="empty">'
                 "Queue view failed because the workspace contains invalid queue records."
                 "</p>",
+                root=workspace_root,
+                layout=layout,
                 status_code=500,
             )
         status_counts: dict[str, int] = {}
@@ -355,7 +383,7 @@ def create_app(root: Path) -> FastAPI:
             "<th>Next attempt</th><th>Error</th><th>Record</th></tr></thead>"
             f"<tbody>{rows}</tbody></table>"
         )
-        return _page("Queue", body)
+        return _page("Queue", body, root=workspace_root, layout=layout)
 
     @app.get("/sources/{source_id}", response_class=HTMLResponse)
     def source_detail(source_id: str) -> HTMLResponse:
@@ -400,7 +428,7 @@ def create_app(root: Path) -> FastAPI:
             "<table><thead><tr><th>Page</th><th>Kind</th><th>Score</th><th>Reasons</th></tr></thead>"
             f"<tbody>{suggestion_rows}</tbody></table>"
         )
-        return _page(source.title, body)
+        return _page(source.title, body, root=workspace_root, layout=layout)
 
     @app.get("/browse", response_class=HTMLResponse)
     def browse() -> HTMLResponse:
@@ -437,7 +465,7 @@ def create_app(root: Path) -> FastAPI:
             f"<tbody>{content_rows}</tbody></table>"
             f"{special_section}"
         )
-        return _page("Browse", body)
+        return _page("Browse", body, root=workspace_root, layout=layout)
 
     @app.get("/documents/{document_path:path}", response_class=HTMLResponse)
     def document(document_path: str) -> HTMLResponse:
@@ -446,18 +474,18 @@ def create_app(root: Path) -> FastAPI:
         detail = _document_detail(workspace_root, layout, path)
         metadata = html.escape(json.dumps(detail.metadata, indent=2, sort_keys=True))
         body_html = _render_markdown(detail.body)
+        badges = _document_badges(detail)
         body = (
             '<p class="breadcrumbs"><a href="/browse">Browse</a> / '
             f"{html.escape(detail.path)}</p>"
-            '<section class="metadata">'
-            f"<div><strong>Class</strong><span>{html.escape(detail.document_class)}</span></div>"
-            f"<div><strong>Kind</strong><span>{html.escape(detail.kind or '-')}</span></div>"
-            f"<div><strong>Status</strong><span>{html.escape(detail.status or '-')}</span></div>"
-            f"<pre>{metadata}</pre>"
-            "</section>"
+            f"{badges}"
             f'<article class="markdown">{body_html}</article>'
+            '<details class="technical">'
+            "<summary>Technical metadata</summary>"
+            f"<pre>{metadata}</pre>"
+            "</details>"
         )
-        return _page(detail.title, body)
+        return _page(detail.title, body, root=workspace_root, layout=layout)
 
     @app.get("/search", response_class=HTMLResponse)
     def search(q: str = Query(default="")) -> HTMLResponse:
@@ -471,9 +499,9 @@ def create_app(root: Path) -> FastAPI:
             "</form>"
             "</section>"
         )
-        if not query:
-            return _page("Search", form)
         layout = _layout_for(workspace_root)
+        if not query:
+            return _page("Search", form, root=workspace_root, layout=layout)
         try:
             result = run_query(workspace_root, query)
         except QueryValidationError as exc:
@@ -486,6 +514,8 @@ def create_app(root: Path) -> FastAPI:
                 '<p class="empty">'
                 "Search failed because the workspace contains invalid records."
                 "</p>",
+                root=workspace_root,
+                layout=layout,
                 status_code=500,
             )
 
@@ -504,7 +534,7 @@ def create_app(root: Path) -> FastAPI:
             else:
                 rows = '<p class="empty">No matches found.</p>'
         body = f"{form}<p>{html.escape(result.summary)}</p><section>{rows}</section>"
-        return _page("Search", body)
+        return _page("Search", body, root=workspace_root, layout=layout)
 
     return app
 
@@ -514,6 +544,13 @@ def _layout_for(root: Path) -> ResolvedLayout:
     _validate_layout_root(root, config.layout.wiki_dir, label="wiki_dir")
     _validate_layout_root(root, config.layout.planning_dir, label="planning_dir")
     return resolve_layout(root, config)
+
+
+def _identity_layout_for(root: Path) -> ResolvedLayout | None:
+    try:
+        return _layout_for(root)
+    except WebLayoutError:
+        return None
 
 
 def _validate_layout_root(root: Path, value: str, *, label: str) -> None:
@@ -566,6 +603,99 @@ def _workspace_counts(
         ),
         runs=sum(1 for path in layout.runs_dir.glob("*.json") if path.is_file()),
     )
+
+
+def _build_project_identity(root: Path, layout: ResolvedLayout | None = None) -> _ProjectIdentity:
+    index_path = layout.index_file if layout is not None else root / "wiki" / "index.md"
+    index_identity = _project_identity_from_markdown(index_path)
+    if index_identity is not None and not _is_generic_index_identity(index_identity):
+        return index_identity
+
+    readme_identity = _project_identity_from_markdown(root / "README.md")
+    if readme_identity is not None:
+        return readme_identity
+
+    basename = root.name.strip()
+    if basename:
+        return _ProjectIdentity(name=basename, summary=None)
+    return _ProjectIdentity(name="Splendor workspace", summary=None)
+
+
+def _is_generic_index_identity(identity: _ProjectIdentity) -> bool:
+    return identity.name == _GENERIC_INDEX_TITLE and identity.summary == _GENERIC_INDEX_SUMMARY
+
+
+def _project_identity_from_markdown(path: Path) -> _ProjectIdentity | None:
+    if not path.is_file():
+        return None
+    raw = _read_identity_markdown(path)
+    if raw is None:
+        return None
+
+    lines = _strip_frontmatter(raw).splitlines()
+    heading: str | None = None
+    heading_index = -1
+    for index, line in enumerate(lines):
+        heading = _heading_from_line(line)
+        if heading:
+            heading_index = index
+            break
+    if heading is None:
+        return None
+
+    return _ProjectIdentity(
+        name=heading,
+        summary=_leading_paragraph(lines[heading_index + 1 :]),
+    )
+
+
+def _read_identity_markdown(path: Path) -> str | None:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            lines: list[str] = []
+            char_count = 0
+            for _ in range(_IDENTITY_LINE_LIMIT):
+                line = handle.readline()
+                if not line:
+                    break
+                char_count += len(line)
+                if char_count > _IDENTITY_CHAR_LIMIT:
+                    break
+                lines.append(line)
+    except OSError:
+        return None
+    return "".join(lines)
+
+
+def _strip_frontmatter(markdown_text: str) -> str:
+    normalized = markdown_text.replace("\r\n", "\n").replace("\r", "\n")
+    if not normalized.startswith("---\n"):
+        return normalized
+    try:
+        _frontmatter_text, body = normalized.removeprefix("---\n").split("\n---\n", maxsplit=1)
+    except ValueError:
+        return normalized
+    return body
+
+
+def _leading_paragraph(lines: list[str]) -> str | None:
+    paragraph: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if paragraph:
+                break
+            continue
+        if stripped.startswith("#") or stripped.startswith("```"):
+            if paragraph:
+                break
+            continue
+        if stripped.startswith(("> ", "- ", "* ", "+ ")) and not paragraph:
+            continue
+        paragraph.append(stripped)
+    if not paragraph:
+        return None
+    return " ".join(paragraph)
 
 
 def _normalize_planning_kind(kind: str) -> str:
@@ -873,6 +1003,36 @@ def _document_detail(root: Path, layout: ResolvedLayout, path: Path) -> _Documen
     )
 
 
+def _document_badges(detail: _DocumentDetail) -> str:
+    badges = [
+        ("Class", detail.document_class),
+        ("Kind", detail.kind),
+        ("Status", detail.status),
+        ("Review", _metadata_string(detail.metadata, "review_state")),
+        ("Authority", _metadata_string(detail.metadata, "authority_role")),
+        ("Freshness", _metadata_string(detail.metadata, "authority_freshness")),
+    ]
+    source_refs = detail.metadata.get("source_refs")
+    if isinstance(source_refs, list) and source_refs:
+        badges.append(("Sources", str(len(source_refs))))
+    run_refs = detail.metadata.get("generated_by_run_ids")
+    if isinstance(run_refs, list) and run_refs:
+        badges.append(("Runs", str(len(run_refs))))
+    badge_items = "".join(
+        f'<span class="badge"><strong>{html.escape(label)}</strong> {html.escape(value)}</span>'
+        for label, value in badges
+        if value
+    )
+    if not badge_items:
+        return ""
+    return f'<section class="badges">{badge_items}</section>'
+
+
+def _metadata_string(metadata: dict[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    return value if isinstance(value, str) and value else None
+
+
 def _planning_kind(layout: ResolvedLayout, path: Path) -> str | None:
     relative_parts = path.relative_to(layout.planning_dir).parts
     if not relative_parts:
@@ -1097,15 +1257,35 @@ def _search_row(match: QueryMatch) -> str:
     )
 
 
-def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
+def _page(
+    title: str,
+    body: str,
+    *,
+    root: Path | None = None,
+    layout: ResolvedLayout | None = None,
+    status_code: int = 200,
+) -> HTMLResponse:
+    identity = (
+        _build_project_identity(root, layout)
+        if root is not None
+        else _ProjectIdentity(name="Splendor workspace", summary=None)
+    )
     escaped_title = html.escape(title)
+    escaped_project = html.escape(identity.name)
+    escaped_summary = html.escape(identity.summary) if identity.summary else ""
+    browser_title = f"{escaped_title} · {escaped_project} · Splendor"
+    header_summary = (
+        f"<span>{escaped_summary}</span>"
+        if escaped_summary
+        else '<span class="empty">Local Splendor wiki</span>'
+    )
     return HTMLResponse(
         "<!doctype html>"
         '<html lang="en">'
         "<head>"
         '<meta charset="utf-8" />'
         '<meta name="viewport" content="width=device-width, initial-scale=1" />'
-        f"<title>{escaped_title} · Splendor</title>"
+        f"<title>{browser_title}</title>"
         "<style>"
         ":root{color-scheme:light;--border:#d8dee8;--text:#1f2937;--muted:#5f6b7a;"
         "--surface:#f8fafc;--accent:#0f766e}"
@@ -1113,6 +1293,9 @@ def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
         "'Segoe UI',sans-serif;"
         "color:var(--text);background:white}"
         "header{border-bottom:1px solid var(--border);padding:18px 28px;background:var(--surface)}"
+        ".brand{max-width:1060px;margin:0 auto}.brand p{margin:4px 0 0;color:var(--muted)}"
+        ".brand .product{font-size:13px;text-transform:uppercase;letter-spacing:.08em}"
+        ".brand .page-title{font-size:18px;margin:4px 0 0;color:var(--text)}"
         "main{max-width:1060px;margin:0 auto;padding:28px}"
         "h1{font-size:28px;margin:0}h2{font-size:18px;margin:0 0 6px}"
         "a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}"
@@ -1137,12 +1320,22 @@ def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
         "pre{overflow:auto;background:var(--surface);border-radius:6px;padding:12px}"
         ".metadata{display:grid;gap:10px;margin-bottom:24px;background:var(--surface)}"
         ".metadata div{display:flex;gap:10px}.metadata strong{width:70px}"
+        ".badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}"
+        ".badge{border:1px solid var(--border);border-radius:999px;padding:4px 9px;"
+        "background:var(--surface);font-size:13px;color:var(--muted)}"
+        ".badge strong{color:var(--text);font-weight:600}"
+        ".technical{margin-top:24px;border-top:1px solid var(--border);padding-top:14px}"
+        ".technical summary{cursor:pointer;color:var(--muted)}"
         ".markdown{max-width:820px}.markdown img{max-width:100%}.result{margin:0 0 12px}"
         ".empty{color:var(--muted)}"
         "</style>"
         "</head>"
         "<body>"
-        f"<header><h1>{escaped_title}</h1></header>"
+        '<header><div class="brand">'
+        f"<h1>{escaped_project}</h1>"
+        f'<h2 class="page-title">{escaped_title}</h2>'
+        f'<p>{header_summary} <span class="product">Splendor</span></p>'
+        "</div></header>"
         f"<main>{body}</main>"
         "</body></html>",
         status_code=status_code,

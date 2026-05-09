@@ -624,7 +624,8 @@ project display name through a deterministic cascade:
 5. quiet fallback such as `Splendor workspace`.
 
 Explicit project config is useful as a future precision mechanism, but it should not be required
-before the web UI can present a useful project identity.
+before the web UI can present a useful project identity. The local web runtime currently implements
+the file-based portion of this cascade without adding a config schema.
 
 ## 13. Execution Model
 
@@ -1515,7 +1516,9 @@ the CLI wiki status/suggest contracts. They expose source/page/queue/run/review 
 manifests, linked source-summary pages, latest ingest run state, and deterministic affected
 synthesis-page suggestions without adding mutating web actions. It also includes read-only
 `/planning`, `/planning/{kind}`, `/runs`, and `/queue` pages that list durable planning and runtime
-records and link planning rows back to their markdown detail pages.
+records and link planning rows back to their markdown detail pages. Page chrome now derives the
+target project identity from local files, and document detail pages lead with compact human badges
+plus readable markdown before collapsed technical metadata.
 
 ### Human operator contract
 
