@@ -6,6 +6,12 @@ Splendor's current local web UI remains read-only. This proposal defines the sma
 browser workflows worth supporting later, and the constraints they must satisfy before any runtime
 implementation starts.
 
+This proposal is separate from the human operator cockpit and wiki navigation track in
+`docs/human_operator_cockpit.md`. The cockpit track is a read-only comprehension and navigation
+layer; it should not be treated as permission to add browser-side mutations. Mutating review
+workflows still require the trust-boundary, deterministic-state, and CLI-equivalence constraints
+defined here.
+
 ## Product Boundary
 
 The web UI may become a review and acceptance surface for existing local-first workflows, not a new

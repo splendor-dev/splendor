@@ -335,11 +335,11 @@ annotations plus linked review tasks for explicit conflicts, richer query metada
 deterministic lint/health validation for those cross-links.
 
 - Previous completed PR sub-slice: `M20-P1.4`
-- Current planned slice: `M20 mutating web review workflows`
-- Current PR sub-slice: `M20-P2.1`
+- Current planned slice: `M20 human operator cockpit and wiki navigation`
+- Current PR sub-slice: `M20-P4.0`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 richer GitHub integrations`
-- Next planned PR sub-slice: `M20-P3.1`
+- Next planned slice: `M20 human operator cockpit and wiki navigation`
+- Next planned PR sub-slice: `M20-P4.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1361,7 +1361,9 @@ Start larger product bets now that the v0.5 integrated-use review accepts the M1
 as closed, while treating the v0.5.1 hocrgen/hocrsyngen retry evidence as a new M20 product-scope
 handoff signal rather than a reason to reopen M19. After `M20-P1.2` and the v0.5.1 release, the
 next adoption-trust slice should focus on current-work handoff ranking before mutating web review
-workflows. Remaining M19 polish issues can ride along only when they are directly relevant to the
+workflows. The human operator web/wiki review adds a parallel product bet: improve local web
+legibility and wiki navigation without reducing CLI-first semantics or moving state out of local
+files. Remaining M19 polish issues can ride along only when they are directly relevant to the
 selected M20 implementation.
 
 ### Candidate PR slices
@@ -1373,6 +1375,14 @@ selected M20 implementation.
 - `M20-P2.1` Explore mutating web review workflows (#119).
 - `M20-P3.1` Add richer GitHub issue, PR, review-thread, and CI integrations on top of the
   v0.4 handoff model.
+- `M20-P4.0` Define the human operator cockpit and wiki navigation design/spec/architecture
+  contract.
+- `M20-P4.1` Implement human-first page detail layout and deterministic project identity.
+- `M20-P4.2` Implement the first read-only cockpit home read model.
+- `M20-P4.3` Render planning records as a human roadmap while preserving raw record access.
+- `M20-P4.4` Add attention and health interpretation for review, run, queue, and planning state.
+- `M20-P4.5` Add knowledge-map navigation from related pages, tags, provenance, and backlinks.
+- `M20-P4.6` Render recent insights and `wiki/log.md` as a first-class local web surface.
 
 `M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
 first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
@@ -1417,6 +1427,7 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P1.4` current-work handoff ranking from planning authority (#177).
 - `M20-P2.1` mutating web review workflows after the adoption-trust handoff follow-up.
 - `M20-P3.1` richer GitHub issue, PR, review-thread, and CI integrations.
+- `M20-P4.0` human operator cockpit and wiki navigation design/spec contract.
 
 `M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
 while defining the narrow first mutation paths worth implementing later: accept one reviewed
@@ -1429,6 +1440,15 @@ leave the resulting working-tree diff as the git-native review surface. The deta
 in `docs/mutating_web_review_workflows.md`. Runtime web mutation, source or queue maintenance apply
 buttons, background workers, databases, auth, hosted services, mandatory external APIs, automatic
 GitHub mutation, and broad multi-page editing stay out of scope for this slice.
+
+`M20-P4.0` is a docs/design-first slice for the human operator cockpit and wiki navigation track.
+It records the external review feedback that the local web UI currently exposes state without
+constructing human meaning, then defines the additive design contract in
+`docs/human_operator_cockpit.md`. The track keeps the CLI as the deterministic operating surface,
+keeps the web UI read-only first, and treats operator views as pure read models over local files.
+The first implementation follow-up should be `M20-P4.1`: human-first page detail metadata demotion
+plus deterministic project identity. Broader cockpit home, planning roadmap, attention/health,
+knowledge-map, and recent-insight surfaces remain staged behind that contract.
 
 ---
 
