@@ -91,7 +91,9 @@ Corrections needed:
   reproducing the hocrgen current-work handoff bug; current-work extraction should reuse or wait for
   the M20-P1.6 authority classifier;
 - raw planning tables should not be abandoned, only demoted behind a human roadmap layer;
-- `review_state == stale` needs verification against the actual schema before becoming a contract.
+- `review_state: stale` is schema-backed, but operator views still need a precise contract for how
+  `review_state: stale`, `status: stale`, and authority/freshness stale signals relate to each
+  other.
 
 ### ChatGPT Pro Reply
 
