@@ -10,6 +10,7 @@ workflow.
 - [Schema contracts](schema_contracts.md)
 - [Source-resolution refactor plan](source_resolution_refactor_plan.md)
 - [Issue #70 design response](issue_70_design_response.md)
+- [Current-work authority model](current_work_authority_model.md)
 - [Mutating web review workflows proposal](mutating_web_review_workflows.md)
 - [Human operator cockpit and wiki navigation](human_operator_cockpit.md)
 
@@ -39,6 +40,7 @@ workflow.
 - [v0.4 external review round summary](evaluations/v0_4_external_review_round_summary.md)
 - [v0.4 external findings register](evaluations/v0_4_external_findings_register.md)
 - [v0.5 SynthBanshee integrated-use review](evaluations/v0_5_synthbanshee_integrated_use/summary.md)
+- [v0.5.2 hocrgen/hocrsyngen retry findings](evaluations/v0_5_2_hocr_retry_findings.md)
 - [Human operator web/wiki review synthesis](evaluations/human_operator_web_wiki_reviews/synthesis.md)
 - [Public mock client acceptance](evaluations/public_mock_client_acceptance.md)
 

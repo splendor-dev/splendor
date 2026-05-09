@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.0`
-- Current planned slice: `M20 human operator cockpit and wiki navigation`
-- Current PR sub-slice: `M20-P4.1`
+- Previous completed PR sub-slice: `M20-P4.1`
+- Current planned slice: `M20 current-work authority model from v0.5.2 hocr retries`
+- Current PR sub-slice: `M20-P1.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 human operator cockpit and wiki navigation`
-- Next planned PR sub-slice: `M20-P4.2`
+- Next planned slice: `M20 current-work authority classifier implementation (#182)`
+- Next planned PR sub-slice: `M20-P1.6`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1361,10 +1361,12 @@ Start larger product bets now that the v0.5 integrated-use review accepts the M1
 as closed, while treating the v0.5.1 hocrgen/hocrsyngen retry evidence as a new M20 product-scope
 handoff signal rather than a reason to reopen M19. After `M20-P1.2` and the v0.5.1 release, the
 next adoption-trust slice should focus on current-work handoff ranking before mutating web review
-workflows. The human operator web/wiki review adds a parallel product bet: improve local web
-legibility and wiki navigation without reducing CLI-first semantics or moving state out of local
-files. Remaining M19 polish issues can ride along only when they are directly relevant to the
-selected M20 implementation.
+workflows. After `M20-P2.1` and the v0.5.2 release, the second hocrgen/hocrsyngen retry shows
+that current-work handoff needs one more narrow authority-model correction before richer GitHub
+integration work resumes. The human operator web/wiki review adds a parallel product bet: improve
+local web legibility and wiki navigation without reducing CLI-first semantics or moving state out
+of local files. Remaining M19 polish issues can ride along only when they are directly relevant to
+the selected M20 implementation.
 
 ### Candidate PR slices
 - `M20-P0.1` Record v0.5 SynthBanshee integrated-use review intake and M20 issue disposition.
@@ -1373,6 +1375,10 @@ selected M20 implementation.
 - `M20-P1.3` Record v0.5.1 hocrgen/hocrsyngen retry findings and current-work handoff plan.
 - `M20-P1.4` Current-work handoff ranking from planning authority (#177).
 - `M20-P2.1` Explore mutating web review workflows (#119).
+- `M20-P1.5` Record v0.5.2 hocrgen/hocrsyngen retry findings and define the current-work
+  authority model.
+- `M20-P1.6` Implement current-work authority classification and hocr retry acceptance coverage
+  (#182).
 - `M20-P3.1` Add richer GitHub issue, PR, review-thread, and CI integrations on top of the
   v0.4 handoff model.
 - `M20-P4.0` Define the human operator cockpit and wiki navigation design/spec/architecture
@@ -1425,10 +1431,14 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P1.2` retrieval evaluation and handoff retry fixture closeout.
 - `M20-P1.3` v0.5.1 retry evidence intake and current-work handoff planning.
 - `M20-P1.4` current-work handoff ranking from planning authority (#177).
-- `M20-P2.1` mutating web review workflows after the adoption-trust handoff follow-up.
-- `M20-P3.1` richer GitHub issue, PR, review-thread, and CI integrations.
+- `M20-P2.1` mutating web review workflows after the first adoption-trust handoff follow-up.
+- `M20-P1.5` v0.5.2 retry evidence intake and current-work authority-model design.
+- `M20-P1.6` current-work authority classification implementation (#182).
+- `M20-P3.1` richer GitHub issue, PR, review-thread, and CI integrations after the authority-model
+  correction.
 - `M20-P4.0` human operator cockpit and wiki navigation design/spec contract.
 - `M20-P4.1` human-first page detail layout and deterministic project identity.
+- `M20-P4.2` first read-only cockpit home read model.
 
 `M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
 while defining the narrow first mutation paths worth implementing later: accept one reviewed
@@ -1441,6 +1451,25 @@ leave the resulting working-tree diff as the git-native review surface. The deta
 in `docs/mutating_web_review_workflows.md`. Runtime web mutation, source or queue maintenance apply
 buttons, background workers, databases, auth, hosted services, mandatory external APIs, automatic
 GitHub mutation, and broad multi-page editing stay out of scope for this slice.
+
+`M20-P1.5` follows `M20-P2.1` chronologically even though it belongs to the `M20-P1` adoption-trust
+track. The v0.5.2 release packaged the `M20-P1.4` runtime handoff fix, then fresh hocrgen and
+hocrsyngen retries showed a sharper product gap: Splendor can still treat old blocker prose as the
+current action. This slice is docs/design only. It records the four raw hocr replies, summarizes
+the findings, and defines `docs/current_work_authority_model.md`. The model says
+`brief --agent-context` and `suggest-next` must classify planning evidence before ranking it:
+active or unchecked `.agent-plan.md` work outranks roadmap blocker prose, blocker prose is context
+rather than a slice, gated follow-ons stay behind prerequisites, and merged PRs remain predecessor
+context for current-work goals. `query` remains retrieval/search, not guaranteed handoff answer
+synthesis.
+
+`M20-P1.6` (#182) should be the next implementation slice. It should keep the runtime local-first
+and deterministic while adding the authority classification needed by the captured retry cases.
+The acceptance bar is narrow: hocrgen current-work handoff ranks `F6f2` first, keeps `F6g` gated
+behind it, preserves `F1c` only as blocker/prerequisite context, suppresses merged PRs as top
+actions for current-work goals, and preserves the hocrsyngen `S8b` partial pass. This slice should
+not broaden into query answer synthesis, mutating web workflows, background services, databases,
+mandatory external APIs, or a general agent-memory architecture.
 
 `M20-P4.0` is a docs/design-first slice for the human operator cockpit and wiki navigation track.
 It records the external review feedback that the local web UI currently exposes state without
@@ -1457,6 +1486,7 @@ makes the target project primary in page chrome; renders compact human page badg
 markdown; and moves full parsed metadata into a collapsed technical section. The cockpit home read
 model, planning roadmap lanes, attention and recent routes, backlinks, browser mutation, config
 schema expansion, databases, background workers, hosted services, and external APIs remain deferred.
+The next cockpit-track implementation follow-up remains `M20-P4.2`.
 
 ---
 

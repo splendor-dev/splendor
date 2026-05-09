@@ -1225,6 +1225,12 @@ Current implementation:
   historical review material as work actions. Merged PRs and commits are predecessor context unless
   the user explicitly asks to review history or a PR. Open issues and active PRs remain eligible to
   lead when they are the live work thread for the stated goal.
+- Current-work synthesis should classify evidence before ranking it. Active or unchecked
+  `.agent-plan.md` work and reconciled roadmap status are stronger current-work signals than
+  blocker prose, generated source summaries, superseded reviews, merged PRs, or maintenance state.
+  Blocker prose can explain why a slice matters, but it should not become
+  `current_planned_work.slice_id` unless it maps back to active or unchecked planned work. Gated
+  follow-on work should remain visible behind its prerequisite rather than displacing it.
 - Git-aware `brief --agent-context` and `suggest-next` include the `splendor pr-summary --since
   <base>` command under Splendor maintenance context when a branch has Splendor-specific compact
   review groups or attention diagnostics. This keeps compact committed generated-state review
@@ -1302,6 +1308,14 @@ v0.4 direction from external trials:
   conventions, then rank it ahead of merged PRs, commits, and maintenance actions for
   current/next-roadmap goals. Open issues or PRs that directly match that current work remain the
   leading work-thread signal.
+- Post-v0.5.2 hocrgen and hocrsyngen retries narrow the next product contract. The hocrsyngen
+  retry shows that the existing handoff path can use `.agent-plan.md` to rank active `S8b` work
+  first. The hocrgen retry shows that the same path can still select stale `F1c` blocker prose
+  instead of the active unchecked `F6f2` task. `brief --agent-context` and `suggest-next` therefore
+  need the evidence-class model in `docs/current_work_authority_model.md`: active or unchecked
+  work first, gated follow-ons behind prerequisites, blocker prose as context, and merged PRs as
+  predecessor history for current-work goals. `splendor query` remains retrieval/search; answering
+  "what is the current slice?" from retrieved evidence is a separate future design problem.
 - First-run adoption should be explicit about state churn. `splendor init` may create a
   repository-local workspace, but the CLI and docs should make the state location, review burden,
   and local/throwaway-worktree strategy clear before a first-time agent creates many visible
