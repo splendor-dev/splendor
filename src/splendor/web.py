@@ -66,6 +66,8 @@ _LISTING_FRONTMATTER_LINE_LIMIT = 200
 _LISTING_FRONTMATTER_CHAR_LIMIT = 64 * 1024
 _LISTING_HEADING_LINE_LIMIT = 40
 _LISTING_HEADING_CHAR_LIMIT = 16 * 1024
+_IDENTITY_LINE_LIMIT = 80
+_IDENTITY_CHAR_LIMIT = 32 * 1024
 _GENERIC_INDEX_TITLE = "Splendor Wiki Index"
 _GENERIC_INDEX_SUMMARY = "This wiki is maintained by Splendor."
 
@@ -154,6 +156,7 @@ def create_app(root: Path) -> FastAPI:
             title,
             f'<p class="empty">{detail}</p>',
             root=workspace_root,
+            layout=_identity_layout_for(workspace_root),
             status_code=exc.status_code,
         )
 
@@ -164,6 +167,7 @@ def create_app(root: Path) -> FastAPI:
             "Workspace Error",
             '<p class="empty">Workspace configuration is invalid.</p>',
             root=workspace_root,
+            layout=_identity_layout_for(workspace_root),
             status_code=500,
         )
 
@@ -542,6 +546,13 @@ def _layout_for(root: Path) -> ResolvedLayout:
     return resolve_layout(root, config)
 
 
+def _identity_layout_for(root: Path) -> ResolvedLayout | None:
+    try:
+        return _layout_for(root)
+    except WebLayoutError:
+        return None
+
+
 def _validate_layout_root(root: Path, value: str, *, label: str) -> None:
     path = Path(value)
     if "\\" in value or path.is_absolute() or not path.parts or ".." in path.parts:
@@ -617,9 +628,8 @@ def _is_generic_index_identity(identity: _ProjectIdentity) -> bool:
 def _project_identity_from_markdown(path: Path) -> _ProjectIdentity | None:
     if not path.is_file():
         return None
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError:
+    raw = _read_identity_markdown(path)
+    if raw is None:
         return None
 
     lines = _strip_frontmatter(raw).splitlines()
@@ -637,6 +647,24 @@ def _project_identity_from_markdown(path: Path) -> _ProjectIdentity | None:
         name=heading,
         summary=_leading_paragraph(lines[heading_index + 1 :]),
     )
+
+
+def _read_identity_markdown(path: Path) -> str | None:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            lines: list[str] = []
+            char_count = 0
+            for _ in range(_IDENTITY_LINE_LIMIT):
+                line = handle.readline()
+                if not line:
+                    break
+                char_count += len(line)
+                if char_count > _IDENTITY_CHAR_LIMIT:
+                    break
+                lines.append(line)
+    except OSError:
+        return None
+    return "".join(lines)
 
 
 def _strip_frontmatter(markdown_text: str) -> str:
@@ -1267,7 +1295,7 @@ def _page(
         "header{border-bottom:1px solid var(--border);padding:18px 28px;background:var(--surface)}"
         ".brand{max-width:1060px;margin:0 auto}.brand p{margin:4px 0 0;color:var(--muted)}"
         ".brand .product{font-size:13px;text-transform:uppercase;letter-spacing:.08em}"
-        ".brand .page-title{color:var(--text);font-weight:600}"
+        ".brand .page-title{font-size:18px;margin:4px 0 0;color:var(--text)}"
         "main{max-width:1060px;margin:0 auto;padding:28px}"
         "h1{font-size:28px;margin:0}h2{font-size:18px;margin:0 0 6px}"
         "a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}"
@@ -1305,7 +1333,7 @@ def _page(
         "<body>"
         '<header><div class="brand">'
         f"<h1>{escaped_project}</h1>"
-        f'<p class="page-title">{escaped_title}</p>'
+        f'<h2 class="page-title">{escaped_title}</h2>'
         f'<p>{header_summary} <span class="product">Splendor</span></p>'
         "</div></header>"
         f"<main>{body}</main>"

@@ -131,7 +131,23 @@ def test_page_chrome_keeps_visible_route_title(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert f"<h1>{tmp_path.name}</h1>" in response.text
-    assert '<p class="page-title">Browse</p>' in response.text
+    assert '<h2 class="page-title">Browse</h2>' in response.text
+
+
+def test_project_identity_reads_only_bounded_markdown(tmp_path: Path, monkeypatch) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "# Bounded Project\n\nShort summary.\n\n" + ("extra\n" * 200), encoding="utf-8"
+    )
+
+    def fail_read_text(*args, **kwargs):
+        raise AssertionError("identity parsing should not read the whole markdown file")
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+
+    identity = web._project_identity_from_markdown(readme)
+
+    assert identity == web._ProjectIdentity(name="Bounded Project", summary="Short summary.")
 
 
 def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
@@ -761,6 +777,7 @@ def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> Non
     browse = client.get("/browse")
     detail = client.get("/documents/knowledge/concepts/web-shell.md")
     empty_search = client.get("/search")
+    missing_document = client.get("/documents/knowledge/missing.md")
 
     assert browse.status_code == 200
     assert 'href="/documents/knowledge/concepts/web-shell.md"' in browse.text
@@ -768,7 +785,10 @@ def test_document_links_respect_custom_layout_directories(tmp_path: Path) -> Non
     assert "<h1>Custom web shell</h1>" in detail.text
     assert empty_search.status_code == 200
     assert "<h1>Custom Knowledge</h1>" in empty_search.text
-    assert '<p class="page-title">Search</p>' in empty_search.text
+    assert '<h2 class="page-title">Search</h2>' in empty_search.text
+    assert missing_document.status_code == 404
+    assert "<h1>Custom Knowledge</h1>" in missing_document.text
+    assert '<h2 class="page-title">Not Found</h2>' in missing_document.text
 
 
 def test_web_routes_reject_layout_roots_that_escape_workspace(tmp_path: Path) -> None:
