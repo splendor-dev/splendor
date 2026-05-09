@@ -15,10 +15,10 @@ Confirmed: `splendor 0.5.2`.
 
 Current hocrgen `main` is at `16144e0 F6f2a: Implement hocrsyngen evidence preflight reader (#78)`. Direct repo truth says:
 
-- [.agent-plan.md](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:8): last completed roadmap action is `F6f2a`.
-- [.agent-plan.md](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:152): next unchecked slice is `F6f2`.
-- [.agent-plan.md](/Users/shaypalachy/clones/hocrgen/.agent-plan.md:153): `F6g` is also unchecked but gated after more evidence.
-- [docs/HeOCR_hocrgen_long_term_roadmap.md](/Users/shaypalachy/clones/hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:205): `F6f2` is planned and requires a settled hocrgen-owned import metadata form plus a larger validated hocrsyngen batch.
+- Local path `/Users/shaypalachy/clones/hocrgen/.agent-plan.md:8`: last completed roadmap action is `F6f2a`.
+- Local path `/Users/shaypalachy/clones/hocrgen/.agent-plan.md:152`: next unchecked slice is `F6f2`.
+- Local path `/Users/shaypalachy/clones/hocrgen/.agent-plan.md:153`: `F6g` is also unchecked but gated after more evidence.
+- Local path `/Users/shaypalachy/clones/hocrgen/docs/HeOCR_hocrgen_long_term_roadmap.md:205`: `F6f2` is planned and requires a settled hocrgen-owned import metadata form plus a larger validated hocrsyngen batch.
 - `gh issue list` and `gh pr list` both returned `[]`.
 
 Splendor output before refresh:
@@ -43,7 +43,7 @@ After that, Splendor still returned the same wrong handoff:
 
 I cleaned up the generated Splendor refresh artifacts afterward; the hocrgen worktree is clean.
 
-**What It Got Useful**
+**What Was Useful**
 
 It did surface some useful context:
 

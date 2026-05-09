@@ -1,7 +1,7 @@
 I re-created the same targeted refresh/ingest state and captured both exact JSON outputs as files:
 
-- [brief JSON](/tmp/splendor-hocrgen-v052-brief-after-refresh.json)
-- [suggest-next JSON](/tmp/splendor-hocrgen-v052-suggest-next-after-refresh.json)
+- Local path `/tmp/splendor-hocrgen-v052-brief-after-refresh.json`
+- Local path `/tmp/splendor-hocrgen-v052-suggest-next-after-refresh.json`
 
 Note: this raw follow-up intentionally preserves local transcript paths from the reviewer
 environment. They are evidence references, not portable documentation links.
