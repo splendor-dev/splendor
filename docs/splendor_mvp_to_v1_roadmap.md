@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P3.1`
-- Current planned slice: `M20 human operator cockpit and wiki navigation design/spec/architecture contract (#190)`
-- Current PR sub-slice: `M20-P4.0`
+- Previous completed PR sub-slice: `M20-P4.0`
+- Current planned slice: `M20 first read-only cockpit home read model (#192)`
+- Current PR sub-slice: `M20-P4.2`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 first read-only cockpit home read model`
-- Next planned PR sub-slice: `M20-P4.2`
+- Next planned slice: `M20 planning roadmap view`
+- Next planned PR sub-slice: `M20-P4.3`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1495,7 +1495,15 @@ makes the target project primary in page chrome; renders compact human page badg
 markdown; and moves full parsed metadata into a collapsed technical section. The cockpit home read
 model, planning roadmap lanes, attention and recent routes, backlinks, browser mutation, config
 schema expansion, databases, background workers, hosted services, and external APIs remain deferred.
-The next cockpit-track implementation follow-up remains `M20-P4.2`.
+
+`M20-P4.2` (#192) implements the first cockpit home read model for `/`. The root route is now
+driven by a pure request-time read model over local files and leads with project orientation,
+planning-status fallback panes, knowledge-map summary, recent durable activity, and deterministic
+inspect-next links before raw counts. It remains intentionally modest: no mutating web workflows,
+databases, background workers, hosted services, mandatory external APIs, broad GitHub integration,
+or query answer synthesis are introduced. Planning roadmap lanes, deeper attention and health
+interpretation, backlinks, and recent-insight/log rendering remain staged behind this first home
+read model. The next cockpit-track implementation follow-up is `M20-P4.3`.
 
 ---
 
