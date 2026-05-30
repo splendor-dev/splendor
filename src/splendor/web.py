@@ -137,6 +137,29 @@ class _RunSummary:
     record: RunRecord
 
 
+@dataclass(frozen=True)
+class _CockpitLink:
+    title: str
+    href: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class _CockpitSection:
+    title: str
+    items: list[_CockpitLink]
+    empty: str
+
+
+@dataclass(frozen=True)
+class _CockpitHomeReadModel:
+    counts: _WorkspaceCounts
+    roadmap: list[_CockpitSection]
+    knowledge: list[_CockpitLink]
+    recent_activity: list[_CockpitLink]
+    inspect_next: list[_CockpitLink]
+
+
 class WebLayoutError(ValueError):
     """Raised when configured web document roots are unsafe to serve."""
 
@@ -174,9 +197,8 @@ def create_app(root: Path) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def home() -> HTMLResponse:
         layout = _layout_for(workspace_root)
-        content_documents = _iter_content_documents(workspace_root, layout)
-        counts = _workspace_counts(layout, content_documents=content_documents)
-        empty_state = _empty_workspace_panel() if counts.is_sparse else ""
+        read_model = _build_cockpit_home_read_model(workspace_root, layout)
+        empty_state = _empty_workspace_panel() if read_model.counts.is_sparse else ""
         body = (
             '<section class="toolbar">'
             '<form action="/search" method="get">'
@@ -190,12 +212,24 @@ def create_app(root: Path) -> FastAPI:
             '<a class="button secondary" href="/status">Status</a>'
             "</section>"
             f"{empty_state}"
+            '<section class="cockpit-grid">'
+            f"{_cockpit_section(read_model.roadmap[0])}"
+            f"{_cockpit_section(read_model.roadmap[1])}"
+            f"{_cockpit_section(read_model.roadmap[2])}"
+            f"{_cockpit_section(read_model.roadmap[3])}"
+            "</section>"
+            '<section class="cockpit-grid">'
+            f"{_cockpit_secondary_sections(read_model)}"
+            "</section>"
+            "<h2>Raw workspace counts</h2>"
             '<section class="stats">'
-            f"<div><strong>{counts.wiki_content_pages}</strong>"
+            f"<div><strong>{read_model.counts.wiki_content_pages}</strong>"
             "<span>Wiki content pages</span></div>"
-            f"<div><strong>{counts.planning_records}</strong><span>Planning records</span></div>"
-            f"<div><strong>{counts.source_manifests}</strong><span>Source manifests</span></div>"
-            f"<div><strong>{counts.runs}</strong><span>Runs</span></div>"
+            f"<div><strong>{read_model.counts.planning_records}</strong>"
+            "<span>Planning records</span></div>"
+            f"<div><strong>{read_model.counts.source_manifests}</strong>"
+            "<span>Source manifests</span></div>"
+            f"<div><strong>{read_model.counts.runs}</strong><span>Runs</span></div>"
             "</section>"
         )
         return _page("Home", body, root=workspace_root, layout=layout)
@@ -602,6 +636,275 @@ def _workspace_counts(
             1 for path in layout.source_records_dir.glob("*.json") if path.is_file()
         ),
         runs=sum(1 for path in layout.runs_dir.glob("*.json") if path.is_file()),
+    )
+
+
+def _build_cockpit_home_read_model(root: Path, layout: ResolvedLayout) -> _CockpitHomeReadModel:
+    content_documents = _iter_content_documents(root, layout)
+    counts = _workspace_counts(layout, content_documents=content_documents)
+    planning_documents = [
+        document for document in content_documents if document.document_class == "planning"
+    ]
+    wiki_documents = [
+        document for document in content_documents if document.document_class == "wiki"
+    ]
+    return _CockpitHomeReadModel(
+        counts=counts,
+        roadmap=_cockpit_roadmap_sections(planning_documents),
+        knowledge=_cockpit_knowledge_summary(layout, wiki_documents),
+        recent_activity=_cockpit_recent_activity(root, layout),
+        inspect_next=_cockpit_inspect_next(counts, planning_documents, wiki_documents),
+    )
+
+
+def _cockpit_roadmap_sections(planning_documents: list[_DocumentSummary]) -> list[_CockpitSection]:
+    current = _planning_links(
+        planning_documents,
+        statuses={"in_progress", "active"},
+        limit=4,
+    )
+    next_work = _planning_links(
+        planning_documents,
+        statuses={"todo", "planned"},
+        limit=4,
+    )
+    attention = _planning_links(
+        planning_documents,
+        statuses={"blocked", "proposed", "open"},
+        limit=4,
+    )
+    completed = _planning_links(
+        planning_documents,
+        statuses={"done", "completed", "accepted", "answered"},
+        limit=3,
+    )
+    return [
+        _CockpitSection(
+            title="Current work",
+            items=current,
+            empty="No active task or milestone records found.",
+        ),
+        _CockpitSection(
+            title="Next planned work",
+            items=next_work,
+            empty="No todo or planned records found.",
+        ),
+        _CockpitSection(
+            title="Needs attention",
+            items=attention,
+            empty="No blocked tasks, proposed decisions, or open questions found.",
+        ),
+        _CockpitSection(
+            title="Recently completed",
+            items=completed,
+            empty="No completed planning records found.",
+        ),
+    ]
+
+
+def _planning_links(
+    planning_documents: list[_DocumentSummary], *, statuses: set[str], limit: int
+) -> list[_CockpitLink]:
+    links = [
+        _CockpitLink(
+            title=document.title,
+            href=f"/documents/{quote(document.path, safe='/')}",
+            detail=f"{document.kind or 'planning'} · {document.status or '-'}",
+        )
+        for document in planning_documents
+        if document.status in statuses
+    ]
+    return sorted(links, key=lambda item: (item.detail, item.title, item.href))[:limit]
+
+
+def _cockpit_knowledge_summary(
+    layout: ResolvedLayout, wiki_documents: list[_DocumentSummary]
+) -> list[_CockpitLink]:
+    maintained_pages = sum(
+        1 for document in wiki_documents if not document.path.startswith("wiki/sources/")
+    )
+    source_summary_pages = sum(
+        1 for document in wiki_documents if document.path.startswith("wiki/sources/")
+    )
+    review_needed = sum(1 for document in wiki_documents if document.status == "review_needed")
+    source_manifest_count = sum(
+        1 for path in layout.source_records_dir.glob("*.json") if path.is_file()
+    )
+    items = [
+        _CockpitLink(
+            title=f"{maintained_pages} maintained wiki pages",
+            href="/browse",
+            detail="Human-curated or synthesis pages outside generated source summaries.",
+        ),
+        _CockpitLink(
+            title=f"{source_summary_pages} generated source summaries",
+            href="/browse",
+            detail="Pages under the configured source-summary wiki root.",
+        ),
+        _CockpitLink(
+            title=f"{source_manifest_count} source manifests",
+            href="/status",
+            detail="Curated machine-readable source records.",
+        ),
+    ]
+    if review_needed:
+        items.append(
+            _CockpitLink(
+                title=f"{review_needed} wiki pages need review",
+                href="/browse",
+                detail="Review state is visible in document rows and page badges.",
+            )
+        )
+    return items
+
+
+def _cockpit_recent_activity(root: Path, layout: ResolvedLayout) -> list[_CockpitLink]:
+    items: list[_CockpitLink] = []
+    try:
+        for run in _run_records(root, layout)[:3]:
+            record = run.record
+            finished = record.finished_at or record.started_at
+            items.append(
+                _CockpitLink(
+                    title=f"{record.status} run {record.run_id}",
+                    href="/runs",
+                    detail=f"{finished} · {len(record.page_refs)} pages",
+                )
+            )
+    except (ValueError, ValidationError):
+        items.append(
+            _CockpitLink(
+                title="Run records need inspection",
+                href="/runs",
+                detail="At least one durable run record could not be parsed.",
+            )
+        )
+    items.extend(_cockpit_log_entries(layout, limit=max(0, 3 - len(items))))
+    return items[:3]
+
+
+def _cockpit_log_entries(layout: ResolvedLayout, *, limit: int) -> list[_CockpitLink]:
+    if limit <= 0 or not layout.log_file.is_file():
+        return []
+    entries: list[_CockpitLink] = []
+    try:
+        with layout.log_file.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped.startswith("- "):
+                    continue
+                entry = stripped.removeprefix("- ").strip()
+                if not entry:
+                    continue
+                log_path = layout.log_file.relative_to(layout.root).as_posix()
+                entries.append(
+                    _CockpitLink(
+                        title=entry,
+                        href=f"/documents/{quote(log_path, safe='/')}",
+                        detail="wiki/log.md",
+                    )
+                )
+                if len(entries) >= limit:
+                    break
+    except OSError:
+        return []
+    return entries
+
+
+def _cockpit_inspect_next(
+    counts: _WorkspaceCounts,
+    planning_documents: list[_DocumentSummary],
+    wiki_documents: list[_DocumentSummary],
+) -> list[_CockpitLink]:
+    links: list[_CockpitLink] = []
+    attention = _planning_links(
+        planning_documents,
+        statuses={"blocked", "proposed", "open"},
+        limit=1,
+    )
+    current = _planning_links(
+        planning_documents,
+        statuses={"in_progress", "active"},
+        limit=1,
+    )
+    if attention:
+        links.append(attention[0])
+    if current:
+        links.append(current[0])
+    if wiki_documents:
+        links.append(
+            _CockpitLink(
+                title="Browse knowledge records",
+                href="/browse",
+                detail=f"{counts.wiki_content_pages} wiki pages available.",
+            )
+        )
+    if counts.source_manifests or counts.runs:
+        links.append(
+            _CockpitLink(
+                title="Inspect workspace status",
+                href="/status",
+                detail="Sources, review state, queue, and recent runs.",
+            )
+        )
+    if not links:
+        links.append(
+            _CockpitLink(
+                title="Seed deterministic workspace knowledge",
+                href="/browse",
+                detail="Start with repo refresh or add-source, then return here.",
+            )
+        )
+    return _dedupe_cockpit_links(links)[:4]
+
+
+def _dedupe_cockpit_links(links: list[_CockpitLink]) -> list[_CockpitLink]:
+    seen: set[tuple[str, str]] = set()
+    result: list[_CockpitLink] = []
+    for link in links:
+        key = (link.title, link.href)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(link)
+    return result
+
+
+def _cockpit_section(section: _CockpitSection) -> str:
+    items = "".join(_cockpit_link_item(item) for item in section.items)
+    if not items:
+        items = f'<li class="empty">{html.escape(section.empty)}</li>'
+    return (
+        '<section class="cockpit-panel">'
+        f"<h2>{html.escape(section.title)}</h2>"
+        f"<ul>{items}</ul>"
+        "</section>"
+    )
+
+
+def _cockpit_secondary_sections(read_model: _CockpitHomeReadModel) -> str:
+    sections = [
+        _CockpitSection(
+            "Knowledge map summary",
+            read_model.knowledge,
+            "No knowledge records yet.",
+        ),
+        _CockpitSection(
+            "Recent durable activity",
+            read_model.recent_activity,
+            "No durable activity beyond workspace initialization yet.",
+        ),
+        _CockpitSection("Inspect next", read_model.inspect_next, "No inspection links yet."),
+    ]
+    return "".join(_cockpit_section(section) for section in sections)
+
+
+def _cockpit_link_item(item: _CockpitLink) -> str:
+    return (
+        "<li>"
+        f'<a href="{html.escape(item.href)}">{html.escape(item.title)}</a>'
+        f"<span>{html.escape(item.detail)}</span>"
+        "</li>"
     )
 
 
@@ -1306,6 +1609,13 @@ def _page(
         "button,.button{border:1px solid var(--accent);border-radius:6px;background:var(--accent);"
         "color:white;padding:9px 12px;font:inherit;cursor:pointer}"
         ".button.secondary{background:white;color:var(--accent)}"
+        ".cockpit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));"
+        "gap:14px;margin:0 0 24px}"
+        ".cockpit-panel{border:1px solid var(--border);border-radius:8px;padding:14px}"
+        ".cockpit-panel ul{list-style:none;margin:10px 0 0;padding:0}"
+        ".cockpit-panel li{border-top:1px solid var(--border);padding:9px 0}"
+        ".cockpit-panel li:first-child{border-top:0;padding-top:0}"
+        ".cockpit-panel a{font-weight:600}.cockpit-panel span{display:block;color:var(--muted)}"
         ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
         ".stats div,.metadata,.result,.empty-state{border:1px solid var(--border);"
         "border-radius:8px;"

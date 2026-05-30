@@ -150,6 +150,99 @@ def test_project_identity_reads_only_bounded_markdown(tmp_path: Path, monkeypatc
     assert identity == web._ProjectIdentity(name="Bounded Project", summary="Short summary.")
 
 
+def test_home_page_renders_cockpit_read_model(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "operator-cockpit.md",
+        title="Operator cockpit",
+        page_id="concept-operator-cockpit",
+        body="# Operator cockpit\n",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "sources" / "src-web.md",
+        title="Source web",
+        page_id="source-src-web",
+        body="# Source web\n",
+    )
+    create_milestone(
+        tmp_path,
+        "Cockpit rollout",
+        record_id="milestone-cockpit",
+        status="active",
+        target_date=None,
+        task_refs=["task-home-read-model"],
+        decision_refs=["decision-home-scope"],
+        question_refs=["question-cockpit-cli"],
+    )
+    create_task(
+        tmp_path,
+        "Build home read model",
+        record_id="task-home-read-model",
+        status="in_progress",
+        priority="high",
+        owner="codex",
+        milestone_refs=["milestone-cockpit"],
+        decision_refs=["decision-home-scope"],
+        question_refs=["question-cockpit-cli"],
+        depends_on=[],
+        source_refs=[],
+    )
+    create_decision(
+        tmp_path,
+        "Keep home read only",
+        record_id="decision-home-scope",
+        status="proposed",
+        decided_at=None,
+        supersedes=[],
+        source_refs=[],
+        related_tasks=["task-home-read-model"],
+        related_questions=["question-cockpit-cli"],
+    )
+    create_question(
+        tmp_path,
+        "Should cockpit summary be a CLI command",
+        record_id="question-cockpit-cli",
+        status="open",
+        source_refs=[],
+        related_tasks=["task-home-read-model"],
+        related_decisions=["decision-home-scope"],
+    )
+    write_run_record(
+        layout.runs_dir / "run-home.json",
+        RunRecord(
+            run_id="run-home",
+            job_id="ingest-src-web",
+            job_type="ingest_source",
+            started_at="2026-05-01T10:01:00+00:00",
+            finished_at="2026-05-01T10:02:00+00:00",
+            status="succeeded",
+            input_refs=["state/manifests/sources/src-web.json"],
+            output_refs=["wiki/sources/src-web.md"],
+            pipeline_version="test",
+            source_ids=["src-web"],
+            page_refs=["wiki/sources/src-web.md"],
+        ),
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Current work" in response.text
+    assert "Build home read model" in response.text
+    assert 'href="/documents/planning/tasks/task-home-read-model.md"' in response.text
+    assert "Needs attention" in response.text
+    assert "Keep home read only" in response.text
+    assert "Knowledge map summary" in response.text
+    assert "1 maintained wiki pages" in response.text
+    assert "1 generated source summaries" in response.text
+    assert "Recent durable activity" in response.text
+    assert "succeeded run run-home" in response.text
+    assert "Inspect next" in response.text
+    assert "Raw workspace counts" in response.text
+
+
 def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(
