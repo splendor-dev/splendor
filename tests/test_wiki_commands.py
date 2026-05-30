@@ -4146,6 +4146,63 @@ def test_agent_context_reports_gh_timeout_as_warning(tmp_path: Path, capsys, mon
     assert any("Timed out" in warning for warning in payload["git_context"]["warnings"])
 
 
+def test_agent_context_includes_pr_review_and_check_status(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    _install_fake_gh(
+        tmp_path,
+        monkeypatch,
+        issues=[],
+        prs=[
+            {
+                "number": 42,
+                "title": "M20-P3.1 improve GitHub handoff context",
+                "url": "https://github.com/example/project/pull/42",
+                "body": "Agent handoff should expose review and CI status.",
+                "state": "open",
+                "isDraft": False,
+                "mergedAt": None,
+                "labels": [],
+                "reviewDecision": "CHANGES_REQUESTED",
+                "statusCheckRollup": [
+                    {"name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                    {"name": "tests", "status": "IN_PROGRESS", "conclusion": None},
+                ],
+            }
+        ],
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "M20-P3.1",
+            "GitHub",
+            "handoff",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    thread = payload["git_context"]["threads"][0]
+    assert thread["kind"] == "pr"
+    assert thread["review_decision"] == "changes-requested"
+    assert thread["check_state"] == "pending"
+    assert thread["check_summary"] == "1 pending, 1 success"
+    assert "review=changes-requested" in thread["summary"]
+    assert "checks=1 pending, 1 success" in thread["summary"]
+    action = payload["work_context"]["actions"][0]
+    assert action["category"] == "work-thread"
+    assert "checks=1 pending, 1 success" in action["reason"]
+
+
 def test_agent_context_git_lookup_ignores_path_file_entries(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
