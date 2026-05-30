@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P1.6`
-- Current planned slice: `M20 richer GitHub issue, PR, review-thread, and CI integrations (#188)`
-- Current PR sub-slice: `M20-P3.1`
+- Previous completed PR sub-slice: `M20-P3.1`
+- Current planned slice: `M20 human operator cockpit and wiki navigation design/spec/architecture contract (#190)`
+- Current PR sub-slice: `M20-P4.0`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 human operator cockpit and wiki navigation design/spec/architecture contract`
-- Next planned PR sub-slice: `M20-P4.0`
+- Next planned slice: `M20 first read-only cockpit home read model`
+- Next planned PR sub-slice: `M20-P4.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1480,7 +1480,7 @@ and status-check rollup fields plus a compact summary in the existing work-threa
 does not add hosted services, background workers, databases, auth complexity, mandatory external
 APIs, mutating web workflows, broad GitHub ingestion, or query answer synthesis.
 
-`M20-P4.0` is a docs/design-first slice for the human operator cockpit and wiki navigation track.
+`M20-P4.0` (#190) is a docs/design-first slice for the human operator cockpit and wiki navigation track.
 It records the external review feedback that the local web UI currently exposes state without
 constructing human meaning, then defines the additive design contract in
 `docs/human_operator_cockpit.md`. The track keeps the CLI as the deterministic operating surface,
