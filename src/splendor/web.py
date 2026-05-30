@@ -955,9 +955,45 @@ def _build_attention_read_model(
     )
     items: list[_AttentionItem] = []
     items.extend(_attention_from_review_documents(content_documents).items)
-    items.extend(_attention_from_sources(layout).items)
-    items.extend(_attention_from_runs(_run_records(root, layout)).items)
-    items.extend(_attention_from_queue(_queue_records(root, layout)).items)
+    try:
+        items.extend(_attention_from_sources(layout).items)
+    except ValueError:
+        items.append(
+            _AttentionItem(
+                kind="source",
+                title="Source manifests need inspection",
+                explanation="At least one source manifest could not be parsed.",
+                href="/status",
+                evidence="state/manifests/sources",
+                cli_hint="uv run splendor lint",
+            )
+        )
+    try:
+        items.extend(_attention_from_runs(_run_records(root, layout)).items)
+    except (ValueError, ValidationError):
+        items.append(
+            _AttentionItem(
+                kind="run",
+                title="Run records need inspection",
+                explanation="At least one durable run record could not be parsed.",
+                href="/runs",
+                evidence="state/runs",
+                cli_hint="uv run splendor lint",
+            )
+        )
+    try:
+        items.extend(_attention_from_queue(_queue_records(root, layout)).items)
+    except (ValueError, ValidationError):
+        items.append(
+            _AttentionItem(
+                kind="queue",
+                title="Queue records need inspection",
+                explanation="At least one durable queue record could not be parsed.",
+                href="/queue",
+                evidence="state/queue",
+                cli_hint="uv run splendor lint",
+            )
+        )
     items.extend(_attention_from_planning_documents(planning_documents).items)
     return _AttentionReadModel(items=_sort_attention_items(items))
 
@@ -1591,15 +1627,23 @@ def _run_records(root: Path, layout: ResolvedLayout) -> list[_RunSummary]:
 
 
 def _sort_runs_for_attention(records: list[_RunSummary]) -> list[_RunSummary]:
-    return sorted(
-        records,
+    attention = sorted(
+        [item for item in records if item.record.status in _ATTENTION_RUN_STATES],
         key=lambda item: (
-            item.record.status not in _ATTENTION_RUN_STATES,
             item.record.finished_at or item.record.started_at,
             item.record.run_id,
         ),
-        reverse=False,
+        reverse=True,
     )
+    other = sorted(
+        [item for item in records if item.record.status not in _ATTENTION_RUN_STATES],
+        key=lambda item: (
+            item.record.finished_at or item.record.started_at,
+            item.record.run_id,
+        ),
+        reverse=True,
+    )
+    return [*attention, *other]
 
 
 def _queue_records(root: Path, layout: ResolvedLayout) -> list[_QueueSummary]:

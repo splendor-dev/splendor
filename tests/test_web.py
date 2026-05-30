@@ -252,6 +252,24 @@ def test_home_page_renders_cockpit_read_model(tmp_path: Path) -> None:
     assert "Raw workspace counts" in response.text
 
 
+def test_home_page_reports_invalid_runtime_records_as_attention(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    bad_run = tmp_path / "state" / "runs" / "run-bad.json"
+    bad_queue = tmp_path / "state" / "queue" / "queue-bad.json"
+    bad_run.write_text("{not valid json", encoding="utf-8")
+    bad_queue.write_text("{not valid json", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Run records need inspection" in response.text
+    assert "Queue records need inspection" in response.text
+    assert "At least one durable run record could not be parsed." in response.text
+    assert "At least one durable queue record could not be parsed." in response.text
+    assert str(tmp_path) not in response.text
+
+
 def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(
