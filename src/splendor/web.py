@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
@@ -118,6 +119,39 @@ class _DocumentDetail:
     status: str | None
     metadata: dict[str, object]
     body: str
+
+
+@dataclass(frozen=True)
+class _KnowledgeMapItem:
+    path: str
+    title: str
+    document_class: str
+    kind: str | None
+    status: str | None
+    review_state: str | None
+    tags: list[str]
+    related_pages: list[str]
+    source_refs: list[str]
+    run_refs: list[str]
+    provenance_links: list[dict[str, object]]
+
+
+@dataclass(frozen=True)
+class _DocumentRelationship:
+    title: str
+    href: str | None
+    detail: str
+
+
+@dataclass(frozen=True)
+class _DocumentRelationships:
+    related_pages: list[_DocumentRelationship]
+    tags: list[_DocumentRelationship]
+    sources: list[_DocumentRelationship]
+    runs: list[_DocumentRelationship]
+    provenance: list[_DocumentRelationship]
+    backlinks: list[_DocumentRelationship]
+    references: list[_DocumentRelationship]
 
 
 @dataclass(frozen=True)
@@ -539,6 +573,7 @@ def create_app(root: Path) -> FastAPI:
         content_documents = _iter_content_documents(workspace_root, layout)
         special_documents = _iter_special_documents(workspace_root, layout)
         counts = _workspace_counts(layout, content_documents=content_documents)
+        knowledge_map = _browse_knowledge_map(workspace_root, layout, content_documents)
         content_rows = "\n".join(_document_row(item) for item in content_documents)
         special_rows = "\n".join(_document_row(item) for item in special_documents)
         if not content_rows:
@@ -563,7 +598,9 @@ def create_app(root: Path) -> FastAPI:
             "</form>"
             "</section>"
             f"{empty_state}"
+            f"{knowledge_map}"
             "<h2>Content records</h2>"
+            '<p class="empty">Raw browse rows remain available for direct file inspection.</p>'
             "<table><thead><tr><th>Title</th><th>Kind</th><th>Status</th><th>Path</th></tr></thead>"
             f"<tbody>{content_rows}</tbody></table>"
             f"{special_section}"
@@ -578,11 +615,15 @@ def create_app(root: Path) -> FastAPI:
         metadata = html.escape(json.dumps(detail.metadata, indent=2, sort_keys=True))
         body_html = _render_markdown(detail.body)
         badges = _document_badges(detail)
+        relationships = _document_relationship_section(
+            _build_document_relationships(workspace_root, layout, detail)
+        )
         body = (
             '<p class="breadcrumbs"><a href="/browse">Browse</a> / '
             f"{html.escape(detail.path)}</p>"
             f"{badges}"
             f'<article class="markdown">{body_html}</article>'
+            f"{relationships}"
             '<details class="technical">'
             "<summary>Technical metadata</summary>"
             f"<pre>{metadata}</pre>"
@@ -1696,6 +1737,196 @@ def _empty_workspace_panel() -> str:
     )
 
 
+def _browse_knowledge_map(
+    root: Path, layout: ResolvedLayout, content_documents: list[_DocumentSummary]
+) -> str:
+    items = [
+        _knowledge_map_item(path=root / document.path, summary=document)
+        for document in content_documents
+    ]
+    maintained = [
+        item for item in items if item.document_class == "wiki" and item.kind != "source-summary"
+    ]
+    source_summaries = [
+        item for item in items if item.document_class == "wiki" and item.kind == "source-summary"
+    ]
+    planning = [item for item in items if item.document_class == "planning"]
+    review_needed = [item for item in items if item.review_state in _REVIEW_NEEDED_STATES]
+    source_backed = [
+        item
+        for item in items
+        if item.source_refs
+        or item.run_refs
+        or any(link.get("source_id") or link.get("run_id") for link in item.provenance_links)
+    ]
+    related = [
+        item
+        for item in items
+        if item.related_pages
+        or any(link.get("page_id") or link.get("path_ref") for link in item.provenance_links)
+    ]
+    tag_clusters = _tag_clusters(items)
+    orphan_pages = _orphan_knowledge_pages(items)
+    sections = [
+        _knowledge_map_section(
+            "Maintained pages",
+            "Human-curated or synthesis pages outside generated source summaries.",
+            maintained[:8],
+            "No maintained wiki pages yet.",
+        ),
+        _knowledge_map_section(
+            "Generated source summaries",
+            "Generated pages backed by curated source manifests.",
+            source_summaries[:8],
+            "No generated source-summary pages yet.",
+        ),
+        _knowledge_map_section(
+            "Planning records",
+            "Tasks, milestones, decisions, and questions with raw files preserved below.",
+            planning[:8],
+            "No planning records yet.",
+        ),
+        _knowledge_map_section(
+            "Review-needed pages",
+            "Wiki pages whose review state asks for operator inspection.",
+            review_needed[:8],
+            "No review-needed pages found.",
+        ),
+        _knowledge_map_section(
+            "Related-page clusters",
+            "Pages with explicit related page or page-level provenance links.",
+            related[:8],
+            "No explicit related-page metadata found.",
+        ),
+        _knowledge_map_section(
+            "Source-backed pages",
+            "Pages connected to source refs, generated runs, or source provenance.",
+            source_backed[:8],
+            "No source-backed page metadata found.",
+        ),
+        _knowledge_map_section(
+            "Orphan pages",
+            "Wiki pages without tags, related pages, source refs, or provenance links.",
+            orphan_pages[:8],
+            "No orphan wiki pages found.",
+        ),
+    ]
+    tags = _tag_cluster_section(tag_clusters)
+    return (
+        "<h2>Knowledge map</h2>"
+        '<p class="empty">Browse is grouped by page role, tags, relationships, and provenance '
+        "before the raw file table.</p>"
+        '<section class="knowledge-grid">' + "".join(sections) + tags + "</section>"
+    )
+
+
+def _knowledge_map_item(path: Path, summary: _DocumentSummary) -> _KnowledgeMapItem:
+    metadata = _read_relationship_frontmatter(path)
+    return _KnowledgeMapItem(
+        path=summary.path,
+        title=summary.title,
+        document_class=summary.document_class,
+        kind=summary.kind,
+        status=summary.status,
+        review_state=summary.review_state,
+        tags=_string_list(metadata.get("tags")),
+        related_pages=_string_list(metadata.get("related_pages")),
+        source_refs=_string_list(metadata.get("source_refs")),
+        run_refs=_string_list(metadata.get("generated_by_run_ids")),
+        provenance_links=_dict_list(metadata.get("provenance_links")),
+    )
+
+
+def _knowledge_map_section(
+    title: str, description: str, items: list[_KnowledgeMapItem], empty: str
+) -> str:
+    rows = "".join(_knowledge_map_link(item) for item in _sort_knowledge_items(items))
+    if not rows:
+        rows = f'<li class="empty">{html.escape(empty)}</li>'
+    return (
+        '<section class="knowledge-panel">'
+        f"<h3>{html.escape(title)}</h3>"
+        f"<p>{html.escape(description)}</p>"
+        f"<ul>{rows}</ul>"
+        "</section>"
+    )
+
+
+def _knowledge_map_link(item: _KnowledgeMapItem) -> str:
+    href = f"/documents/{quote(item.path, safe='/')}"
+    detail_parts = [
+        item.kind or item.document_class,
+        item.status or "-",
+    ]
+    if item.tags:
+        detail_parts.append("tags=" + ", ".join(item.tags[:3]))
+    if item.related_pages:
+        detail_parts.append(f"related={len(item.related_pages)}")
+    if item.source_refs:
+        detail_parts.append(f"sources={len(item.source_refs)}")
+    return (
+        "<li>"
+        f'<a href="{href}">{html.escape(item.title)}</a>'
+        f"<span>{html.escape(' · '.join(detail_parts))}</span>"
+        f"<code>{html.escape(item.path)}</code>"
+        "</li>"
+    )
+
+
+def _tag_clusters(items: list[_KnowledgeMapItem]) -> dict[str, list[_KnowledgeMapItem]]:
+    clusters: dict[str, list[_KnowledgeMapItem]] = {}
+    for item in items:
+        for tag in item.tags:
+            clusters.setdefault(tag, []).append(item)
+    return clusters
+
+
+def _tag_cluster_section(clusters: dict[str, list[_KnowledgeMapItem]]) -> str:
+    if not clusters:
+        rows = '<li class="empty">No tags found in page frontmatter.</li>'
+    else:
+        rows = ""
+        for tag in sorted(clusters):
+            items = _sort_knowledge_items(clusters[tag])
+            links = ", ".join(
+                f'<a href="/documents/{quote(item.path, safe="/")}">{html.escape(item.title)}</a>'
+                for item in items[:4]
+            )
+            extra = f" (+{len(items) - 4})" if len(items) > 4 else ""
+            rows += (
+                f'<li id="{html.escape(_tag_anchor(tag))}">'
+                f"<strong>{html.escape(tag)}</strong>"
+                f"<span>{links}{html.escape(extra)}</span>"
+                "</li>"
+            )
+    return (
+        '<section class="knowledge-panel">'
+        "<h3>Tags</h3>"
+        "<p>Topic clusters from page frontmatter.</p>"
+        f"<ul>{rows}</ul>"
+        "</section>"
+    )
+
+
+def _orphan_knowledge_pages(items: list[_KnowledgeMapItem]) -> list[_KnowledgeMapItem]:
+    return [
+        item
+        for item in items
+        if item.document_class == "wiki"
+        and not item.tags
+        and not item.related_pages
+        and not item.source_refs
+        and not item.run_refs
+        and not item.provenance_links
+    ]
+
+
+def _sort_knowledge_items(items: list[_KnowledgeMapItem]) -> list[_KnowledgeMapItem]:
+    return sorted(
+        items, key=lambda item: (item.document_class, item.kind or "", item.title, item.path)
+    )
+
+
 def _document_summary(root: Path, layout: ResolvedLayout, path: Path) -> _DocumentSummary:
     relative_path = path.relative_to(root).as_posix()
     metadata = _read_listing_metadata(path)
@@ -1780,9 +2011,35 @@ def _load_listing_frontmatter(frontmatter_lines: list[str]) -> dict[str, object]
     return loaded if isinstance(loaded, dict) else {}
 
 
+def _read_relationship_frontmatter(path: Path) -> dict[str, object]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            first_line = handle.readline()
+            if first_line.replace("\r\n", "\n").replace("\r", "\n") != "---\n":
+                return {}
+            frontmatter_lines = _read_bounded_frontmatter_lines(handle)
+    except OSError:
+        return {}
+    if frontmatter_lines is None:
+        return {}
+    return _load_listing_frontmatter(frontmatter_lines)
+
+
 def _frontmatter_string(frontmatter: dict[str, object], key: str) -> str | None:
     value = frontmatter.get(key)
     return value if isinstance(value, str) and value else None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
+
+
+def _dict_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _document_detail(root: Path, layout: ResolvedLayout, path: Path) -> _DocumentDetail:
@@ -1874,6 +2131,301 @@ def _document_badges(detail: _DocumentDetail) -> str:
     if not badge_items:
         return ""
     return f'<section class="badges">{badge_items}</section>'
+
+
+def _build_document_relationships(
+    root: Path, layout: ResolvedLayout, detail: _DocumentDetail
+) -> _DocumentRelationships:
+    documents = _relationship_documents(root, layout)
+    document_lookup = _relationship_lookup(documents)
+    target_ids = _relationship_identity_values(detail)
+    related_pages = [
+        _relationship_for_ref(ref, document_lookup, label="related page")
+        for ref in _string_list(detail.metadata.get("related_pages"))
+    ]
+    tags = [
+        _DocumentRelationship(
+            title=tag,
+            href=f"/browse#{_tag_anchor(tag)}",
+            detail="tag",
+        )
+        for tag in _string_list(detail.metadata.get("tags"))
+    ]
+    sources = [
+        _DocumentRelationship(
+            title=source_ref,
+            href=f"/sources/{quote(source_ref, safe='')}",
+            detail="source ref",
+        )
+        for source_ref in _string_list(detail.metadata.get("source_refs"))
+    ]
+    runs = [
+        _DocumentRelationship(title=run_id, href="/runs", detail="generated by run")
+        for run_id in _string_list(detail.metadata.get("generated_by_run_ids"))
+    ]
+    provenance = [
+        relationship
+        for link in _dict_list(detail.metadata.get("provenance_links"))
+        for relationship in _provenance_relationships(link, document_lookup)
+    ]
+    references = _field_reference_relationships(detail.metadata, document_lookup)
+    backlinks = [
+        _DocumentRelationship(
+            title=document.title,
+            href=f"/documents/{quote(document.path, safe='/')}",
+            detail=_backlink_detail(document, target_ids, detail.path),
+        )
+        for document in documents
+        if document.path != detail.path
+        and _document_mentions_target(document, target_ids, detail.path)
+    ]
+    return _DocumentRelationships(
+        related_pages=_dedupe_relationships(related_pages),
+        tags=_dedupe_relationships(tags),
+        sources=_dedupe_relationships(sources),
+        runs=_dedupe_relationships(runs),
+        provenance=_dedupe_relationships(provenance),
+        backlinks=_dedupe_relationships(backlinks),
+        references=_dedupe_relationships(references),
+    )
+
+
+def _relationship_documents(root: Path, layout: ResolvedLayout) -> list[_DocumentDetail]:
+    documents: list[_DocumentDetail] = []
+    for summary in [*_iter_content_documents(root, layout), *_iter_special_documents(root, layout)]:
+        path = root / summary.path
+        if path.is_file():
+            documents.append(_document_detail(root, layout, path))
+    return sorted(documents, key=lambda item: (item.document_class, item.kind or "", item.title))
+
+
+def _relationship_lookup(
+    documents: list[_DocumentDetail],
+) -> dict[str, _DocumentDetail]:
+    lookup: dict[str, _DocumentDetail] = {}
+    for document in documents:
+        for value in _relationship_identity_values(document):
+            lookup.setdefault(value, document)
+    return lookup
+
+
+def _relationship_identity_values(detail: _DocumentDetail) -> set[str]:
+    values = {detail.path}
+    for key in (
+        "page_id",
+        "task_id",
+        "milestone_id",
+        "decision_id",
+        "question_id",
+    ):
+        value = detail.metadata.get(key)
+        if isinstance(value, str) and value:
+            values.add(value)
+    return values
+
+
+def _relationship_for_ref(
+    ref: str, document_lookup: dict[str, _DocumentDetail], *, label: str
+) -> _DocumentRelationship:
+    document = document_lookup.get(ref)
+    if document is None:
+        return _DocumentRelationship(title=ref, href=None, detail=label)
+    return _DocumentRelationship(
+        title=document.title,
+        href=f"/documents/{quote(document.path, safe='/')}",
+        detail=f"{label} · {document.kind or document.document_class}",
+    )
+
+
+def _provenance_relationships(
+    link: dict[str, object], document_lookup: dict[str, _DocumentDetail]
+) -> list[_DocumentRelationship]:
+    role = link.get("role")
+    detail = f"provenance · {role}" if isinstance(role, str) and role else "provenance"
+    relationships: list[_DocumentRelationship] = []
+    for key, label in (
+        ("page_id", "page"),
+        ("path_ref", "path"),
+        ("source_id", "source"),
+        ("run_id", "run"),
+    ):
+        value = link.get(key)
+        if not isinstance(value, str) or not value:
+            continue
+        if key in {"page_id", "path_ref"}:
+            relationships.append(_relationship_for_ref(value, document_lookup, label=detail))
+        elif key == "source_id":
+            relationships.append(
+                _DocumentRelationship(
+                    title=value,
+                    href=f"/sources/{quote(value, safe='')}",
+                    detail=f"{detail} · {label}",
+                )
+            )
+        else:
+            relationships.append(
+                _DocumentRelationship(title=value, href="/runs", detail=f"{detail} · {label}")
+            )
+    return relationships or [_DocumentRelationship(title="-", href=None, detail=detail)]
+
+
+def _field_reference_relationships(
+    metadata: dict[str, object], document_lookup: dict[str, _DocumentDetail]
+) -> list[_DocumentRelationship]:
+    relationships: list[_DocumentRelationship] = []
+    field_labels = {
+        "issue_refs": "issue",
+        "pr_refs": "pull request",
+        "supersedes": "supersedes",
+        "superseded_by": "superseded by",
+        "depends_on": "depends on",
+        "milestone_refs": "milestone",
+        "task_refs": "task",
+        "decision_refs": "decision",
+        "question_refs": "question",
+        "related_tasks": "task",
+        "related_decisions": "decision",
+        "related_questions": "question",
+        "answer_page_ref": "answer page",
+    }
+    for field, label in field_labels.items():
+        value = metadata.get(field)
+        values = (
+            _string_list(value)
+            if isinstance(value, list)
+            else ([value] if isinstance(value, str) else [])
+        )
+        for ref in values:
+            if not ref:
+                continue
+            relationships.append(_relationship_for_ref(ref, document_lookup, label=label))
+    contradictions = metadata.get("contradictions")
+    if isinstance(contradictions, list):
+        for item in contradictions:
+            if not isinstance(item, dict):
+                continue
+            task_id = item.get("review_task_id")
+            if isinstance(task_id, str) and task_id:
+                relationships.append(
+                    _relationship_for_ref(task_id, document_lookup, label="review task")
+                )
+            for source_id in _string_list(item.get("related_source_ids")):
+                relationships.append(
+                    _DocumentRelationship(
+                        title=source_id,
+                        href=f"/sources/{quote(source_id, safe='')}",
+                        detail="contradiction source",
+                    )
+                )
+    return relationships
+
+
+def _document_mentions_target(
+    document: _DocumentDetail, target_ids: set[str], target_path: str
+) -> bool:
+    return _metadata_mentions_target(
+        document.metadata, target_ids, target_path
+    ) or _body_links_target(document.body, target_path)
+
+
+def _metadata_mentions_target(
+    metadata: dict[str, object], target_ids: set[str], target_path: str
+) -> bool:
+    for value in metadata.values():
+        if _value_mentions_target(value, target_ids, target_path):
+            return True
+    return False
+
+
+def _value_mentions_target(value: object, target_ids: set[str], target_path: str) -> bool:
+    if isinstance(value, str):
+        return value in target_ids or value == target_path
+    if isinstance(value, list):
+        return any(_value_mentions_target(item, target_ids, target_path) for item in value)
+    if isinstance(value, dict):
+        return any(_value_mentions_target(item, target_ids, target_path) for item in value.values())
+    return False
+
+
+def _body_links_target(body: str, target_path: str) -> bool:
+    target_names = {target_path, f"/documents/{target_path}", PurePosixPath(target_path).name}
+    for match in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", body):
+        href = match.group(1).split("#", maxsplit=1)[0].strip()
+        if href in target_names or href.endswith("/" + target_path):
+            return True
+    return False
+
+
+def _backlink_detail(document: _DocumentDetail, target_ids: set[str], target_path: str) -> str:
+    sources: list[str] = []
+    if _metadata_mentions_target(document.metadata, target_ids, target_path):
+        sources.append("frontmatter")
+    if _body_links_target(document.body, target_path):
+        sources.append("markdown link")
+    return f"{document.kind or document.document_class} · {', '.join(sources)}"
+
+
+def _document_relationship_section(read_model: _DocumentRelationships) -> str:
+    sections = [
+        _relationship_section(
+            "Related pages", read_model.related_pages, "No related pages recorded."
+        ),
+        _relationship_section("Tags", read_model.tags, "No tags recorded."),
+        _relationship_section("Sources", read_model.sources, "No source refs recorded."),
+        _relationship_section("Runs", read_model.runs, "No generated run refs recorded."),
+        _relationship_section("Provenance", read_model.provenance, "No provenance links recorded."),
+        _relationship_section("Backlinks", read_model.backlinks, "No backlinks found."),
+        _relationship_section(
+            "Other references",
+            read_model.references,
+            "No issue, PR, planning, or contradiction refs recorded.",
+        ),
+    ]
+    return (
+        '<section class="relationships"><h2>Related context</h2>' + "".join(sections) + "</section>"
+    )
+
+
+def _relationship_section(
+    title: str, relationships: list[_DocumentRelationship], empty: str
+) -> str:
+    rows = "".join(_relationship_item(item) for item in relationships[:10])
+    if len(relationships) > 10:
+        rows += f'<li class="empty">{len(relationships) - 10} more references in metadata.</li>'
+    if not rows:
+        rows = f'<li class="empty">{html.escape(empty)}</li>'
+    return (
+        '<section class="relationship-panel">'
+        f"<h3>{html.escape(title)}</h3>"
+        f"<ul>{rows}</ul>"
+        "</section>"
+    )
+
+
+def _relationship_item(item: _DocumentRelationship) -> str:
+    title = html.escape(item.title)
+    if item.href:
+        title = f'<a href="{html.escape(item.href)}">{title}</a>'
+    return f"<li>{title}<span>{html.escape(item.detail)}</span></li>"
+
+
+def _dedupe_relationships(
+    relationships: list[_DocumentRelationship],
+) -> list[_DocumentRelationship]:
+    seen: set[tuple[str, str | None, str]] = set()
+    result: list[_DocumentRelationship] = []
+    for relationship in relationships:
+        key = (relationship.title, relationship.href, relationship.detail)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(relationship)
+    return sorted(result, key=lambda item: (item.detail, item.title, item.href or ""))
+
+
+def _tag_anchor(tag: str) -> str:
+    normalized = re.sub(r"[^a-z0-9_-]+", "-", tag.lower()).strip("-")
+    return f"tag-{normalized or 'untagged'}"
 
 
 def _metadata_string(metadata: dict[str, object], key: str) -> str | None:
@@ -2177,6 +2729,20 @@ def _page(
         ".attention-list li{border-top:1px solid var(--border);padding:9px 0}"
         ".attention-list li:first-child{border-top:0;padding-top:0}"
         ".attention-list a{font-weight:600}.attention-list span{display:block;color:var(--muted)}"
+        ".knowledge-grid,.relationships{display:grid;"
+        "grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:0 0 24px}"
+        ".relationships>h2{grid-column:1/-1}"
+        ".knowledge-panel,.relationship-panel{border:1px solid var(--border);border-radius:8px;"
+        "padding:14px;background:var(--surface)}"
+        ".knowledge-panel h3,.relationship-panel h3{font-size:16px;margin:0 0 6px}"
+        ".knowledge-panel p{margin:0;color:var(--muted)}"
+        ".knowledge-panel ul,.relationship-panel ul{list-style:none;margin:10px 0 0;padding:0}"
+        ".knowledge-panel li,.relationship-panel li{border-top:1px solid var(--border);"
+        "padding:9px 0}"
+        ".knowledge-panel li:first-child,.relationship-panel li:first-child{border-top:0;"
+        "padding-top:0}"
+        ".knowledge-panel a,.relationship-panel a{font-weight:600}"
+        ".knowledge-panel span,.relationship-panel span{display:block;color:var(--muted)}"
         ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
         ".stats div,.metadata,.result,.empty-state{border:1px solid var(--border);"
         "border-radius:8px;"

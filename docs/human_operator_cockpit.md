@@ -279,6 +279,12 @@ The first pass should use existing metadata fields such as `kind`, `status`, `re
 `authority_role`, `tags`, `related_pages`, `source_refs`, and provenance links. It should not add a
 graph database.
 
+`M20-P4.5` implements that first pass as a request-time read model. `/browse` groups existing wiki
+and planning files by page role, review state, tags, relationship metadata, source/run provenance,
+and cheap orphan-page signals before the raw table. Document detail pages render related pages,
+tags, sources, runs, provenance, planning/issue/PR references, contradictions, and backlinks derived
+from reverse local scans before the technical metadata block.
+
 ## Recent Insights And Log Contract
 
 `wiki/log.md` should become a first-class human recent-insights surface. It remains readable

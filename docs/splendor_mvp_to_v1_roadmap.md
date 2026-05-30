@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.3`
-- Current planned slice: `M20 attention and health interpretation (#196)`
-- Current PR sub-slice: `M20-P4.4`
+- Previous completed PR sub-slice: `M20-P4.4`
+- Current planned slice: `M20 knowledge-map navigation (#198)`
+- Current PR sub-slice: `M20-P4.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 knowledge-map navigation`
-- Next planned PR sub-slice: `M20-P4.5`
+- Next planned slice: `M20 recent insights and log rendering`
+- Next planned PR sub-slice: `M20-P4.6`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1519,6 +1519,13 @@ source coverage gaps, failed or incomplete runs, queue records that need inspect
 open planning records into human explanations with evidence references and CLI hints while keeping
 the raw tables and documents available. Knowledge-map navigation from related pages, tags,
 provenance, and backlinks remains the next cockpit-track follow-up in `M20-P4.5`.
+
+`M20-P4.5` (#198) adds the first read-only knowledge-map navigation pass. `/browse` now leads with
+deterministic page-role, tag, relationship, source-backed, review-needed, and orphan-page groups
+before the raw document table, while document detail pages render related context from existing
+related-page, tag, source, run, provenance, planning, issue/PR, contradiction, and computed backlink
+inputs before technical metadata. Recent insights and `wiki/log.md` rendering remains the next
+cockpit-track follow-up in `M20-P4.6`.
 
 ---
 

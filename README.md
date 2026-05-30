@@ -187,12 +187,12 @@ non-draft GitHub PR with labels, milestone, and a clear description.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M20-P4.3`
-- Current planned slice: `M20 attention and health interpretation (#196)`
-- Current PR sub-slice: `M20-P4.4`
+- Previous completed PR sub-slice: `M20-P4.4`
+- Current planned slice: `M20 knowledge-map navigation (#198)`
+- Current PR sub-slice: `M20-P4.5`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 knowledge-map navigation`
-- Next planned PR sub-slice: `M20-P4.5`
+- Next planned slice: `M20 recent insights and log rendering`
+- Next planned PR sub-slice: `M20-P4.6`
 
 These planning-state lines are for contributors and agents. The detailed roadmap lives in
 [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md).
