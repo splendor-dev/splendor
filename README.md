@@ -187,12 +187,12 @@ non-draft GitHub PR with labels, milestone, and a clear description.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M20-P4.1`
-- Current planned slice: `M20 current-work authority model from v0.5.2 hocr retries`
-- Current PR sub-slice: `M20-P1.5`
+- Previous completed PR sub-slice: `M20-P1.5`
+- Current planned slice: `M20 current-work authority classifier implementation (#182)`
+- Current PR sub-slice: `M20-P1.6`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 current-work authority classifier implementation (#182)`
-- Next planned PR sub-slice: `M20-P1.6`
+- Next planned slice: `M20 richer GitHub issue, PR, review-thread, and CI integrations`
+- Next planned PR sub-slice: `M20-P3.1`
 
 These planning-state lines are for contributors and agents. The detailed roadmap lives in
 [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md).

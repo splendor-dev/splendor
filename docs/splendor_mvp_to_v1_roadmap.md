@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.1`
-- Current planned slice: `M20 current-work authority model from v0.5.2 hocr retries`
-- Current PR sub-slice: `M20-P1.5`
+- Previous completed PR sub-slice: `M20-P1.5`
+- Current planned slice: `M20 current-work authority classifier implementation (#182)`
+- Current PR sub-slice: `M20-P1.6`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 current-work authority classifier implementation (#182)`
-- Next planned PR sub-slice: `M20-P1.6`
+- Next planned slice: `M20 richer GitHub issue, PR, review-thread, and CI integrations`
+- Next planned PR sub-slice: `M20-P3.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1463,11 +1463,13 @@ rather than a slice, gated follow-ons stay behind prerequisites, and merged PRs 
 context for current-work goals. `query` remains retrieval/search, not guaranteed handoff answer
 synthesis.
 
-`M20-P1.6` (#182) should be the next implementation slice. It should keep the runtime local-first
-and deterministic while adding the authority classification needed by the captured retry cases.
-The acceptance bar is narrow: hocrgen current-work handoff ranks `F6f2` first, keeps `F6g` gated
+`M20-P1.6` (#182) implements the narrow current-work authority classification layer needed by the
+captured retry cases. The runtime remains local-first and deterministic while `current_planned_work`
+adds classified evidence fields for selected work, predecessor evidence, gated follow-ons,
+blocker/prerequisite context, lower-priority conflicts, and reconciled selection state. The
+acceptance bar stays narrow: hocrgen current-work handoff ranks `F6f2` first, keeps `F6g` gated
 behind it, preserves `F1c` only as blocker/prerequisite context, suppresses merged PRs as top
-actions for current-work goals, and preserves the hocrsyngen `S8b` partial pass. This slice should
+actions for current-work goals, and preserves the hocrsyngen `S8b` partial pass. This slice does
 not broaden into query answer synthesis, mutating web workflows, background services, databases,
 mandatory external APIs, or a general agent-memory architecture.
 
