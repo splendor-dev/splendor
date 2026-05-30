@@ -128,6 +128,19 @@ class _PlanningSummary:
 
 
 @dataclass(frozen=True)
+class _PlanningRoadmapLane:
+    title: str
+    description: str
+    items: list[_PlanningSummary]
+    empty: str
+
+
+@dataclass(frozen=True)
+class _PlanningRoadmapReadModel:
+    lanes: list[_PlanningRoadmapLane]
+
+
+@dataclass(frozen=True)
 class _QueueSummary:
     path: str
     record: QueueItemRecord
@@ -318,11 +331,18 @@ def create_app(root: Path) -> FastAPI:
             f"<span>{html.escape(_planning_label(kind))}</span></div>"
             for kind in ("task", "milestone", "decision", "question")
         )
+        roadmap = _build_planning_roadmap(grouped)
         sections = "".join(_planning_section(kind, records) for kind, records in grouped.items())
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Planning</p>'
+            '<p class="empty">Planning records are grouped into deterministic roadmap lanes. '
+            "Raw kind-specific tables remain available below for audit and debugging.</p>"
+            f"{_planning_roadmap(roadmap)}"
+            '<details class="technical">'
+            "<summary>Raw planning records</summary>"
             f'<section class="stats">{stats}</section>'
             f"{sections}"
+            "</details>"
         )
         return _page("Planning", body, root=workspace_root, layout=layout)
 
@@ -1043,12 +1063,132 @@ def _planning_records(root: Path, layout: ResolvedLayout, kind: str) -> list[_Pl
     return sorted(records, key=lambda item: (item.status, item.record_id))
 
 
+def _build_planning_roadmap(
+    grouped: dict[str, list[_PlanningSummary]],
+) -> _PlanningRoadmapReadModel:
+    def matching(kind: str, statuses: set[str]) -> list[_PlanningSummary]:
+        return [record for record in grouped[kind] if record.status in statuses]
+
+    lanes = [
+        _PlanningRoadmapLane(
+            title="Active / current",
+            description="Tasks in progress and active milestones.",
+            items=[
+                *matching("task", {"in_progress"}),
+                *matching("milestone", {"active"}),
+            ],
+            empty="No task or milestone is marked active.",
+        ),
+        _PlanningRoadmapLane(
+            title="Next",
+            description="Todo tasks and planned milestones.",
+            items=[
+                *matching("task", {"todo"}),
+                *matching("milestone", {"planned"}),
+            ],
+            empty="No todo task or planned milestone found.",
+        ),
+        _PlanningRoadmapLane(
+            title="Blocked or gated",
+            description="Planning work that cannot proceed directly.",
+            items=matching("task", {"blocked"}),
+            empty="No blocked planning tasks found.",
+        ),
+        _PlanningRoadmapLane(
+            title="Open decisions",
+            description="Proposed decisions that still need a durable resolution.",
+            items=matching("decision", {"proposed"}),
+            empty="No proposed decisions found.",
+        ),
+        _PlanningRoadmapLane(
+            title="Open questions",
+            description="Questions that still need an answer or disposition.",
+            items=matching("question", {"open"}),
+            empty="No open questions found.",
+        ),
+        _PlanningRoadmapLane(
+            title="Completed / answered",
+            description="Status-based completed, accepted, or answered planning records.",
+            items=[
+                *matching("task", {"done"}),
+                *matching("milestone", {"completed"}),
+                *matching("decision", {"accepted"}),
+                *matching("question", {"answered"}),
+            ],
+            empty="No completed planning records found.",
+        ),
+        _PlanningRoadmapLane(
+            title="Historical / archived",
+            description="Superseded or deferred planning records kept for context.",
+            items=[
+                *matching("decision", {"superseded"}),
+                *matching("question", {"deferred"}),
+            ],
+            empty="No superseded decisions or deferred questions found.",
+        ),
+    ]
+    return _PlanningRoadmapReadModel(lanes=lanes)
+
+
+def _planning_roadmap(read_model: _PlanningRoadmapReadModel) -> str:
+    return (
+        '<section class="roadmap-grid">'
+        + "".join(_planning_roadmap_lane(lane) for lane in read_model.lanes)
+        + "</section>"
+    )
+
+
+def _planning_roadmap_lane(lane: _PlanningRoadmapLane) -> str:
+    items = "".join(_planning_roadmap_item(item) for item in _sort_roadmap_items(lane.items))
+    if not items:
+        items = f'<li class="empty">{html.escape(lane.empty)}</li>'
+    return (
+        '<section class="roadmap-lane">'
+        f"<h2>{html.escape(lane.title)}</h2>"
+        f"<p>{html.escape(lane.description)}</p>"
+        f"<ul>{items}</ul>"
+        "</section>"
+    )
+
+
+def _sort_roadmap_items(items: list[_PlanningSummary]) -> list[_PlanningSummary]:
+    return sorted(
+        items, key=lambda item: (_planning_kind_order(item.kind), item.status, item.title)
+    )
+
+
+def _planning_kind_order(kind: str) -> int:
+    return {
+        "milestone": 0,
+        "task": 1,
+        "decision": 2,
+        "question": 3,
+    }[kind]
+
+
+def _planning_roadmap_item(item: _PlanningSummary) -> str:
+    href = f"/documents/{quote(item.path, safe='/')}"
+    return (
+        "<li>"
+        f'<a href="{href}">{html.escape(item.title)}</a>'
+        "<span>"
+        f"{html.escape(item.kind)} · {html.escape(item.status)} · "
+        f"<code>{html.escape(item.record_id)}</code>"
+        "</span>"
+        f"<span>{html.escape(item.detail)}</span>"
+        "</li>"
+    )
+
+
 def _planning_detail(kind: str, metadata: dict[str, object]) -> str:
     if kind == "task":
         parts = [f"priority={metadata.get('priority', '-')}"]
         owner = metadata.get("owner")
         if owner:
             parts.append(f"owner={owner}")
+        depends_on = metadata.get("depends_on")
+        if isinstance(depends_on, list) and depends_on:
+            parts.append(f"blocked_by={len(depends_on)}")
         milestone_refs = metadata.get("milestone_refs")
         if isinstance(milestone_refs, list) and milestone_refs:
             parts.append(f"milestones={len(milestone_refs)}")
@@ -1621,6 +1761,15 @@ def _page(
         ".cockpit-panel li{border-top:1px solid var(--border);padding:9px 0}"
         ".cockpit-panel li:first-child{border-top:0;padding-top:0}"
         ".cockpit-panel a{font-weight:600}.cockpit-panel span{display:block;color:var(--muted)}"
+        ".roadmap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));"
+        "gap:14px;margin:0 0 24px}"
+        ".roadmap-lane{border:1px solid var(--border);border-radius:8px;padding:14px;"
+        "background:var(--surface)}"
+        ".roadmap-lane p{margin:0;color:var(--muted)}"
+        ".roadmap-lane ul{list-style:none;margin:10px 0 0;padding:0}"
+        ".roadmap-lane li{border-top:1px solid var(--border);padding:9px 0}"
+        ".roadmap-lane li:first-child{border-top:0;padding-top:0}"
+        ".roadmap-lane a{font-weight:600}.roadmap-lane span{display:block;color:var(--muted)}"
         ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
         ".stats div,.metadata,.result,.empty-state{border:1px solid var(--border);"
         "border-radius:8px;"

@@ -187,12 +187,12 @@ non-draft GitHub PR with labels, milestone, and a clear description.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M20-P4.0`
-- Current planned slice: `M20 first read-only cockpit home read model (#192)`
-- Current PR sub-slice: `M20-P4.2`
+- Previous completed PR sub-slice: `M20-P4.2`
+- Current planned slice: `M20 planning roadmap view (#194)`
+- Current PR sub-slice: `M20-P4.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 planning roadmap view`
-- Next planned PR sub-slice: `M20-P4.3`
+- Next planned slice: `M20 attention and health interpretation`
+- Next planned PR sub-slice: `M20-P4.4`
 
 These planning-state lines are for contributors and agents. The detailed roadmap lives in
 [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md).

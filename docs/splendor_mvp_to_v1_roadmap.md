@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.0`
-- Current planned slice: `M20 first read-only cockpit home read model (#192)`
-- Current PR sub-slice: `M20-P4.2`
+- Previous completed PR sub-slice: `M20-P4.2`
+- Current planned slice: `M20 planning roadmap view (#194)`
+- Current PR sub-slice: `M20-P4.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 planning roadmap view`
-- Next planned PR sub-slice: `M20-P4.3`
+- Next planned slice: `M20 attention and health interpretation`
+- Next planned PR sub-slice: `M20-P4.4`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1504,6 +1504,14 @@ databases, background workers, hosted services, mandatory external APIs, broad G
 or query answer synthesis are introduced. Planning roadmap lanes, deeper attention and health
 interpretation, backlinks, and recent-insight/log rendering remain staged behind this first home
 read model. The next cockpit-track implementation follow-up is `M20-P4.3`.
+
+`M20-P4.3` (#194) implements the planning roadmap view for `/planning`. The route now leads with
+deterministic human-readable lanes for active/current, next, blocked or gated, open decisions, open
+questions, completed/answered, and historical/archived planning records while keeping raw
+kind-specific planning tables reachable for audit and debugging. The implementation stays
+read-only and request-time over local planning files; it does not add mutation flows, background
+jobs, databases, hosted services, broad search changes, or external APIs. Deeper attention and
+health interpretation remains the next cockpit-track follow-up in `M20-P4.4`.
 
 ---
 
