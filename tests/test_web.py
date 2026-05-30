@@ -22,7 +22,9 @@ from splendor.state.source_registry import load_source_record
 from splendor.web import create_app
 
 
-def write_wiki_page(path: Path, *, title: str, page_id: str, body: str) -> None:
+def write_wiki_page(
+    path: Path, *, title: str, page_id: str, body: str, metadata: dict | None = None
+) -> None:
     frontmatter = KnowledgePageFrontmatter(
         kind="concept",
         title=title,
@@ -30,8 +32,11 @@ def write_wiki_page(path: Path, *, title: str, page_id: str, body: str) -> None:
         status="active",
         confidence=0.8,
     )
+    frontmatter_payload = frontmatter.model_dump(mode="json")
+    if metadata:
+        frontmatter_payload.update(metadata)
     path.parent.mkdir(parents=True, exist_ok=True)
-    frontmatter_text = yaml.safe_dump(frontmatter.model_dump(mode="json"), sort_keys=False).strip()
+    frontmatter_text = yaml.safe_dump(frontmatter_payload, sort_keys=False).strip()
     path.write_text(f"---\n{frontmatter_text}\n---\n\n{body}", encoding="utf-8")
 
 
@@ -404,6 +409,64 @@ def test_browse_page_separates_index_and_log_as_special_files(tmp_path: Path) ->
     assert "wiki/log.md" in response.text
 
 
+def test_browse_page_renders_knowledge_map_groups_before_raw_table(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "navigation-source.md"
+    source.write_text("# Navigation source\n\nKnowledge map source evidence.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    write_wiki_page(
+        tmp_path / "wiki" / "topics" / "navigation.md",
+        title="Navigation topic",
+        page_id="topic-navigation",
+        body="# Navigation topic\n",
+        metadata={
+            "kind": "topic",
+            "tags": ["navigation", "web"],
+            "related_pages": ["concept-related"],
+            "source_refs": [added.source_id],
+            "provenance_links": [{"source_id": added.source_id, "role": "supports"}],
+        },
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "related.md",
+        title="Related concept",
+        page_id="concept-related",
+        body="# Related concept\n",
+        metadata={"tags": ["navigation"]},
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "sources" / "navigation-source.md",
+        title="Navigation source summary",
+        page_id=added.source_id,
+        body="# Navigation source summary\n",
+        metadata={"kind": "source-summary", "review_state": "machine-generated"},
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "orphan.md",
+        title="Orphan concept",
+        page_id="concept-orphan",
+        body="# Orphan concept\n",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/browse")
+
+    assert response.status_code == 200
+    assert response.text.index("Knowledge map") < response.text.index("Content records")
+    assert "Maintained pages" in response.text
+    assert "Generated source summaries" in response.text
+    assert "Review-needed pages" in response.text
+    assert "Related-page clusters" in response.text
+    assert "Source-backed pages" in response.text
+    assert "Orphan pages" in response.text
+    assert "Tags" in response.text
+    assert 'id="tag-navigation"' in response.text
+    assert "Navigation topic" in response.text
+    assert "Navigation source summary" in response.text
+    assert "Orphan concept" in response.text
+    assert "Raw browse rows remain available" in response.text
+
+
 def test_document_detail_renders_markdown_and_metadata(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(
@@ -423,6 +486,81 @@ def test_document_detail_renders_markdown_and_metadata(tmp_path: Path) -> None:
     assert "active" in response.text
     assert '<details class="technical">' in response.text
     assert response.text.index("<article") < response.text.index('<details class="technical">')
+
+
+def test_document_detail_renders_related_context_and_backlinks(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "relationship-source.md"
+    source.write_text("# Relationship source\n\nRelationship evidence.\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_run_record(
+        layout.runs_dir / "run-relationships.json",
+        RunRecord(
+            run_id="run-relationships",
+            job_id="ingest-relationships",
+            job_type="ingest_source",
+            started_at="2026-05-01T10:01:00+00:00",
+            finished_at="2026-05-01T10:02:00+00:00",
+            status="succeeded",
+            input_refs=[],
+            output_refs=[],
+            pipeline_version="test",
+        ),
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "target.md",
+        title="Target page",
+        page_id="concept-target",
+        body="# Target page\n\nReadable body remains primary.\n",
+        metadata={
+            "tags": ["navigation"],
+            "related_pages": ["concept-related"],
+            "source_refs": [added.source_id],
+            "provenance_links": [
+                {"source_id": added.source_id, "run_id": "run-relationships", "role": "supports"}
+            ],
+            "issue_refs": ["#198"],
+            "pr_refs": ["#199"],
+        },
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "related.md",
+        title="Related page",
+        page_id="concept-related",
+        body="# Related page\n",
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "backlink-frontmatter.md",
+        title="Backlink from frontmatter",
+        page_id="concept-backlink-frontmatter",
+        body="# Backlink from frontmatter\n",
+        metadata={"related_pages": ["concept-target"]},
+    )
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "backlink-markdown.md",
+        title="Backlink from markdown",
+        page_id="concept-backlink-markdown",
+        body="# Backlink from markdown\n\nSee [target](wiki/concepts/target.md).\n",
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/documents/wiki/concepts/target.md")
+
+    assert response.status_code == 200
+    assert response.text.index("<article") < response.text.index("Related context")
+    assert response.text.index("Related context") < response.text.index("Technical metadata")
+    assert "Related page" in response.text
+    assert 'href="/browse#tag-navigation"' in response.text
+    assert f'href="/sources/{added.source_id}"' in response.text
+    assert "run-relationships" in response.text
+    assert "provenance · supports · run" in response.text
+    assert "Backlink from frontmatter" in response.text
+    assert "frontmatter" in response.text
+    assert "Backlink from markdown" in response.text
+    assert "markdown link" in response.text
+    assert "#198" in response.text
+    assert "#199" in response.text
 
 
 def test_document_detail_keeps_human_badges_before_body(tmp_path: Path) -> None:
