@@ -71,6 +71,9 @@ _IDENTITY_CHAR_LIMIT = 32 * 1024
 _GENERIC_INDEX_TITLE = "Splendor Wiki Index"
 _GENERIC_INDEX_SUMMARY = "This wiki is maintained by Splendor."
 _REVIEW_NEEDED_STATES = {"draft", "machine-generated", "contested", "stale"}
+_ATTENTION_QUEUE_STATES = {"pending", "leased", "failed", "dead_letter"}
+_ATTENTION_RUN_STATES = {"running", "failed"}
+_ATTENTION_PLANNING_STATUSES = {"blocked", "proposed", "open"}
 
 
 @dataclass(frozen=True)
@@ -141,6 +144,41 @@ class _PlanningRoadmapReadModel:
 
 
 @dataclass(frozen=True)
+class _AttentionItem:
+    kind: str
+    title: str
+    explanation: str
+    href: str
+    evidence: str
+    cli_hint: str | None = None
+
+
+@dataclass(frozen=True)
+class _AttentionReadModel:
+    items: list[_AttentionItem]
+
+    @property
+    def needs_attention(self) -> bool:
+        return bool(self.items)
+
+    @property
+    def label(self) -> str:
+        return "Needs attention" if self.needs_attention else "Healthy"
+
+    @property
+    def explanation(self) -> str:
+        if self.needs_attention:
+            return (
+                "Local records contain review, runtime, queue, or planning state that should be "
+                "inspected before relying on the workspace."
+            )
+        return (
+            "No review-needed pages, failed or incomplete runs, queue records needing inspection, "
+            "or blocked/open planning records were found."
+        )
+
+
+@dataclass(frozen=True)
 class _QueueSummary:
     path: str
     record: QueueItemRecord
@@ -170,6 +208,7 @@ class _CockpitSection:
 class _CockpitHomeReadModel:
     counts: _WorkspaceCounts
     roadmap: list[_CockpitSection]
+    attention: _AttentionReadModel
     knowledge: list[_CockpitLink]
     recent_activity: list[_CockpitLink]
     inspect_next: list[_CockpitLink]
@@ -227,6 +266,8 @@ def create_app(root: Path) -> FastAPI:
             '<a class="button secondary" href="/status">Status</a>'
             "</section>"
             f"{empty_state}"
+            f"{_attention_summary_panel(read_model.attention)}"
+            f"{_attention_section(read_model.attention, limit=4)}"
             '<section class="cockpit-grid">'
             f"{_cockpit_sections(read_model.roadmap)}"
             "</section>"
@@ -252,6 +293,7 @@ def create_app(root: Path) -> FastAPI:
         try:
             status_result = build_wiki_status(workspace_root)
             source_rows = "\n".join(_source_row(source) for source in load_sources(layout))
+            attention = _build_attention_read_model(workspace_root, layout)
         except ValueError:
             _LOGGER.exception("Status failed while parsing workspace records.")
             return _page(
@@ -283,6 +325,8 @@ def create_app(root: Path) -> FastAPI:
             invalid_section = f"<h2>Invalid wiki pages</h2><ul>{invalid_pages}</ul>"
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Status</p>'
+            f"{_health_banner(attention)}"
+            f"{_attention_section(attention, limit=8)}"
             '<section class="stats">'
             f"<div><strong>{status_result.source_total}</strong><span>Sources</span></div>"
             f"<div><strong>{status_result.page_total}</strong><span>Pages</span></div>"
@@ -332,11 +376,13 @@ def create_app(root: Path) -> FastAPI:
             for kind in ("task", "milestone", "decision", "question")
         )
         roadmap = _build_planning_roadmap(grouped)
+        attention = _attention_from_planning(grouped)
         sections = "".join(_planning_section(kind, records) for kind, records in grouped.items())
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Planning</p>'
             '<p class="empty">Planning records are grouped into deterministic roadmap lanes. '
             "Raw kind-specific tables remain available below for audit and debugging.</p>"
+            f"{_attention_section(attention, limit=6)}"
             f"{_planning_roadmap(roadmap)}"
             '<details class="technical">'
             "<summary>Raw planning records</summary>"
@@ -386,13 +432,15 @@ def create_app(root: Path) -> FastAPI:
                 layout=layout,
                 status_code=500,
             )
-        rows = "\n".join(_run_row(run) for run in run_records[:25])
+        attention = _attention_from_runs(run_records)
+        rows = "\n".join(_run_row(run) for run in _sort_runs_for_attention(run_records)[:25])
         if not rows:
             rows = '<tr><td colspan="9" class="empty">No run records yet.</td></tr>'
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Runs</p>'
             '<p class="empty">Recent run records are shown from durable filesystem state. '
             "This page does not start, retry, or mutate jobs.</p>"
+            f"{_attention_section(attention, limit=6)}"
             "<table><thead><tr><th>Run</th><th>Status</th><th>Job</th><th>Started</th>"
             "<th>Finished</th><th>Sources</th><th>Pages</th><th>Warnings / Errors</th>"
             "<th>Record</th></tr></thead>"
@@ -419,11 +467,13 @@ def create_app(root: Path) -> FastAPI:
         status_counts: dict[str, int] = {}
         for item in queue_records:
             status_counts[item.record.status] = status_counts.get(item.record.status, 0) + 1
-        rows = "\n".join(_queue_row(item) for item in queue_records[:50])
+        attention = _attention_from_queue(queue_records)
+        rows = "\n".join(_queue_row(item) for item in _sort_queue_for_attention(queue_records)[:50])
         if not rows:
             rows = '<tr><td colspan="11" class="empty">No queue records yet.</td></tr>'
         body = (
             '<p class="breadcrumbs"><a href="/">Home</a> / Queue</p>'
+            f"{_attention_section(attention, limit=8)}"
             '<section class="stats">'
             f"<div><strong>{len(queue_records)}</strong><span>Queue records</span></div>"
             f"<div><strong>{html.escape(_format_counts(status_counts)) or '-'}</strong>"
@@ -667,12 +717,21 @@ def _build_cockpit_home_read_model(root: Path, layout: ResolvedLayout) -> _Cockp
     wiki_documents = [
         document for document in content_documents if document.document_class == "wiki"
     ]
+    attention = _build_attention_read_model(
+        root,
+        layout,
+        content_documents=content_documents,
+        planning_documents=planning_documents,
+    )
     return _CockpitHomeReadModel(
         counts=counts,
         roadmap=_cockpit_roadmap_sections(planning_documents),
+        attention=attention,
         knowledge=_cockpit_knowledge_summary(layout, wiki_documents),
         recent_activity=_cockpit_recent_activity(root, layout),
-        inspect_next=_cockpit_inspect_next(counts, planning_documents, wiki_documents),
+        inspect_next=_cockpit_inspect_next(
+            counts, planning_documents, wiki_documents, attention=attention
+        ),
     )
 
 
@@ -685,11 +744,6 @@ def _cockpit_roadmap_sections(planning_documents: list[_DocumentSummary]) -> lis
     next_work = _planning_links(
         planning_documents,
         statuses={"todo", "planned"},
-        limit=4,
-    )
-    attention = _planning_links(
-        planning_documents,
-        statuses={"blocked", "proposed", "open"},
         limit=4,
     )
     completed = _planning_links(
@@ -707,11 +761,6 @@ def _cockpit_roadmap_sections(planning_documents: list[_DocumentSummary]) -> lis
             title="Next planned work",
             items=next_work,
             empty="No todo or planned records found.",
-        ),
-        _CockpitSection(
-            title="Needs attention",
-            items=attention,
-            empty="No blocked tasks, proposed decisions, or open questions found.",
         ),
         _CockpitSection(
             title="Recently completed",
@@ -834,20 +883,18 @@ def _cockpit_inspect_next(
     counts: _WorkspaceCounts,
     planning_documents: list[_DocumentSummary],
     wiki_documents: list[_DocumentSummary],
+    *,
+    attention: _AttentionReadModel,
 ) -> list[_CockpitLink]:
     links: list[_CockpitLink] = []
-    attention = _planning_links(
-        planning_documents,
-        statuses={"blocked", "proposed", "open"},
-        limit=1,
-    )
+    attention_links = _attention_links(attention, limit=1)
     current = _planning_links(
         planning_documents,
         statuses={"in_progress", "active"},
         limit=1,
     )
-    if attention:
-        links.append(attention[0])
+    if attention_links:
+        links.append(attention_links[0])
     if current:
         links.append(current[0])
     if wiki_documents:
@@ -887,6 +934,317 @@ def _dedupe_cockpit_links(links: list[_CockpitLink]) -> list[_CockpitLink]:
         seen.add(key)
         result.append(link)
     return result
+
+
+def _build_attention_read_model(
+    root: Path,
+    layout: ResolvedLayout,
+    *,
+    content_documents: list[_DocumentSummary] | None = None,
+    planning_documents: list[_DocumentSummary] | None = None,
+) -> _AttentionReadModel:
+    content_documents = (
+        content_documents
+        if content_documents is not None
+        else _iter_content_documents(root, layout)
+    )
+    planning_documents = (
+        planning_documents
+        if planning_documents is not None
+        else [document for document in content_documents if document.document_class == "planning"]
+    )
+    items: list[_AttentionItem] = []
+    items.extend(_attention_from_review_documents(content_documents).items)
+    try:
+        items.extend(_attention_from_sources(layout).items)
+    except ValueError:
+        items.append(
+            _AttentionItem(
+                kind="source",
+                title="Source manifests need inspection",
+                explanation="At least one source manifest could not be parsed.",
+                href="/status",
+                evidence="state/manifests/sources",
+                cli_hint="uv run splendor lint",
+            )
+        )
+    try:
+        items.extend(_attention_from_runs(_run_records(root, layout)).items)
+    except (ValueError, ValidationError):
+        items.append(
+            _AttentionItem(
+                kind="run",
+                title="Run records need inspection",
+                explanation="At least one durable run record could not be parsed.",
+                href="/runs",
+                evidence="state/runs",
+                cli_hint="uv run splendor lint",
+            )
+        )
+    try:
+        items.extend(_attention_from_queue(_queue_records(root, layout)).items)
+    except (ValueError, ValidationError):
+        items.append(
+            _AttentionItem(
+                kind="queue",
+                title="Queue records need inspection",
+                explanation="At least one durable queue record could not be parsed.",
+                href="/queue",
+                evidence="state/queue",
+                cli_hint="uv run splendor lint",
+            )
+        )
+    items.extend(_attention_from_planning_documents(planning_documents).items)
+    return _AttentionReadModel(items=_sort_attention_items(items))
+
+
+def _attention_from_review_documents(documents: list[_DocumentSummary]) -> _AttentionReadModel:
+    items = [
+        _AttentionItem(
+            kind="review",
+            title=document.title,
+            explanation=f"Wiki page review state is {document.review_state}.",
+            href=f"/documents/{quote(document.path, safe='/')}",
+            evidence=f"{document.path} review_state={document.review_state}",
+        )
+        for document in documents
+        if document.document_class == "wiki" and document.review_state in _REVIEW_NEEDED_STATES
+    ]
+    return _AttentionReadModel(items=_sort_attention_items(items))
+
+
+def _attention_from_sources(layout: ResolvedLayout) -> _AttentionReadModel:
+    items: list[_AttentionItem] = []
+    for source in load_sources(layout):
+        if source.status == "failed":
+            items.append(
+                _AttentionItem(
+                    kind="source",
+                    title=source.title,
+                    explanation="Source manifest is marked failed.",
+                    href=f"/sources/{quote(source.source_id)}",
+                    evidence=f"{source.source_id} status=failed",
+                    cli_hint="uv run splendor source freshness",
+                )
+            )
+        if not source.linked_pages:
+            items.append(
+                _AttentionItem(
+                    kind="source",
+                    title=source.title,
+                    explanation="Source has no linked source-summary page yet.",
+                    href=f"/sources/{quote(source.source_id)}",
+                    evidence=f"{source.source_id} linked_pages=0",
+                    cli_hint=f"uv run splendor ingest {source.source_id}",
+                )
+            )
+    return _AttentionReadModel(items=_sort_attention_items(items))
+
+
+def _attention_from_runs(runs: list[_RunSummary]) -> _AttentionReadModel:
+    items = [
+        _AttentionItem(
+            kind="run",
+            title=f"{run.record.status} run {run.record.run_id}",
+            explanation=_run_attention_explanation(run.record),
+            href="/runs",
+            evidence=run.path,
+            cli_hint="uv run splendor ingest --pending" if run.record.status == "failed" else None,
+        )
+        for run in runs
+        if run.record.status in _ATTENTION_RUN_STATES
+    ]
+    return _AttentionReadModel(items=_sort_attention_items(items))
+
+
+def _attention_from_queue(queue_records: list[_QueueSummary]) -> _AttentionReadModel:
+    items = [
+        _AttentionItem(
+            kind="queue",
+            title=f"{queue.record.status} queue job {queue.record.job_id}",
+            explanation=_queue_attention_explanation(queue.record),
+            href="/queue",
+            evidence=queue.path,
+            cli_hint=_queue_cli_hint(queue.record),
+        )
+        for queue in queue_records
+        if queue.record.status in _ATTENTION_QUEUE_STATES
+    ]
+    return _AttentionReadModel(items=_sort_attention_items(items))
+
+
+def _attention_from_planning(
+    grouped: dict[str, list[_PlanningSummary]],
+) -> _AttentionReadModel:
+    items: list[_AttentionItem] = []
+    for records in grouped.values():
+        for record in records:
+            if record.status not in _ATTENTION_PLANNING_STATUSES:
+                continue
+            items.append(_planning_attention_item(record))
+    return _AttentionReadModel(items=_sort_attention_items(items))
+
+
+def _attention_from_planning_documents(
+    planning_documents: list[_DocumentSummary],
+) -> _AttentionReadModel:
+    items = [
+        _AttentionItem(
+            kind=f"planning-{document.kind or 'record'}",
+            title=document.title,
+            explanation=_planning_attention_explanation(document.kind, document.status),
+            href=f"/documents/{quote(document.path, safe='/')}",
+            evidence=f"{document.path} status={document.status}",
+        )
+        for document in planning_documents
+        if document.status in _ATTENTION_PLANNING_STATUSES
+    ]
+    return _AttentionReadModel(items=_sort_attention_items(items))
+
+
+def _planning_attention_item(record: _PlanningSummary) -> _AttentionItem:
+    return _AttentionItem(
+        kind=f"planning-{record.kind}",
+        title=record.title,
+        explanation=_planning_attention_explanation(record.kind, record.status),
+        href=f"/documents/{quote(record.path, safe='/')}",
+        evidence=f"{record.record_id} status={record.status}",
+    )
+
+
+def _planning_attention_explanation(kind: str | None, status: str | None) -> str:
+    if kind == "task" and status == "blocked":
+        return "Task is blocked and needs operator disposition before it can proceed."
+    if kind == "decision" and status == "proposed":
+        return "Decision is proposed and still needs a durable accepted or superseded outcome."
+    if kind == "question" and status == "open":
+        return "Question is open and may affect the next safe implementation step."
+    return f"Planning record status is {status or '-'}."
+
+
+def _run_attention_explanation(run: RunRecord) -> str:
+    if run.status == "failed":
+        detail = _bounded_detail(run.errors)
+        if detail != "-":
+            return f"Run failed with recorded errors: {detail}."
+        return "Run failed and should be inspected before trusting generated state."
+    return "Run is still marked running in durable state."
+
+
+def _queue_attention_explanation(queue: QueueItemRecord) -> str:
+    if queue.status == "failed":
+        if queue.next_attempt_at:
+            return f"Queue job failed and is scheduled to retry at {queue.next_attempt_at}."
+        return "Queue job failed and is not currently marked done."
+    if queue.status == "dead_letter":
+        return "Queue job is in the dead-letter state and requires explicit operator repair."
+    if queue.status == "leased":
+        if queue.lease_expires_at:
+            return f"Queue job is leased until {queue.lease_expires_at}."
+        return "Queue job is leased with no visible expiry timestamp."
+    return "Queue job is pending and has not completed yet."
+
+
+def _queue_cli_hint(queue: QueueItemRecord) -> str | None:
+    if queue.status == "failed":
+        return f"uv run splendor queue retry {queue.job_id}"
+    if queue.status == "dead_letter":
+        return (
+            f"uv run splendor queue retry {queue.job_id} "
+            "or uv run splendor repair ingest <source-id>"
+        )
+    if queue.status in {"pending", "leased"}:
+        return "uv run splendor ingest --pending"
+    return None
+
+
+def _sort_attention_items(items: list[_AttentionItem]) -> list[_AttentionItem]:
+    return sorted(items, key=lambda item: (_attention_kind_order(item.kind), item.title, item.href))
+
+
+def _attention_kind_order(kind: str) -> int:
+    if kind == "run":
+        return 0
+    if kind == "queue":
+        return 1
+    if kind == "review":
+        return 2
+    if kind.startswith("planning"):
+        return 3
+    if kind == "source":
+        return 4
+    return 5
+
+
+def _attention_links(read_model: _AttentionReadModel, *, limit: int) -> list[_CockpitLink]:
+    return [
+        _CockpitLink(
+            title=item.title,
+            href=item.href,
+            detail=f"{item.kind} · {item.explanation}",
+        )
+        for item in read_model.items[:limit]
+    ]
+
+
+def _attention_summary_panel(read_model: _AttentionReadModel) -> str:
+    count = len(read_model.items)
+    count_text = f"{count} attention item" + ("" if count == 1 else "s")
+    if not read_model.needs_attention:
+        count_text = "No attention items"
+    return (
+        '<section class="health-panel">'
+        f"<h2>{html.escape(read_model.label)}</h2>"
+        f"<p>{html.escape(read_model.explanation)}</p>"
+        f"<p><strong>{html.escape(count_text)}</strong></p>"
+        "</section>"
+    )
+
+
+def _health_banner(read_model: _AttentionReadModel) -> str:
+    return (
+        '<section class="health-panel">'
+        f"<h2>Workspace health: {html.escape(read_model.label)}</h2>"
+        f"<p>{html.escape(read_model.explanation)}</p>"
+        "</section>"
+    )
+
+
+def _attention_section(read_model: _AttentionReadModel, *, limit: int) -> str:
+    if not read_model.items:
+        return (
+            '<section class="attention-list">'
+            "<h2>Attention interpretation</h2>"
+            '<p class="empty">No attention items found for this route.</p>'
+            "</section>"
+        )
+    items = "".join(_attention_item_html(item) for item in read_model.items[:limit])
+    if len(read_model.items) > limit:
+        items += (
+            '<li class="empty">'
+            f"{len(read_model.items) - limit} more attention items available in raw records."
+            "</li>"
+        )
+    return (
+        '<section class="attention-list">'
+        "<h2>Attention interpretation</h2>"
+        f"<ul>{items}</ul>"
+        "</section>"
+    )
+
+
+def _attention_item_html(item: _AttentionItem) -> str:
+    cli = ""
+    if item.cli_hint:
+        cli = f"<span>CLI hint: <code>{html.escape(item.cli_hint)}</code></span>"
+    return (
+        "<li>"
+        f'<a href="{html.escape(item.href)}">{html.escape(item.title)}</a>'
+        f"<span>{html.escape(item.kind)} · {html.escape(item.explanation)}</span>"
+        f"<span>Evidence: <code>{html.escape(item.evidence)}</code></span>"
+        f"{cli}"
+        "</li>"
+    )
 
 
 def _cockpit_section(section: _CockpitSection) -> str:
@@ -1268,6 +1626,26 @@ def _run_records(root: Path, layout: ResolvedLayout) -> list[_RunSummary]:
     )
 
 
+def _sort_runs_for_attention(records: list[_RunSummary]) -> list[_RunSummary]:
+    attention = sorted(
+        [item for item in records if item.record.status in _ATTENTION_RUN_STATES],
+        key=lambda item: (
+            item.record.finished_at or item.record.started_at,
+            item.record.run_id,
+        ),
+        reverse=True,
+    )
+    other = sorted(
+        [item for item in records if item.record.status not in _ATTENTION_RUN_STATES],
+        key=lambda item: (
+            item.record.finished_at or item.record.started_at,
+            item.record.run_id,
+        ),
+        reverse=True,
+    )
+    return [*attention, *other]
+
+
 def _queue_records(root: Path, layout: ResolvedLayout) -> list[_QueueSummary]:
     records: list[_QueueSummary] = []
     for queue_path in sorted(layout.queue_dir.glob("*.json")):
@@ -1278,6 +1656,28 @@ def _queue_records(root: Path, layout: ResolvedLayout) -> list[_QueueSummary]:
             )
         )
     return sorted(records, key=lambda item: (item.record.status, item.record.job_id))
+
+
+def _sort_queue_for_attention(records: list[_QueueSummary]) -> list[_QueueSummary]:
+    return sorted(
+        records,
+        key=lambda item: (
+            item.record.status not in _ATTENTION_QUEUE_STATES,
+            _queue_status_order(item.record.status),
+            item.record.updated_at,
+            item.record.job_id,
+        ),
+    )
+
+
+def _queue_status_order(status: str) -> int:
+    return {
+        "dead_letter": 0,
+        "failed": 1,
+        "leased": 2,
+        "pending": 3,
+        "done": 4,
+    }.get(status, 5)
 
 
 def _format_counts(counts: dict[str, int]) -> str:
@@ -1770,6 +2170,13 @@ def _page(
         ".roadmap-lane li{border-top:1px solid var(--border);padding:9px 0}"
         ".roadmap-lane li:first-child{border-top:0;padding-top:0}"
         ".roadmap-lane a{font-weight:600}.roadmap-lane span{display:block;color:var(--muted)}"
+        ".health-panel,.attention-list{border:1px solid var(--border);border-radius:8px;"
+        "padding:14px;background:var(--surface);margin:0 0 22px}"
+        ".health-panel p{margin:8px 0 0}"
+        ".attention-list ul{list-style:none;margin:10px 0 0;padding:0}"
+        ".attention-list li{border-top:1px solid var(--border);padding:9px 0}"
+        ".attention-list li:first-child{border-top:0;padding-top:0}"
+        ".attention-list a{font-weight:600}.attention-list span{display:block;color:var(--muted)}"
         ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
         ".stats div,.metadata,.result,.empty-state{border:1px solid var(--border);"
         "border-radius:8px;"

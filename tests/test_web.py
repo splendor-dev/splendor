@@ -252,6 +252,24 @@ def test_home_page_renders_cockpit_read_model(tmp_path: Path) -> None:
     assert "Raw workspace counts" in response.text
 
 
+def test_home_page_reports_invalid_runtime_records_as_attention(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    bad_run = tmp_path / "state" / "runs" / "run-bad.json"
+    bad_queue = tmp_path / "state" / "queue" / "queue-bad.json"
+    bad_run.write_text("{not valid json", encoding="utf-8")
+    bad_queue.write_text("{not valid json", encoding="utf-8")
+    client = TestClient(create_app(tmp_path), raise_server_exceptions=False)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Run records need inspection" in response.text
+    assert "Queue records need inspection" in response.text
+    assert "At least one durable run record could not be parsed." in response.text
+    assert "At least one durable queue record could not be parsed." in response.text
+    assert str(tmp_path) not in response.text
+
+
 def test_browse_page_lists_wiki_and_planning_documents(tmp_path: Path) -> None:
     initialize_workspace(tmp_path)
     write_wiki_page(
@@ -653,6 +671,10 @@ def test_planning_page_renders_human_roadmap_lanes_before_raw_tables(tmp_path: P
     response = client.get("/planning")
 
     assert response.status_code == 200
+    assert "Attention interpretation" in response.text
+    assert "Task is blocked and needs operator disposition" in response.text
+    assert "Decision is proposed and still needs a durable" in response.text
+    assert "Question is open and may affect the next safe implementation step" in response.text
     assert response.text.index("Active / current") < response.text.index("Raw planning records")
     assert "Tasks in progress and active milestones." in response.text
     assert "Next" in response.text
@@ -790,18 +812,136 @@ def test_runs_and_queue_pages_show_runtime_state(tmp_path: Path) -> None:
     queue = client.get("/queue")
 
     assert runs.status_code == 200
+    assert "Attention interpretation" in runs.text
+    assert "Run failed with recorded errors: source missing." in runs.text
+    assert "CLI hint: <code>uv run splendor ingest --pending</code>" in runs.text
     assert "run-src-web" in runs.text
     assert "ingest-src-web" in runs.text
     assert "wiki/sources/src-web.md" in runs.text
     assert "source missing" in runs.text
     assert "state/runs/run-src-web.json" in runs.text
     assert queue.status_code == 200
+    assert "Queue job failed and is not currently marked done." in queue.text
+    assert "CLI hint: <code>uv run splendor queue retry ingest-src-web</code>" in queue.text
     assert "failed=1" in queue.text
     assert "2/3" in queue.text
     assert "2026-04-30T10:00:00+00:00" in queue.text
     assert "2026-04-30T10:05:00+00:00" in queue.text
     assert "source missing" in queue.text
     assert "state/queue/ingest-src-web.json" in queue.text
+
+
+def test_status_page_leads_with_attention_health_interpretation(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_wiki_page(
+        tmp_path / "wiki" / "concepts" / "review-needed.md",
+        title="Review needed page",
+        page_id="concept-review-needed",
+        body="# Review needed page\n",
+    )
+    create_question(
+        tmp_path,
+        "Which health state matters",
+        record_id="question-health-state",
+        status="open",
+        source_refs=[],
+        related_tasks=[],
+        related_decisions=[],
+    )
+    write_run_record(
+        layout.runs_dir / "run-health.json",
+        RunRecord(
+            run_id="run-health",
+            job_id="ingest-health",
+            job_type="ingest_source",
+            started_at="2026-04-30T10:01:00+00:00",
+            finished_at="2026-04-30T10:02:00+00:00",
+            status="failed",
+            input_refs=[],
+            output_refs=[],
+            errors=["health source missing"],
+            pipeline_version="test",
+        ),
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/status")
+
+    assert response.status_code == 200
+    assert "Workspace health: Needs attention" in response.text
+    assert response.text.index("Workspace health: Needs attention") < response.text.index(
+        "Review state"
+    )
+    assert "Review needed page" in response.text
+    assert "Wiki page review state is draft." in response.text
+    assert "Which health state matters" in response.text
+    assert "health source missing" in response.text
+
+
+def test_runs_and_queue_prioritize_attention_records_before_done_records(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    write_run_record(
+        layout.runs_dir / "run-done.json",
+        RunRecord(
+            run_id="run-done",
+            job_id="done-job",
+            job_type="ingest_source",
+            started_at="2026-04-30T10:01:00+00:00",
+            finished_at="2026-04-30T10:02:00+00:00",
+            status="succeeded",
+            input_refs=[],
+            output_refs=[],
+            pipeline_version="test",
+        ),
+    )
+    write_run_record(
+        layout.runs_dir / "run-failed.json",
+        RunRecord(
+            run_id="run-failed",
+            job_id="failed-job",
+            job_type="ingest_source",
+            started_at="2026-04-30T09:01:00+00:00",
+            finished_at="2026-04-30T09:02:00+00:00",
+            status="failed",
+            input_refs=[],
+            output_refs=[],
+            pipeline_version="test",
+        ),
+    )
+    write_queue_item(
+        layout.queue_dir / "done-job.json",
+        QueueItemRecord(
+            job_id="done-job",
+            job_type="ingest_source",
+            status="done",
+            created_at="2026-04-30T10:00:00+00:00",
+            updated_at="2026-04-30T10:05:00+00:00",
+            payload_ref="state/manifests/sources/done.json",
+        ),
+    )
+    write_queue_item(
+        layout.queue_dir / "dead-job.json",
+        QueueItemRecord(
+            job_id="dead-job",
+            job_type="ingest_source",
+            status="dead_letter",
+            created_at="2026-04-30T09:00:00+00:00",
+            updated_at="2026-04-30T09:05:00+00:00",
+            payload_ref="state/manifests/sources/dead.json",
+        ),
+    )
+    client = TestClient(create_app(tmp_path))
+
+    runs = client.get("/runs")
+    queue = client.get("/queue")
+
+    assert runs.status_code == 200
+    assert queue.status_code == 200
+    assert runs.text.index("run-failed") < runs.text.index("run-done")
+    assert queue.text.index("dead-job") < queue.text.index("done-job")
+    assert "Queue job is in the dead-letter state" in queue.text
 
 
 def test_runs_and_queue_pages_report_invalid_records_without_path_leak(tmp_path: Path) -> None:
