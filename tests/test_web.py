@@ -520,6 +520,8 @@ def test_planning_page_lists_and_links_all_planning_kinds(tmp_path: Path) -> Non
     response = client.get("/planning")
 
     assert response.status_code == 200
+    assert "Active / current" in response.text
+    assert "Raw planning records" in response.text
     assert "Tasks" in response.text
     assert "Milestones" in response.text
     assert "Decisions" in response.text
@@ -530,6 +532,167 @@ def test_planning_page_lists_and_links_all_planning_kinds(tmp_path: Path) -> Non
     assert 'href="/documents/planning/questions/question-runtime-state.md"' in response.text
     assert "priority=high" in response.text
     assert "owner=codex" in response.text
+
+
+def test_planning_page_renders_human_roadmap_lanes_before_raw_tables(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    create_milestone(
+        tmp_path,
+        "Active milestone",
+        record_id="milestone-active",
+        status="active",
+        target_date=None,
+        task_refs=["task-current"],
+        decision_refs=[],
+        question_refs=[],
+    )
+    create_milestone(
+        tmp_path,
+        "Planned milestone",
+        record_id="milestone-planned",
+        status="planned",
+        target_date=None,
+        task_refs=["task-next"],
+        decision_refs=[],
+        question_refs=[],
+    )
+    create_task(
+        tmp_path,
+        "Current implementation",
+        record_id="task-current",
+        status="in_progress",
+        priority="high",
+        owner="codex",
+        milestone_refs=["milestone-active"],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+    )
+    create_task(
+        tmp_path,
+        "Next implementation",
+        record_id="task-next",
+        status="todo",
+        priority="medium",
+        owner=None,
+        milestone_refs=["milestone-planned"],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+    )
+    create_task(
+        tmp_path,
+        "Blocked implementation",
+        record_id="task-blocked",
+        status="blocked",
+        priority="high",
+        owner=None,
+        milestone_refs=[],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=["task-current"],
+        source_refs=[],
+    )
+    create_task(
+        tmp_path,
+        "Completed implementation",
+        record_id="task-completed",
+        status="done",
+        priority="low",
+        owner=None,
+        milestone_refs=[],
+        decision_refs=[],
+        question_refs=[],
+        depends_on=[],
+        source_refs=[],
+    )
+    create_decision(
+        tmp_path,
+        "Choose roadmap grouping",
+        record_id="decision-roadmap-grouping",
+        status="proposed",
+        decided_at=None,
+        supersedes=[],
+        source_refs=[],
+        related_tasks=["task-current"],
+        related_questions=["question-roadmap-filter"],
+    )
+    create_decision(
+        tmp_path,
+        "Old grouping contract",
+        record_id="decision-old-grouping",
+        status="superseded",
+        decided_at="2026-05-01",
+        supersedes=[],
+        source_refs=[],
+        related_tasks=[],
+        related_questions=[],
+    )
+    create_question(
+        tmp_path,
+        "Should deferred questions be archived",
+        record_id="question-roadmap-filter",
+        status="open",
+        source_refs=[],
+        related_tasks=["task-current"],
+        related_decisions=["decision-roadmap-grouping"],
+    )
+    create_question(
+        tmp_path,
+        "Will archived questions stay visible",
+        record_id="question-archived-visible",
+        status="deferred",
+        source_refs=[],
+        related_tasks=[],
+        related_decisions=[],
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/planning")
+
+    assert response.status_code == 200
+    assert response.text.index("Active / current") < response.text.index("Raw planning records")
+    assert "Tasks in progress and active milestones." in response.text
+    assert "Next" in response.text
+    assert "Blocked or gated" in response.text
+    assert "Open decisions" in response.text
+    assert "Open questions" in response.text
+    assert "Completed / answered" in response.text
+    assert "Historical / archived" in response.text
+    assert 'href="/documents/planning/milestones/milestone-active.md"' in response.text
+    assert 'href="/documents/planning/tasks/task-current.md"' in response.text
+    assert 'href="/documents/planning/tasks/task-next.md"' in response.text
+    assert 'href="/documents/planning/tasks/task-blocked.md"' in response.text
+    assert 'href="/documents/planning/tasks/task-completed.md"' in response.text
+    assert 'href="/documents/planning/decisions/decision-roadmap-grouping.md"' in response.text
+    assert 'href="/documents/planning/decisions/decision-old-grouping.md"' in response.text
+    assert 'href="/documents/planning/questions/question-roadmap-filter.md"' in response.text
+    assert 'href="/documents/planning/questions/question-archived-visible.md"' in response.text
+    assert "milestone · active" in response.text
+    assert "task · blocked" in response.text
+    assert "blocked_by=1" in response.text
+    assert "decision · superseded" in response.text
+    assert "question · deferred" in response.text
+    assert 'href="/planning/tasks"' in response.text
+    assert 'href="/planning/decisions"' in response.text
+    assert "<summary>Raw planning records</summary>" in response.text
+
+
+def test_planning_page_renders_quiet_empty_roadmap_lanes(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/planning")
+
+    assert response.status_code == 200
+    assert "No task or milestone is marked active." in response.text
+    assert "No todo task or planned milestone found." in response.text
+    assert "No proposed decisions found." in response.text
+    assert "No open questions found." in response.text
+    assert "No completed planning records found." in response.text
+    assert "<summary>Raw planning records</summary>" in response.text
 
 
 def test_planning_kind_page_lists_one_kind_and_rejects_unknown_kind(tmp_path: Path) -> None:
