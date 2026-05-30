@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P1.5`
-- Current planned slice: `M20 current-work authority classifier implementation (#182)`
-- Current PR sub-slice: `M20-P1.6`
+- Previous completed PR sub-slice: `M20-P1.6`
+- Current planned slice: `M20 richer GitHub issue, PR, review-thread, and CI integrations (#188)`
+- Current PR sub-slice: `M20-P3.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 richer GitHub issue, PR, review-thread, and CI integrations`
-- Next planned PR sub-slice: `M20-P3.1`
+- Next planned slice: `M20 human operator cockpit and wiki navigation design/spec/architecture contract`
+- Next planned PR sub-slice: `M20-P4.0`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1472,6 +1472,13 @@ behind it, preserves `F1c` only as blocker/prerequisite context, suppresses merg
 actions for current-work goals, and preserves the hocrsyngen `S8b` partial pass. This slice does
 not broaden into query answer synthesis, mutating web workflows, background services, databases,
 mandatory external APIs, or a general agent-memory architecture.
+
+`M20-P3.1` (#188) starts richer GitHub issue, PR, review-thread, and CI integrations with a narrow
+agent-handoff payload improvement. `brief --agent-context` and `suggest-next` keep using best-effort
+`gh` context only when available, but PR work-thread entries now include normalized review decision
+and status-check rollup fields plus a compact summary in the existing work-thread reason. The slice
+does not add hosted services, background workers, databases, auth complexity, mandatory external
+APIs, mutating web workflows, broad GitHub ingestion, or query answer synthesis.
 
 `M20-P4.0` is a docs/design-first slice for the human operator cockpit and wiki navigation track.
 It records the external review feedback that the local web UI currently exposes state without

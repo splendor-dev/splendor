@@ -521,6 +521,9 @@ class GitThreadBrief:
     summary: str
     relevance_score: int
     promoted: bool
+    review_decision: str | None = None
+    check_state: str | None = None
+    check_summary: str | None = None
     related_to: int | None = None
 
 
@@ -2585,6 +2588,9 @@ def _github_threads(
 ) -> tuple[list[GitThreadBrief], list[str]]:
     warnings: list[str] = []
     raw_threads: list[dict[str, object]] = []
+    issue_fields = "number,title,url,body,state,labels"
+    pr_fields = "number,title,url,body,state,isDraft,mergedAt,labels"
+    pr_status_fields = f"{pr_fields},reviewDecision,statusCheckRollup"
     commands = [
         [
             "gh",
@@ -2597,7 +2603,7 @@ def _github_threads(
             "--limit",
             "30",
             "--json",
-            "number,title,url,body,state,labels",
+            issue_fields,
         ],
         [
             "gh",
@@ -2610,32 +2616,33 @@ def _github_threads(
             "--limit",
             "30",
             "--json",
-            "number,title,url,body,state,isDraft,mergedAt,labels",
+            pr_status_fields,
         ],
     ]
     kinds = ["issue", "pr"]
     for kind, command in zip(kinds, commands, strict=True):
-        try:
-            result = subprocess.run(
-                command,
-                cwd=root,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=_GIT_COMMAND_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            warnings.append(
-                f"Timed out after {_GIT_COMMAND_TIMEOUT_SECONDS}s running gh {kind} list."
-            )
-            continue
-        except OSError as exc:
-            warnings.append(f"Could not run gh {kind} list: {exc}")
+        result, command_warnings = _run_gh_list(root, command, kind)
+        warnings.extend(command_warnings)
+        if result is None:
             continue
         if result.returncode != 0:
-            message = result.stderr.strip() or result.stdout.strip() or f"gh {kind} list failed"
-            warnings.append(message)
-            continue
+            if kind == "pr" and _gh_json_field_failure(result):
+                fallback_command = [*command[:-1], pr_fields]
+                fallback_result, fallback_warnings = _run_gh_list(root, fallback_command, kind)
+                warnings.extend(fallback_warnings)
+                if fallback_result is not None and fallback_result.returncode == 0:
+                    warnings.append(
+                        "GitHub PR review/check status fields unavailable from gh; "
+                        "loaded PRs without review/check status."
+                    )
+                    result = fallback_result
+                else:
+                    message = _gh_failure_message(fallback_result or result, kind)
+                    warnings.append(message)
+                    continue
+            else:
+                warnings.append(_gh_failure_message(result, kind))
+                continue
         try:
             payload = json.loads(result.stdout or "[]")
         except json.JSONDecodeError as exc:
@@ -2676,6 +2683,39 @@ def _github_threads(
     return threads[:_GIT_CONTEXT_LIMIT], warnings
 
 
+def _run_gh_list(
+    root: Path, command: list[str], kind: str
+) -> tuple[subprocess.CompletedProcess[str] | None, list[str]]:
+    try:
+        result = subprocess.run(
+            command,
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_COMMAND_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return None, [f"Timed out after {_GIT_COMMAND_TIMEOUT_SECONDS}s running gh {kind} list."]
+    except OSError as exc:
+        return None, [f"Could not run gh {kind} list: {exc}"]
+    return result, []
+
+
+def _gh_failure_message(result: subprocess.CompletedProcess[str], kind: str) -> str:
+    return result.stderr.strip() or result.stdout.strip() or f"gh {kind} list failed"
+
+
+def _gh_json_field_failure(result: subprocess.CompletedProcess[str]) -> bool:
+    message = " ".join([result.stderr, result.stdout]).lower()
+    return (
+        "unknown field" in message
+        or "available fields" in message
+        or "unknown json field" in message
+        or "unknown json" in message
+    )
+
+
 def _git_thread_from_item(
     item: dict[str, object], goal_tokens: set[str], goal_phrase: str
 ) -> tuple[GitThreadBrief, str] | None:
@@ -2694,6 +2734,17 @@ def _git_thread_from_item(
         medium_text=body,
     )
     summary = _one_line(body) or title
+    review_decision = None
+    check_state = None
+    check_summary = None
+    if kind == "pr":
+        review_decision = _normalize_review_decision(item.get("reviewDecision"))
+        check_state, check_summary = _summarize_status_check_rollup(item.get("statusCheckRollup"))
+        github_status_context = _github_status_context(
+            review_decision=review_decision, check_summary=check_summary
+        )
+        if github_status_context:
+            summary = f"{summary} GitHub status: {github_status_context}."
     promoted = _promote_git_thread(
         goal_tokens=goal_tokens,
         relevance_score=relevance_score,
@@ -2707,10 +2758,79 @@ def _git_thread_from_item(
         url=url,
         state=state,
         summary=summary,
+        review_decision=review_decision,
+        check_state=check_state,
+        check_summary=check_summary,
         relevance_score=relevance_score,
         promoted=promoted,
     )
     return thread, " ".join([title, body])
+
+
+def _normalize_review_decision(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower().replace("_", "-")
+    return normalized or None
+
+
+def _summarize_status_check_rollup(value: object) -> tuple[str | None, str | None]:
+    if not isinstance(value, list):
+        return None, None
+    counts: Counter[str] = Counter()
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        state = _status_check_state(item)
+        if state is not None:
+            counts[state] += 1
+    if not counts:
+        return None, None
+    if counts["failure"]:
+        rollup_state = "failure"
+    elif counts["pending"]:
+        rollup_state = "pending"
+    elif counts["success"]:
+        rollup_state = "success"
+    elif counts["skipped"] or counts["neutral"]:
+        rollup_state = "skipped"
+    else:
+        rollup_state = "unknown"
+    pieces = []
+    for state in ("failure", "pending", "success", "skipped", "neutral", "unknown"):
+        count = counts[state]
+        if count:
+            pieces.append(f"{count} {state}")
+    return rollup_state, ", ".join(pieces)
+
+
+def _status_check_state(item: dict[str, object]) -> str | None:
+    conclusion = str(item.get("conclusion") or "").strip().lower()
+    status = str(item.get("status") or item.get("state") or "").strip().lower()
+    if conclusion == "success":
+        return "success"
+    if conclusion == "skipped":
+        return "skipped"
+    if conclusion == "neutral":
+        return "neutral"
+    if conclusion in {"failure", "cancelled", "timed_out", "action_required"}:
+        return "failure"
+    if status in {"completed", "success"}:
+        return "success"
+    if status in {"queued", "pending", "in_progress", "requested", "waiting", "expected"}:
+        return "pending"
+    if status in {"failure", "failed", "error"}:
+        return "failure"
+    return "unknown" if conclusion or status else None
+
+
+def _github_status_context(*, review_decision: str | None, check_summary: str | None) -> str | None:
+    parts = []
+    if review_decision:
+        parts.append(f"review={review_decision}")
+    if check_summary:
+        parts.append(f"checks={check_summary}")
+    return "; ".join(parts) if parts else None
 
 
 def _fetch_referenced_open_issue_threads(
