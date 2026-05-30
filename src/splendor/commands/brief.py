@@ -135,7 +135,7 @@ _AUTHORITY_ORIGIN_ORDER = {
     "inferred-authority": 1,
 }
 _TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{1,}")
-_ROADMAP_SLICE_INNER_PATTERN = r"(?:[A-Z][A-Za-z0-9]*-P\d+(?:\.\d+)?|[A-Z]\d+[a-z])"
+_ROADMAP_SLICE_INNER_PATTERN = r"(?:[A-Z][A-Za-z0-9]*-P\d+(?:\.\d+)?|[A-Z]\d+[a-z]\d*)"
 _ROADMAP_SLICE_PATTERN = re.compile(rf"\b{_ROADMAP_SLICE_INNER_PATTERN}\b")
 _PLANNING_STATE_PATTERN = re.compile(
     r"^\s*-\s+(?P<label>"
@@ -338,7 +338,6 @@ _GATED_FOLLOW_ON_TERMS = (
     "gated",
     "follow-on",
     "follow on",
-    "after",
     "behind",
     "depends",
     "blocked",
@@ -357,6 +356,7 @@ _COMPLETED_CONTEXT_TERMS = (
     "done",
     "merged",
     "closed",
+    "landed",
     "release note",
     "release notes",
 )
@@ -368,6 +368,33 @@ _HISTORICAL_CONTEXT_TERMS = (
     "old",
     "retrospective",
 )
+_CURRENT_STATUS_LINE_RE = re.compile(
+    r"^\s*-\s+Current PR sub-slice:\s+`?(?P<slice>[^`\s]+)`?", re.IGNORECASE
+)
+_NEXT_STATUS_LINE_RE = re.compile(
+    r"^\s*-\s+Next planned PR sub-slice:\s+`?(?P<slice>[^`\s]+)`?", re.IGNORECASE
+)
+_PREVIOUS_STATUS_LINE_RE = re.compile(
+    r"^\s*-\s+Previous completed PR sub-slice:\s+`?(?P<slice>[^`\s]+)`?", re.IGNORECASE
+)
+_LEADING_SLICE_RE = re.compile(
+    rf"^\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?)?`?(?P<slice>{_ROADMAP_SLICE_INNER_PATTERN})`?"
+)
+_CURRENT_WORK_CANDIDATE_CLASSES = {
+    "active_task",
+    "current_status_row",
+    "unchecked_next_task",
+}
+_CURRENT_WORK_CLASS_ORDER = {
+    "active_task": 0,
+    "current_status_row": 1,
+    "unchecked_next_task": 2,
+}
+_CURRENT_WORK_SOURCE_ORDER = {
+    ".agent-plan.md": 0,
+    "README.md": 2,
+    "docs/splendor_mvp_to_v1_roadmap.md": 3,
+}
 
 
 @dataclass(frozen=True)
@@ -527,6 +554,8 @@ class ClassifiedPlanningEvidence:
     evidence_class: str
     path: str
     line: str
+    line_number: int
+    section: str | None = None
 
 
 @dataclass(frozen=True)
@@ -537,10 +566,10 @@ class CurrentPlannedWork:
     predecessor_slices: list[str]
     reason: str
     evidence_class: str | None = None
-    predecessor_evidence: list[dict[str, str]] | None = None
-    gated_follow_ons: list[dict[str, str]] | None = None
-    blocker_context: list[dict[str, str]] | None = None
-    lower_priority_conflicts: list[dict[str, str]] | None = None
+    predecessor_evidence: list[dict[str, object]] | None = None
+    gated_follow_ons: list[dict[str, object]] | None = None
+    blocker_context: list[dict[str, object]] | None = None
+    lower_priority_conflicts: list[dict[str, object]] | None = None
     selection_reconciled: bool = False
 
 
@@ -1658,7 +1687,7 @@ def _classified_planning_evidence(
         except OSError:
             continue
         heading_context = ""
-        for line in lines:
+        for line_number, line in enumerate(lines, start=1):
             stripped = line.strip()
             if stripped.startswith("#"):
                 heading_context = stripped.lstrip("#").strip().lower()
@@ -1666,12 +1695,10 @@ def _classified_planning_evidence(
             if not stripped:
                 continue
             line_context = " ".join([heading_context, stripped.lower()])
-            slice_ids = list(dict.fromkeys(_ROADMAP_SLICE_PATTERN.findall(stripped)))
-            if not slice_ids:
-                continue
             evidence_class = _classify_planning_line(line_context)
             if evidence_class is None:
                 continue
+            slice_ids = _classified_line_slice_ids(stripped, evidence_class)
             for slice_id in slice_ids:
                 evidence.append(
                     ClassifiedPlanningEvidence(
@@ -1679,12 +1706,20 @@ def _classified_planning_evidence(
                         evidence_class=evidence_class,
                         path=relpath,
                         line=stripped,
+                        line_number=line_number,
+                        section=heading_context or None,
                     )
                 )
     return evidence
 
 
 def _classify_planning_line(text: str) -> str | None:
+    if _CURRENT_STATUS_LINE_RE.search(text):
+        return "current_status_row"
+    if _NEXT_STATUS_LINE_RE.search(text):
+        return "unchecked_next_task"
+    if _PREVIOUS_STATUS_LINE_RE.search(text):
+        return "completed_work"
     if _contains_any(text, _COMPLETED_CONTEXT_TERMS):
         return "completed_work"
     if _contains_any(text, _GATED_FOLLOW_ON_TERMS):
@@ -1700,19 +1735,44 @@ def _classify_planning_line(text: str) -> str | None:
     return None
 
 
+def _classified_line_slice_ids(line: str, evidence_class: str) -> list[str]:
+    status_match = (
+        _CURRENT_STATUS_LINE_RE.search(line)
+        or _NEXT_STATUS_LINE_RE.search(line)
+        or _PREVIOUS_STATUS_LINE_RE.search(line)
+    )
+    if status_match is not None:
+        return [status_match.group("slice")]
+
+    slice_ids = list(dict.fromkeys(_ROADMAP_SLICE_PATTERN.findall(line)))
+    if not slice_ids:
+        return []
+    leading = _LEADING_SLICE_RE.search(line)
+    if leading is not None:
+        return [leading.group("slice")]
+    if evidence_class in {
+        "blocker_or_prerequisite_context",
+        "completed_work",
+        "gated_follow_on",
+        "historical_or_superseded_context",
+    }:
+        return slice_ids[:1]
+    return slice_ids
+
+
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
 
 
 def _classified_evidence_for_json(
     evidence: list[ClassifiedPlanningEvidence], *, exclude_slice: str | None = None
-) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str, str]] = set()
+) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    seen: set[tuple[str, str, str, str, int]] = set()
     for item in evidence:
         if exclude_slice is not None and item.slice_id == exclude_slice:
             continue
-        key = (item.slice_id, item.evidence_class, item.path, item.line)
+        key = (item.slice_id, item.evidence_class, item.path, item.line, item.line_number)
         if key in seen:
             continue
         seen.add(key)
@@ -1722,6 +1782,8 @@ def _classified_evidence_for_json(
                 "evidence_class": item.evidence_class,
                 "path": item.path,
                 "line": item.line,
+                "line_number": item.line_number,
+                "section": item.section,
             }
         )
     return items
@@ -1732,10 +1794,206 @@ def _classified_evidence_by_class(
     classes: set[str],
     *,
     exclude_slice: str | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, object]]:
     return _classified_evidence_for_json(
         [item for item in evidence if item.evidence_class in classes], exclude_slice=exclude_slice
     )
+
+
+def _classified_current_planned_work(
+    classified_evidence: list[ClassifiedPlanningEvidence],
+    states: list[tuple[str, dict[str, str]]],
+    git_context: GitContext,
+) -> CurrentPlannedWork | None:
+    combined, disagreements = _reconciled_planning_state(states)
+    candidates = [
+        item
+        for item in classified_evidence
+        if item.evidence_class in _CURRENT_WORK_CANDIDATE_CLASSES
+    ]
+    if not candidates:
+        return None
+    previous_slice = combined.get("Previous completed PR sub-slice")
+    current_slice = combined.get("Current PR sub-slice")
+    next_slice = combined.get("Next planned PR sub-slice")
+    current_lifecycle = (combined.get("Current PR lifecycle") or "").lower()
+    use_next = bool(
+        current_slice
+        and next_slice
+        and (
+            previous_slice == current_slice
+            or (git_context.branch == "main" and "main=merged" in current_lifecycle)
+        )
+    )
+    if use_next:
+        next_candidates = [item for item in candidates if item.slice_id == next_slice]
+        candidate = (
+            sorted(next_candidates, key=_classified_candidate_sort_key)[0]
+            if next_candidates
+            else _synthetic_classified_evidence(next_slice, "unchecked_next_task", states)
+        )
+    else:
+        candidate = sorted(candidates, key=_classified_candidate_sort_key)[0]
+    planned_slice = _planned_slice_for_candidate(candidate.slice_id, combined)
+    predecessor_slices = [
+        slice_id
+        for slice_id in [previous_slice, current_slice if use_next else None]
+        if slice_id and slice_id != candidate.slice_id
+    ]
+    reason_parts = [
+        "Classified planning evidence identifies the current handoff target.",
+        f"{candidate.evidence_class} from {candidate.path}:{candidate.line_number}.",
+    ]
+    if use_next and current_slice:
+        reason_parts.append(
+            f"{current_slice} is predecessor context; lead with {candidate.slice_id}."
+        )
+    if disagreements:
+        reason_parts.append("Reconciled disagreement: " + "; ".join(disagreements[:3]) + ".")
+    return CurrentPlannedWork(
+        slice_id=candidate.slice_id,
+        planned_slice=planned_slice,
+        authority_paths=[candidate.path],
+        predecessor_slices=predecessor_slices,
+        reason=" ".join(reason_parts),
+        evidence_class=candidate.evidence_class,
+        predecessor_evidence=_bounded_current_work_context(
+            classified_evidence,
+            candidate,
+            {"completed_work"},
+            predecessor_slices=set(predecessor_slices),
+        ),
+        gated_follow_ons=_bounded_current_work_context(
+            classified_evidence,
+            candidate,
+            {"gated_follow_on"},
+        ),
+        blocker_context=_bounded_current_work_context(
+            classified_evidence,
+            candidate,
+            {"blocker_or_prerequisite_context"},
+        ),
+        lower_priority_conflicts=_bounded_current_work_context(
+            classified_evidence,
+            candidate,
+            _CURRENT_WORK_CANDIDATE_CLASSES,
+            include_same_class=True,
+        ),
+        selection_reconciled=use_next or bool(disagreements),
+    )
+
+
+def _planned_slice_for_candidate(slice_id: str, combined: dict[str, str]) -> str | None:
+    if slice_id == combined.get("Current PR sub-slice"):
+        return combined.get("Current planned slice")
+    if slice_id == combined.get("Next planned PR sub-slice"):
+        return combined.get("Next planned slice")
+    return None
+
+
+def _synthetic_classified_evidence(
+    slice_id: str, evidence_class: str, states: list[tuple[str, dict[str, str]]]
+) -> ClassifiedPlanningEvidence:
+    path = states[0][0] if states else ""
+    return ClassifiedPlanningEvidence(
+        slice_id=slice_id,
+        evidence_class=evidence_class,
+        path=path,
+        line=f"Current work: {slice_id}",
+        line_number=0,
+        section=None,
+    )
+
+
+def _classified_candidate_sort_key(item: ClassifiedPlanningEvidence) -> tuple[int, int, int, int]:
+    return (
+        _current_work_source_priority(item.path),
+        _CURRENT_WORK_CLASS_ORDER.get(item.evidence_class, 99),
+        _current_work_section_priority(item.section),
+        item.line_number,
+    )
+
+
+def _current_work_source_priority(path: str) -> int:
+    return _CURRENT_WORK_SOURCE_ORDER.get(path, 5)
+
+
+def _current_work_section_priority(section: str | None) -> int:
+    normalized = section or ""
+    if any(term in normalized for term in ("current system state", "current work")):
+        return 0
+    if any(term in normalized for term in ("active task", "implementation checklist")):
+        return 1
+    if any(term in normalized for term in ("planned", "candidate", "roadmap")):
+        return 2
+    if any(
+        term in normalized for term in ("historical", "release", "review", "appendix", "archive")
+    ):
+        return 5
+    return 3
+
+
+def _bounded_current_work_context(
+    evidence: list[ClassifiedPlanningEvidence],
+    selected: ClassifiedPlanningEvidence,
+    classes: set[str],
+    *,
+    predecessor_slices: set[str] | None = None,
+    include_same_class: bool = False,
+    limit: int = 5,
+) -> list[dict[str, object]]:
+    predecessor_slices = predecessor_slices or set()
+    related: list[ClassifiedPlanningEvidence] = []
+    for item in evidence:
+        if item.slice_id == selected.slice_id:
+            continue
+        if item.evidence_class not in classes:
+            continue
+        if predecessor_slices and item.slice_id in predecessor_slices:
+            related.append(item)
+            continue
+        if include_same_class and not _candidate_can_conflict_with_selected(item, selected):
+            continue
+        if not include_same_class and not _context_item_is_near_selected(item, selected):
+            continue
+        related.append(item)
+    related = sorted(
+        related, key=lambda item: (_context_sort_key(item, selected), item.line_number)
+    )
+    return _classified_evidence_for_json(related[:limit])
+
+
+def _candidate_can_conflict_with_selected(
+    item: ClassifiedPlanningEvidence, selected: ClassifiedPlanningEvidence
+) -> bool:
+    if item.path == selected.path:
+        return item.section == selected.section or abs(item.line_number - selected.line_number) <= 6
+    return _current_work_source_priority(item.path) < _current_work_source_priority(
+        "docs/splendor_mvp_to_v1_roadmap.md"
+    )
+
+
+def _context_item_is_near_selected(
+    item: ClassifiedPlanningEvidence, selected: ClassifiedPlanningEvidence
+) -> bool:
+    if item.path != selected.path:
+        return False
+    if item.section == selected.section:
+        return True
+    if item.section and any(term in item.section for term in ("blocker", "prerequisite")):
+        return True
+    if _text_mentions_slice(item.line, selected.slice_id):
+        return True
+    return abs(item.line_number - selected.line_number) <= 6
+
+
+def _context_sort_key(
+    item: ClassifiedPlanningEvidence, selected: ClassifiedPlanningEvidence
+) -> tuple[int, int, int]:
+    same_path = 0 if item.path == selected.path else 1
+    same_section = 0 if item.section == selected.section else 1
+    distance = abs(item.line_number - selected.line_number)
+    return same_path, same_section, distance
 
 
 def _current_planned_work(
@@ -1751,8 +2009,12 @@ def _current_planned_work(
         return None
 
     classified_evidence = _classified_planning_evidence(root, authority_briefs)
+    states = _planning_state_by_path(root, authority_briefs)
+    classified = _classified_current_planned_work(classified_evidence, states, git_context)
+    if classified is not None:
+        return classified
     structured = _structured_current_planned_work(
-        root, git_context, authority_briefs, classified_evidence
+        root, git_context, authority_briefs, classified_evidence, states
     )
     if structured is not None:
         return structured
@@ -1764,8 +2026,9 @@ def _structured_current_planned_work(
     git_context: GitContext,
     authority_briefs: list[AuthorityBrief],
     classified_evidence: list[ClassifiedPlanningEvidence],
+    states: list[tuple[str, dict[str, str]]] | None = None,
 ) -> CurrentPlannedWork | None:
-    states = _planning_state_by_path(root, authority_briefs)
+    states = states if states is not None else _planning_state_by_path(root, authority_briefs)
     if not states:
         return None
     combined, disagreements = _reconciled_planning_state(states)
@@ -1812,6 +2075,18 @@ def _structured_current_planned_work(
         if use_next
         else "current_status_row"
     )
+    selected_anchor = (
+        selected_evidence[0]
+        if selected_evidence
+        else ClassifiedPlanningEvidence(
+            slice_id=slice_id,
+            evidence_class=evidence_class,
+            path=authority_paths[0] if authority_paths else "",
+            line=f"Current work: {slice_id}",
+            line_number=0,
+            section=None,
+        )
+    )
     return CurrentPlannedWork(
         slice_id=slice_id,
         planned_slice=next_planned_slice if use_next and next_planned_slice else planned_slice,
@@ -1820,24 +2095,32 @@ def _structured_current_planned_work(
         reason=" ".join(reason_parts),
         evidence_class=evidence_class,
         predecessor_evidence=_classified_evidence_by_class(
-            classified_evidence,
+            [item for item in classified_evidence if item.slice_id in set(predecessor_slices)],
             {"completed_work"},
-            exclude_slice=slice_id,
         ),
         gated_follow_ons=_classified_evidence_by_class(
-            classified_evidence,
+            [
+                item
+                for item in classified_evidence
+                if _context_item_is_near_selected(item, selected_anchor)
+            ],
             {"gated_follow_on"},
             exclude_slice=slice_id,
         ),
         blocker_context=_classified_evidence_by_class(
-            classified_evidence,
+            [
+                item
+                for item in classified_evidence
+                if _context_item_is_near_selected(item, selected_anchor)
+            ],
             {"blocker_or_prerequisite_context"},
             exclude_slice=slice_id,
         ),
-        lower_priority_conflicts=_classified_evidence_by_class(
+        lower_priority_conflicts=_bounded_current_work_context(
             classified_evidence,
+            selected_anchor,
             {"historical_or_superseded_context", "active_task", "unchecked_next_task"},
-            exclude_slice=slice_id,
+            include_same_class=True,
         ),
         selection_reconciled=use_next or bool(disagreements),
     )
@@ -1869,6 +2152,14 @@ def _line_inferred_current_planned_work(
                 if match is None:
                     continue
                 slice_id = match.group("slice")
+                selected_anchor = ClassifiedPlanningEvidence(
+                    slice_id=slice_id,
+                    evidence_class=line_class or "active_task",
+                    path=relpath,
+                    line=line.strip(),
+                    line_number=0,
+                    section=None,
+                )
                 return CurrentPlannedWork(
                     slice_id=slice_id,
                     planned_slice=None,
@@ -1885,19 +2176,28 @@ def _line_inferred_current_planned_work(
                         exclude_slice=slice_id,
                     ),
                     gated_follow_ons=_classified_evidence_by_class(
-                        classified_evidence,
+                        [
+                            item
+                            for item in classified_evidence
+                            if _context_item_is_near_selected(item, selected_anchor)
+                        ],
                         {"gated_follow_on"},
                         exclude_slice=slice_id,
                     ),
                     blocker_context=_classified_evidence_by_class(
-                        classified_evidence,
+                        [
+                            item
+                            for item in classified_evidence
+                            if _context_item_is_near_selected(item, selected_anchor)
+                        ],
                         {"blocker_or_prerequisite_context"},
                         exclude_slice=slice_id,
                     ),
-                    lower_priority_conflicts=_classified_evidence_by_class(
+                    lower_priority_conflicts=_bounded_current_work_context(
                         classified_evidence,
+                        selected_anchor,
                         {"historical_or_superseded_context", "active_task", "unchecked_next_task"},
-                        exclude_slice=slice_id,
+                        include_same_class=True,
                     ),
                 )
     return None

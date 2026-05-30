@@ -3427,6 +3427,51 @@ def test_agent_context_hocrgen_retry_classifies_gated_and_blocker_context(
         assert "F1c" not in action["title"]
 
 
+def test_agent_context_hocrgen_retry_selects_active_checklist_without_state_block(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "## Current Work\n\n"
+        "- [ ] F6f2: build the narrow synthetic target scale acceptance path.\n"
+        "- [ ] F6g: gated follow-on after F6f2 expands the larger batch.\n\n"
+        "## Blocker Context\n\n"
+        "- F1c is old blocker/prerequisite context for synthetic target scale, not current work.\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "continue",
+            "the",
+            "current",
+            "hocrgen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    current = payload["current_planned_work"]
+    assert current["slice_id"] == "F6f2"
+    assert current["evidence_class"] == "unchecked_next_task"
+    assert {item["slice_id"] for item in current["gated_follow_ons"]} == {"F6g"}
+    assert {item["slice_id"] for item in current["blocker_context"]} == {"F1c"}
+    lower_conflicts = {item["slice_id"] for item in current["lower_priority_conflicts"]}
+    assert "F6g" not in lower_conflicts
+    assert "F1c" not in lower_conflicts
+    assert payload["work_context"]["actions"][0]["category"] == "current-state"
+    assert "F6f2" in payload["work_context"]["actions"][0]["title"]
+
+
 def test_agent_context_hocrsyngen_retry_still_selects_s8b(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     (tmp_path / ".agent-plan.md").write_text(
