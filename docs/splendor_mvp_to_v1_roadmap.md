@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.4`
-- Current planned slice: `M20 knowledge-map navigation (#198)`
-- Current PR sub-slice: `M20-P4.5`
+- Previous completed PR sub-slice: `M20-P4.5`
+- Current planned slice: `M20 recent insights and log rendering (#200)`
+- Current PR sub-slice: `M20-P4.6`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 recent insights and log rendering`
-- Next planned PR sub-slice: `M20-P4.6`
+- Next planned slice: `M20 follow-up selection pending`
+- Next planned PR sub-slice: `TBD`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1526,6 +1526,13 @@ before the raw document table, while document detail pages render related contex
 related-page, tag, source, run, provenance, planning, issue/PR, contradiction, and computed backlink
 inputs before technical metadata. Recent insights and `wiki/log.md` rendering remains the next
 cockpit-track follow-up in `M20-P4.6`.
+
+`M20-P4.6` (#200) makes recent durable activity a first-class read-only cockpit surface. `/recent`
+renders parsed `wiki/log.md` insights, the full markdown log body, and recent run-record events
+from local filesystem state while keeping raw log and run records reachable. It avoids per-user
+last-seen state, filesystem mtime ordering, mutation flows, background workers, databases, hosted
+services, and new persistent indexes. The `M20-P4` cockpit sequence is complete enough that the
+next roadmap sub-slice should be selected explicitly rather than inferred from this track.
 
 ---
 
