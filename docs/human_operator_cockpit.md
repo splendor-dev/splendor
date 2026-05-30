@@ -1,6 +1,6 @@
 # Human Operator Cockpit And Wiki Navigation
 
-Status: design/specification contract for `M20-P4.0`.
+Status: design/specification contract for `M20-P4.0` / issue #190.
 
 This document defines the human-operator web/wiki product track derived from the May 2026
 SynthBanshee dogfood critique and the Gemini Pro, ChatGPT Pro, and Claude Opus review round
@@ -144,6 +144,29 @@ Required conceptual panes:
 
 Each pane needs a sparse-workspace empty state. A new workspace should look quiet and actionable,
 not broken.
+
+## Route-Level Contract
+
+The operator cockpit track should evolve existing read-only routes before adding new concepts. The
+first implementation of each route may be modest, but the information hierarchy should be clear.
+
+| Route | Primary operator question | Required contract |
+| --- | --- | --- |
+| `/` | What is this project and what should I inspect? | Render project identity, roadmap snapshot, attention summary, recent durable activity, knowledge-map summary, and deterministic inspect-next links before raw counts. |
+| `/documents/*` | What does this wiki page say and why should I trust it? | Render badges and readable markdown before full metadata; show relationship/provenance links when present; keep raw metadata accessible as technical detail. |
+| `/browse` | What knowledge exists here? | Group pages by human meaning such as maintained pages, generated source summaries, review state, tags, or related clusters before large flat inventories. |
+| `/search` | Which existing pages match this question? | Keep deterministic local search, but render result kinds, review states, source-backed context, and relationship hints where available instead of making title/path matches the whole experience. |
+| `/planning` | Where are we in the work? | Present active/current, next, blocked/gated, open decisions, open questions, recently completed, and historical lanes while preserving raw record access. |
+| `/status` | Is the knowledge workspace healthy? | Lead with healthy versus needs-attention interpretation, affected artifacts, and CLI hints; keep raw counts and diagnostics available. |
+| `/runs` | What happened recently in local execution? | Prioritize failed or relevant runs, affected sources/pages, and human explanations before run IDs and payload-like details. |
+| `/queue` | What work is pending, stuck, or failed? | Prioritize pending, retry-scheduled, failed, dead-letter, or stale-lease records with evidence and CLI hints; keep raw queue records visible. |
+| `/sources/*` | What source produced or changed this knowledge? | Show source title/path, source state, linked source-summary page, latest run, provenance, and affected synthesis suggestions before manifest internals. |
+| Future `/attention` | What needs inspection now? | Promote the shared attention read model once `/` and `/status` prove enough item types to justify a dedicated route. |
+| Future `/recent` | What changed or was learned recently? | Render `wiki/log.md` and durable run/page/planning timestamps without per-user last-seen state or filesystem mtime dependence. |
+
+Route implementations should share read models where the same judgment appears in more than one
+place. For example, "current work" should come from the current-work authority layer, and attention
+items should not be reclassified differently on `/`, `/status`, and a future `/attention` route.
 
 ## Page Detail Contract
 
@@ -326,6 +349,23 @@ Recommended test classes:
 - planning lane assignment tests;
 - attention item tests for contested, failed, blocked, and review-needed records;
 - relationship/backlink tests when those surfaces are implemented.
+
+## Acceptance Criteria For `M20-P4.0`
+
+This design slice is complete when:
+
+- the product contract names the human operator cockpit as a read-only comprehension layer;
+- the route-level contracts above cover the existing local web surfaces and likely future
+  `/attention` and `/recent` routes;
+- the architecture contract requires pure deterministic read models over local files;
+- project identity, page detail layout, planning lanes, attention items, recent activity,
+  relationship navigation, and raw audit access have explicit expectations;
+- non-goals reject runtime UI mutation, hidden caches, databases, background workers, hosted
+  services, and mandatory external APIs for this track;
+- the roadmap sequence points follow-up implementation at the next cockpit slice instead of
+  displacing remaining P3 polish work;
+- synchronized planning state in `.agent-plan.md`, `README.md`, and the roadmap identifies
+  `M20-P4.0` as the current PR sub-slice and `M20-P4.2` as the next cockpit implementation slice.
 
 ## Non-Goals
 
