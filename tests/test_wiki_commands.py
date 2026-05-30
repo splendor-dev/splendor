@@ -75,6 +75,45 @@ def _install_fake_gh(
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ.get('PATH', '')}")
 
 
+def _install_status_field_fallback_gh(tmp_path: Path, monkeypatch) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    script = bin_dir / "gh"
+    prs = [
+        {
+            "number": 42,
+            "title": "M20-P3.1 fallback GitHub handoff context",
+            "url": "https://github.com/example/project/pull/42",
+            "body": "Agent handoff should keep PR context when status fields are unavailable.",
+            "state": "open",
+            "isDraft": False,
+            "mergedAt": None,
+            "labels": [],
+        }
+    ]
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "import sys\n"
+        f"prs = {prs!r}\n"
+        "if sys.argv[1:3] == ['issue', 'list']:\n"
+        "    print('[]')\n"
+        "elif sys.argv[1:3] == ['pr', 'list']:\n"
+        "    fields = sys.argv[sys.argv.index('--json') + 1]\n"
+        "    if 'reviewDecision' in fields or 'statusCheckRollup' in fields:\n"
+        "        message = 'Unknown JSON field: reviewDecision\\nAvailable fields: number,title'\n"
+        "        print(message, file=sys.stderr)\n"
+        "        sys.exit(1)\n"
+        "    print(json.dumps(prs))\n"
+        "else:\n"
+        "    print('unsupported fake gh call', file=sys.stderr)\n"
+        "    sys.exit(2)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ.get('PATH', '')}")
+
+
 def _install_marker_gh(tmp_path: Path, monkeypatch, *, sleep_seconds: float = 0) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
@@ -4170,6 +4209,8 @@ def test_agent_context_includes_pr_review_and_check_status(
                 "statusCheckRollup": [
                     {"name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
                     {"name": "tests", "status": "IN_PROGRESS", "conclusion": None},
+                    {"name": "health", "status": "COMPLETED", "conclusion": "SKIPPED"},
+                    {"name": "coverage", "status": "COMPLETED", "conclusion": "NEUTRAL"},
                 ],
             }
         ],
@@ -4195,12 +4236,48 @@ def test_agent_context_includes_pr_review_and_check_status(
     assert thread["kind"] == "pr"
     assert thread["review_decision"] == "changes-requested"
     assert thread["check_state"] == "pending"
-    assert thread["check_summary"] == "1 pending, 1 success"
+    assert thread["check_summary"] == "1 pending, 1 success, 1 skipped, 1 neutral"
     assert "review=changes-requested" in thread["summary"]
-    assert "checks=1 pending, 1 success" in thread["summary"]
+    assert "checks=1 pending, 1 success, 1 skipped, 1 neutral" in thread["summary"]
     action = payload["work_context"]["actions"][0]
     assert action["category"] == "work-thread"
-    assert "checks=1 pending, 1 success" in action["reason"]
+    assert "checks=1 pending, 1 success, 1 skipped, 1 neutral" in action["reason"]
+
+
+def test_agent_context_falls_back_when_pr_status_fields_are_unavailable(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    _init_git_repo(tmp_path, repo="example/project")
+    _commit_all(tmp_path, "Initial context")
+    _install_status_field_fallback_gh(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "M20-P3.1",
+            "GitHub",
+            "handoff",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    thread = payload["git_context"]["threads"][0]
+    assert thread["kind"] == "pr"
+    assert thread["number"] == 42
+    assert thread["review_decision"] is None
+    assert thread["check_state"] is None
+    assert thread["check_summary"] is None
+    assert any(
+        "review/check status fields unavailable" in warning
+        for warning in payload["git_context"]["warnings"]
+    )
 
 
 def test_agent_context_git_lookup_ignores_path_file_entries(
