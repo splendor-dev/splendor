@@ -165,6 +165,13 @@ def test_home_page_renders_cockpit_read_model(tmp_path: Path) -> None:
         page_id="source-src-web",
         body="# Source web\n",
     )
+    (tmp_path / "wiki" / "log.md").write_text(
+        "# Splendor Wiki Log\n\n"
+        "## Timeline\n\n"
+        "- Initialized Splendor workspace.\n"
+        "- Added cockpit read model evidence.\n",
+        encoding="utf-8",
+    )
     create_milestone(
         tmp_path,
         "Cockpit rollout",
@@ -237,8 +244,10 @@ def test_home_page_renders_cockpit_read_model(tmp_path: Path) -> None:
     assert "Knowledge map summary" in response.text
     assert "1 maintained wiki pages" in response.text
     assert "1 generated source summaries" in response.text
+    assert "2 wiki pages need review" in response.text
     assert "Recent durable activity" in response.text
     assert "succeeded run run-home" in response.text
+    assert "Added cockpit read model evidence." in response.text
     assert "Inspect next" in response.text
     assert "Raw workspace counts" in response.text
 
@@ -341,6 +350,7 @@ def test_listing_metadata_stops_after_frontmatter_title(tmp_path: Path) -> None:
         "title": "Bounded listing",
         "kind": "concept",
         "status": "active",
+        "review_state": None,
     }
 
 

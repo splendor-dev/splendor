@@ -70,6 +70,7 @@ _IDENTITY_LINE_LIMIT = 80
 _IDENTITY_CHAR_LIMIT = 32 * 1024
 _GENERIC_INDEX_TITLE = "Splendor Wiki Index"
 _GENERIC_INDEX_SUMMARY = "This wiki is maintained by Splendor."
+_REVIEW_NEEDED_STATES = {"draft", "machine-generated", "contested", "stale"}
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,7 @@ class _DocumentSummary:
     document_class: str
     kind: str | None
     status: str | None
+    review_state: str | None
 
 
 @dataclass(frozen=True)
@@ -213,10 +215,7 @@ def create_app(root: Path) -> FastAPI:
             "</section>"
             f"{empty_state}"
             '<section class="cockpit-grid">'
-            f"{_cockpit_section(read_model.roadmap[0])}"
-            f"{_cockpit_section(read_model.roadmap[1])}"
-            f"{_cockpit_section(read_model.roadmap[2])}"
-            f"{_cockpit_section(read_model.roadmap[3])}"
+            f"{_cockpit_sections(read_model.roadmap)}"
             "</section>"
             '<section class="cockpit-grid">'
             f"{_cockpit_secondary_sections(read_model)}"
@@ -726,7 +725,9 @@ def _cockpit_knowledge_summary(
     source_summary_pages = sum(
         1 for document in wiki_documents if document.path.startswith("wiki/sources/")
     )
-    review_needed = sum(1 for document in wiki_documents if document.status == "review_needed")
+    review_needed = sum(
+        1 for document in wiki_documents if document.review_state in _REVIEW_NEEDED_STATES
+    )
     source_manifest_count = sum(
         1 for path in layout.source_records_dir.glob("*.json") if path.is_file()
     )
@@ -804,11 +805,9 @@ def _cockpit_log_entries(layout: ResolvedLayout, *, limit: int) -> list[_Cockpit
                         detail="wiki/log.md",
                     )
                 )
-                if len(entries) >= limit:
-                    break
     except OSError:
         return []
-    return entries
+    return list(reversed(entries[-limit:]))
 
 
 def _cockpit_inspect_next(
@@ -880,6 +879,10 @@ def _cockpit_section(section: _CockpitSection) -> str:
         f"<ul>{items}</ul>"
         "</section>"
     )
+
+
+def _cockpit_sections(sections: list[_CockpitSection]) -> str:
+    return "".join(_cockpit_section(section) for section in sections)
 
 
 def _cockpit_secondary_sections(read_model: _CockpitHomeReadModel) -> str:
@@ -1168,6 +1171,7 @@ def _document_summary(root: Path, layout: ResolvedLayout, path: Path) -> _Docume
         document_class=document_class,
         kind=metadata.get("kind") or default_kind,
         status=metadata.get("status"),
+        review_state=metadata.get("review_state"),
     )
 
 
@@ -1192,6 +1196,7 @@ def _read_listing_metadata(path: Path) -> dict[str, str | None]:
         "title": _frontmatter_string(frontmatter, "title") or heading,
         "kind": _frontmatter_string(frontmatter, "kind"),
         "status": _frontmatter_string(frontmatter, "status"),
+        "review_state": _frontmatter_string(frontmatter, "review_state"),
     }
 
 
