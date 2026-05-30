@@ -51,6 +51,7 @@ def test_home_page_loads_for_initialized_workspace(tmp_path: Path) -> None:
     assert "Wiki content pages" in response.text
     assert "/browse" in response.text
     assert "/planning" in response.text
+    assert "/recent" in response.text
     assert "/runs" in response.text
     assert "/queue" in response.text
     assert "/status" in response.text
@@ -255,6 +256,143 @@ def test_home_page_renders_cockpit_read_model(tmp_path: Path) -> None:
     assert "Added cockpit read model evidence." in response.text
     assert "Inspect next" in response.text
     assert "Raw workspace counts" in response.text
+
+
+def test_recent_page_renders_log_and_run_events(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    layout.log_file.write_text(
+        "# Project Log\n\n"
+        "Intro text that should still render when entries are parsed.\n\n"
+        "## Timeline\n\n"
+        "- 2026-05-01T09:00:00+00:00 Ingested initial source.\n"
+        "- Recorded untimed operator note.\n\n"
+        "## Decisions\n\n"
+        "- 2026-05-03 Accepted the log surface.\n",
+        encoding="utf-8",
+    )
+    write_run_record(
+        layout.runs_dir / "run-old.json",
+        RunRecord(
+            run_id="run-old",
+            job_id="ingest-old",
+            job_type="ingest_source",
+            started_at="2026-05-01T10:00:00+00:00",
+            finished_at="2026-05-01T10:01:00+00:00",
+            status="succeeded",
+            input_refs=[],
+            output_refs=[],
+            pipeline_version="test",
+        ),
+    )
+    write_run_record(
+        layout.runs_dir / "run-new.json",
+        RunRecord(
+            run_id="run-new",
+            job_id="ingest-new",
+            job_type="ingest_source",
+            started_at="2026-05-04T10:00:00+00:00",
+            finished_at="2026-05-04T10:01:00+00:00",
+            status="failed",
+            input_refs=["state/manifests/sources/src-new.json"],
+            output_refs=[],
+            pipeline_version="test",
+            source_ids=["src-new"],
+            page_refs=["wiki/sources/src-new.md"],
+        ),
+    )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/recent")
+
+    assert response.status_code == 200
+    assert "Recent insights from wiki/log.md" in response.text
+    assert "Durable run events" in response.text
+    assert "Rendered wiki log" in response.text
+    assert "<h1>Project Log</h1>" in response.text
+    assert "Intro text that should still render" in response.text
+    assert response.text.index("Accepted the log surface.") < response.text.index(
+        "Recorded untimed operator note."
+    )
+    assert "Time: <code>2026-05-03</code>" in response.text
+    assert response.text.index("failed run run-new") < response.text.index("succeeded run run-old")
+    assert "1 sources" in response.text
+    assert "1 pages" in response.text
+    assert 'href="/documents/wiki/log.md"' in response.text
+    assert 'href="/runs"' in response.text
+
+
+def test_recent_page_handles_missing_log_with_raw_run_access(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    layout.log_file.unlink()
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/recent")
+
+    assert response.status_code == 200
+    assert "No <code>wiki/log.md</code> file exists yet." in response.text
+    assert "No bullet entries found in the wiki log yet." in response.text
+    assert 'href="/documents/wiki/log.md"' not in response.text
+    assert 'href="/runs"' in response.text
+
+
+def test_home_recent_activity_promotes_latest_log_entry_over_run_noise(tmp_path: Path) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    layout.log_file.write_text(
+        "# Project Log\n\n"
+        "## Timeline\n\n"
+        "- 2026-05-01T09:00:00+00:00 Old log entry.\n"
+        "- 2026-05-05T09:00:00+00:00 Latest operator insight.\n",
+        encoding="utf-8",
+    )
+    for index in range(4):
+        write_run_record(
+            layout.runs_dir / f"run-{index}.json",
+            RunRecord(
+                run_id=f"run-{index}",
+                job_id=f"ingest-{index}",
+                job_type="ingest_source",
+                started_at=f"2026-05-0{index + 1}T10:00:00+00:00",
+                finished_at=f"2026-05-0{index + 1}T10:01:00+00:00",
+                status="succeeded",
+                input_refs=[],
+                output_refs=[],
+                pipeline_version="test",
+            ),
+        )
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Latest operator insight." in response.text
+    assert 'href="/recent#log-entry-2"' in response.text
+    assert response.text.index("Latest operator insight.") < response.text.index("run-3")
+
+
+def test_home_recent_activity_does_not_read_full_log_body(tmp_path: Path, monkeypatch) -> None:
+    initialize_workspace(tmp_path)
+    layout = resolve_layout(tmp_path, load_config(tmp_path))
+    layout.log_file.write_text(
+        "# Project Log\n\n## Timeline\n\n- Latest bounded log entry.\n" + ("body\n" * 500),
+        encoding="utf-8",
+    )
+    original_read_text = Path.read_text
+
+    def fail_full_log_read(path: Path, *args, **kwargs):
+        if path == layout.log_file:
+            raise AssertionError("home should not read the full wiki log body")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_full_log_read)
+    client = TestClient(create_app(tmp_path))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Latest bounded log entry." in response.text
 
 
 def test_home_page_reports_invalid_runtime_records_as_attention(tmp_path: Path) -> None:

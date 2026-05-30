@@ -162,7 +162,7 @@ first implementation of each route may be modest, but the information hierarchy 
 | `/queue` | What work is pending, stuck, or failed? | Prioritize pending, retry-scheduled, failed, dead-letter, or stale-lease records with evidence and CLI hints; keep raw queue records visible. |
 | `/sources/*` | What source produced or changed this knowledge? | Show source title/path, source state, linked source-summary page, latest run, provenance, and affected synthesis suggestions before manifest internals. |
 | Future `/attention` | What needs inspection now? | Promote the shared attention read model once `/` and `/status` prove enough item types to justify a dedicated route. |
-| Future `/recent` | What changed or was learned recently? | Render `wiki/log.md` and durable run/page/planning timestamps without per-user last-seen state or filesystem mtime dependence. |
+| `/recent` | What changed or was learned recently? | Render `wiki/log.md` and durable run/page/planning timestamps without per-user last-seen state or filesystem mtime dependence. |
 
 Route implementations should share read models where the same judgment appears in more than one
 place. For example, "current work" should come from the current-work authority layer, and attention
@@ -287,9 +287,10 @@ from reverse local scans before the technical metadata block.
 
 ## Recent Insights And Log Contract
 
-`wiki/log.md` should become a first-class human recent-insights surface. It remains readable
-markdown. A renderer may parse headings and lightweight metadata when available, but must fall back
-to rendering the file as-is when the structure is absent.
+`M20-P4.6` makes `wiki/log.md` a first-class human recent-insights surface through `/recent`. The
+log remains readable markdown. The renderer parses headings and lightweight bullet/timestamp
+metadata when available, but falls back to rendering the file body as-is when the structure is
+absent.
 
 Recent activity can also include explicit durable records:
 

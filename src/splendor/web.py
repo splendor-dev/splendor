@@ -232,6 +232,23 @@ class _CockpitLink:
 
 
 @dataclass(frozen=True)
+class _LogInsight:
+    anchor: str
+    title: str
+    section: str
+    timestamp: str | None
+
+
+@dataclass(frozen=True)
+class _RecentReadModel:
+    log_path: str
+    log_exists: bool
+    log_body: str
+    log_insights: list[_LogInsight]
+    run_events: list[_CockpitLink]
+
+
+@dataclass(frozen=True)
 class _CockpitSection:
     title: str
     items: list[_CockpitLink]
@@ -295,6 +312,7 @@ def create_app(root: Path) -> FastAPI:
             "</form>"
             '<a class="button" href="/browse">Browse documents</a>'
             '<a class="button secondary" href="/planning">Planning</a>'
+            '<a class="button secondary" href="/recent">Recent</a>'
             '<a class="button secondary" href="/runs">Runs</a>'
             '<a class="button secondary" href="/queue">Queue</a>'
             '<a class="button secondary" href="/status">Status</a>'
@@ -521,6 +539,41 @@ def create_app(root: Path) -> FastAPI:
             f"<tbody>{rows}</tbody></table>"
         )
         return _page("Queue", body, root=workspace_root, layout=layout)
+
+    @app.get("/recent", response_class=HTMLResponse)
+    def recent() -> HTMLResponse:
+        layout = _layout_for(workspace_root)
+        read_model = _build_recent_read_model(workspace_root, layout)
+        if read_model.log_exists:
+            log_ref = (
+                f'<a href="/documents/{quote(read_model.log_path, safe="/")}">'
+                f"<code>{html.escape(read_model.log_path)}</code></a>"
+            )
+            log_article = (
+                f'<article class="markdown">{_render_markdown(read_model.log_body)}</article>'
+            )
+        else:
+            log_ref = f"<code>{html.escape(read_model.log_path)}</code> (missing)"
+            log_article = (
+                '<p class="empty">No <code>wiki/log.md</code> file exists yet. '
+                "Run <code>uv run splendor init</code> or restore the workspace log.</p>"
+            )
+        body = (
+            '<p class="breadcrumbs"><a href="/">Home</a> / Recent</p>'
+            '<p class="empty">Recent insights are derived from durable local files only: '
+            "<code>wiki/log.md</code> and run records. This page does not track per-user "
+            "last-seen state or mutate workspace files.</p>"
+            f"{_recent_insights_section(read_model.log_insights)}"
+            f"{_recent_runs_section(read_model.run_events)}"
+            "<h2>Rendered wiki log</h2>"
+            f"{log_article}"
+            '<details class="technical">'
+            "<summary>Raw recent records</summary>"
+            f"<p>Wiki log: {log_ref}</p>"
+            '<p>Run records: <a href="/runs">/runs</a></p>'
+            "</details>"
+        )
+        return _page("Recent", body, root=workspace_root, layout=layout)
 
     @app.get("/sources/{source_id}", response_class=HTMLResponse)
     def source_detail(source_id: str) -> HTMLResponse:
@@ -870,54 +923,147 @@ def _cockpit_knowledge_summary(
 
 
 def _cockpit_recent_activity(root: Path, layout: ResolvedLayout) -> list[_CockpitLink]:
+    read_model = _build_recent_read_model(
+        root,
+        layout,
+        run_limit=3,
+        log_limit=3,
+        include_log_body=False,
+    )
     items: list[_CockpitLink] = []
-    try:
-        for run in _run_records(root, layout)[:3]:
-            record = run.record
-            finished = record.finished_at or record.started_at
-            items.append(
-                _CockpitLink(
-                    title=f"{record.status} run {record.run_id}",
-                    href="/runs",
-                    detail=f"{finished} · {len(record.page_refs)} pages",
-                )
-            )
-    except (ValueError, ValidationError):
+    if read_model.log_insights:
+        latest_log = read_model.log_insights[0]
+        items.append(
+            _log_insight_link(latest_log),
+        )
+    items.extend(read_model.run_events[: max(0, 3 - len(items))])
+    for insight in read_model.log_insights[1 : max(1, 3 - len(items) + 1)]:
+        items.append(_log_insight_link(insight))
+    if not items and read_model.log_exists:
         items.append(
             _CockpitLink(
-                title="Run records need inspection",
-                href="/runs",
-                detail="At least one durable run record could not be parsed.",
+                title="Open wiki log",
+                href="/recent",
+                detail="Rendered recent-insights surface from wiki/log.md.",
             )
         )
-    items.extend(_cockpit_log_entries(layout, limit=max(0, 3 - len(items))))
     return items[:3]
 
 
-def _cockpit_log_entries(layout: ResolvedLayout, *, limit: int) -> list[_CockpitLink]:
+def _build_recent_read_model(
+    root: Path,
+    layout: ResolvedLayout,
+    *,
+    run_limit: int = 8,
+    log_limit: int = 12,
+    include_log_body: bool = True,
+) -> _RecentReadModel:
+    log_path = layout.log_file.relative_to(root).as_posix()
+    log_body = ""
+    log_exists = layout.log_file.is_file()
+    if log_exists and include_log_body:
+        try:
+            log_body = layout.log_file.read_text(encoding="utf-8")
+        except OSError:
+            log_exists = False
+            log_body = ""
+    return _RecentReadModel(
+        log_path=log_path,
+        log_exists=log_exists,
+        log_body=log_body,
+        log_insights=_parse_log_insights(layout, limit=log_limit),
+        run_events=_recent_run_events(root, layout, limit=run_limit),
+    )
+
+
+def _parse_log_insights(layout: ResolvedLayout, *, limit: int) -> list[_LogInsight]:
     if limit <= 0 or not layout.log_file.is_file():
         return []
-    entries: list[_CockpitLink] = []
+    entries: list[_LogInsight] = []
+    section = "Log"
     try:
         with layout.log_file.open("r", encoding="utf-8") as handle:
             for line in handle:
                 stripped = line.strip()
+                heading = _heading_from_line(stripped) or _subheading_from_line(stripped)
+                if heading:
+                    section = heading
+                    continue
                 if not stripped.startswith("- "):
                     continue
-                entry = stripped.removeprefix("- ").strip()
-                if not entry:
+                text = stripped.removeprefix("- ").strip()
+                if not text:
                     continue
-                log_path = layout.log_file.relative_to(layout.root).as_posix()
+                source_order = len(entries) + 1
+                timestamp, title = _split_log_timestamp(text)
                 entries.append(
-                    _CockpitLink(
-                        title=entry,
-                        href=f"/documents/{quote(log_path, safe='/')}",
-                        detail="wiki/log.md",
+                    _LogInsight(
+                        anchor=f"log-entry-{source_order}",
+                        title=title,
+                        section=section,
+                        timestamp=timestamp,
                     )
                 )
     except OSError:
         return []
     return list(reversed(entries[-limit:]))
+
+
+def _log_insight_link(insight: _LogInsight) -> _CockpitLink:
+    return _CockpitLink(
+        title=insight.title,
+        href=f"/recent#{insight.anchor}",
+        detail=_log_insight_detail(insight),
+    )
+
+
+def _subheading_from_line(line: str) -> str | None:
+    stripped = line.strip()
+    if stripped.startswith("## "):
+        return stripped.removeprefix("## ").strip()
+    if stripped.startswith("### "):
+        return stripped.removeprefix("### ").strip()
+    return None
+
+
+def _split_log_timestamp(text: str) -> tuple[str | None, str]:
+    match = re.match(
+        r"^(?P<timestamp>\d{4}-\d{2}-\d{2}(?:T[0-9:.+-]+| [0-9:.+-]+)?)\s+"
+        r"(?P<title>.+)$",
+        text,
+    )
+    if match is None:
+        return None, text
+    return match.group("timestamp"), match.group("title").strip()
+
+
+def _recent_run_events(root: Path, layout: ResolvedLayout, *, limit: int) -> list[_CockpitLink]:
+    if limit <= 0:
+        return []
+    try:
+        runs = _run_records(root, layout)
+    except (ValueError, ValidationError):
+        return [
+            _CockpitLink(
+                title="Run records need inspection",
+                href="/runs",
+                detail="At least one durable run record could not be parsed.",
+            )
+        ]
+    links: list[_CockpitLink] = []
+    for run in runs[:limit]:
+        record = run.record
+        finished = record.finished_at or record.started_at
+        sources = f"{len(record.source_ids)} sources"
+        pages = f"{len(record.page_refs)} pages"
+        links.append(
+            _CockpitLink(
+                title=f"{record.status} run {record.run_id}",
+                href="/runs",
+                detail=f"{finished} · {sources} · {pages}",
+            )
+        )
+    return links
 
 
 def _cockpit_inspect_next(
@@ -1319,6 +1465,62 @@ def _cockpit_secondary_sections(read_model: _CockpitHomeReadModel) -> str:
         _CockpitSection("Inspect next", read_model.inspect_next, "No inspection links yet."),
     ]
     return "".join(_cockpit_section(section) for section in sections)
+
+
+def _recent_insights_section(insights: list[_LogInsight]) -> str:
+    if not insights:
+        return (
+            '<section class="recent-panel">'
+            "<h2>Recent insights from wiki/log.md</h2>"
+            '<p class="empty">No bullet entries found in the wiki log yet.</p>'
+            "</section>"
+        )
+    items = "".join(_log_insight_item(insight) for insight in insights)
+    return (
+        '<section class="recent-panel">'
+        "<h2>Recent insights from wiki/log.md</h2>"
+        '<p class="empty">Latest parsed bullet entries, newest first by log order.</p>'
+        f"<ol>{items}</ol>"
+        "</section>"
+    )
+
+
+def _log_insight_item(insight: _LogInsight) -> str:
+    timestamp = ""
+    if insight.timestamp:
+        timestamp = f"<span>Time: <code>{html.escape(insight.timestamp)}</code></span>"
+    return (
+        f'<li id="{html.escape(insight.anchor)}">'
+        f"<strong>{html.escape(insight.title)}</strong>"
+        f"<span>{html.escape(_log_insight_detail(insight))}</span>"
+        f"{timestamp}"
+        "</li>"
+    )
+
+
+def _log_insight_detail(insight: _LogInsight) -> str:
+    detail = f"wiki/log.md · {insight.section}"
+    if insight.timestamp:
+        detail += f" · {insight.timestamp}"
+    return detail
+
+
+def _recent_runs_section(run_events: list[_CockpitLink]) -> str:
+    if not run_events:
+        return (
+            '<section class="recent-panel">'
+            "<h2>Durable run events</h2>"
+            '<p class="empty">No run records found.</p>'
+            "</section>"
+        )
+    items = "".join(_cockpit_link_item(event) for event in run_events)
+    return (
+        '<section class="recent-panel">'
+        "<h2>Durable run events</h2>"
+        '<p class="empty">Latest run records, sorted by recorded run timestamps.</p>'
+        f"<ul>{items}</ul>"
+        "</section>"
+    )
 
 
 def _cockpit_link_item(item: _CockpitLink) -> str:
@@ -2743,6 +2945,10 @@ def _page(
         "padding-top:0}"
         ".knowledge-panel a,.relationship-panel a{font-weight:600}"
         ".knowledge-panel span,.relationship-panel span{display:block;color:var(--muted)}"
+        ".recent-panel{border:1px solid var(--border);border-radius:8px;padding:14px;"
+        "background:var(--surface);margin:0 0 22px}"
+        ".recent-panel ol,.recent-panel ul{margin:10px 0 0;padding-left:22px}"
+        ".recent-panel li{padding:7px 0}.recent-panel span{display:block;color:var(--muted)}"
         ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
         ".stats div,.metadata,.result,.empty-state{border:1px solid var(--border);"
         "border-radius:8px;"
