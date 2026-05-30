@@ -326,6 +326,48 @@ _CURRENT_WORK_LINE_PATTERNS = (
         re.IGNORECASE,
     ),
 )
+_ACTIVE_TASK_TERMS = (
+    "active",
+    "current",
+    "in progress",
+    "implementation",
+    "next implementation",
+)
+_UNCHECKED_NEXT_TERMS = ("next", "next planned", "real next", "follows", "follow with")
+_GATED_FOLLOW_ON_TERMS = (
+    "gated",
+    "follow-on",
+    "follow on",
+    "after",
+    "behind",
+    "depends",
+    "blocked",
+)
+_BLOCKER_CONTEXT_TERMS = (
+    "blocker",
+    "prerequisite",
+    "prereq",
+    "requires",
+    "needed before",
+    "missing",
+)
+_COMPLETED_CONTEXT_TERMS = (
+    "complete",
+    "completed",
+    "done",
+    "merged",
+    "closed",
+    "release note",
+    "release notes",
+)
+_HISTORICAL_CONTEXT_TERMS = (
+    "historical",
+    "history",
+    "superseded",
+    "archived",
+    "old",
+    "retrospective",
+)
 
 
 @dataclass(frozen=True)
@@ -480,12 +522,26 @@ class HandoffCurrentState:
 
 
 @dataclass(frozen=True)
+class ClassifiedPlanningEvidence:
+    slice_id: str
+    evidence_class: str
+    path: str
+    line: str
+
+
+@dataclass(frozen=True)
 class CurrentPlannedWork:
     slice_id: str
     planned_slice: str | None
     authority_paths: list[str]
     predecessor_slices: list[str]
     reason: str
+    evidence_class: str | None = None
+    predecessor_evidence: list[dict[str, str]] | None = None
+    gated_follow_ons: list[dict[str, str]] | None = None
+    blocker_context: list[dict[str, str]] | None = None
+    lower_priority_conflicts: list[dict[str, str]] | None = None
+    selection_reconciled: bool = False
 
 
 @dataclass(frozen=True)
@@ -1591,6 +1647,97 @@ def _handoff_current_state(root: Path, git_context: GitContext) -> HandoffCurren
     )
 
 
+def _classified_planning_evidence(
+    root: Path, authority_briefs: list[AuthorityBrief] | None = None
+) -> list[ClassifiedPlanningEvidence]:
+    evidence: list[ClassifiedPlanningEvidence] = []
+    for relpath in _current_work_fallback_paths(root, authority_briefs or []):
+        path = root / relpath
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        heading_context = ""
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                heading_context = stripped.lstrip("#").strip().lower()
+                continue
+            if not stripped:
+                continue
+            line_context = " ".join([heading_context, stripped.lower()])
+            slice_ids = list(dict.fromkeys(_ROADMAP_SLICE_PATTERN.findall(stripped)))
+            if not slice_ids:
+                continue
+            evidence_class = _classify_planning_line(line_context)
+            if evidence_class is None:
+                continue
+            for slice_id in slice_ids:
+                evidence.append(
+                    ClassifiedPlanningEvidence(
+                        slice_id=slice_id,
+                        evidence_class=evidence_class,
+                        path=relpath,
+                        line=stripped,
+                    )
+                )
+    return evidence
+
+
+def _classify_planning_line(text: str) -> str | None:
+    if _contains_any(text, _COMPLETED_CONTEXT_TERMS):
+        return "completed_work"
+    if _contains_any(text, _GATED_FOLLOW_ON_TERMS):
+        return "gated_follow_on"
+    if _contains_any(text, _BLOCKER_CONTEXT_TERMS):
+        return "blocker_or_prerequisite_context"
+    if _contains_any(text, _HISTORICAL_CONTEXT_TERMS):
+        return "historical_or_superseded_context"
+    if "- [ ]" in text or _contains_any(text, _UNCHECKED_NEXT_TERMS):
+        return "unchecked_next_task"
+    if _contains_any(text, _ACTIVE_TASK_TERMS):
+        return "active_task"
+    return None
+
+
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
+def _classified_evidence_for_json(
+    evidence: list[ClassifiedPlanningEvidence], *, exclude_slice: str | None = None
+) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for item in evidence:
+        if exclude_slice is not None and item.slice_id == exclude_slice:
+            continue
+        key = (item.slice_id, item.evidence_class, item.path, item.line)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(
+            {
+                "slice_id": item.slice_id,
+                "evidence_class": item.evidence_class,
+                "path": item.path,
+                "line": item.line,
+            }
+        )
+    return items
+
+
+def _classified_evidence_by_class(
+    evidence: list[ClassifiedPlanningEvidence],
+    classes: set[str],
+    *,
+    exclude_slice: str | None = None,
+) -> list[dict[str, str]]:
+    return _classified_evidence_for_json(
+        [item for item in evidence if item.evidence_class in classes], exclude_slice=exclude_slice
+    )
+
+
 def _current_planned_work(
     root: Path,
     git_context: GitContext,
@@ -1603,14 +1750,20 @@ def _current_planned_work(
     if handoff_current_state is not None or not _is_current_work_goal(goal_tokens, goal):
         return None
 
-    structured = _structured_current_planned_work(root, git_context, authority_briefs)
+    classified_evidence = _classified_planning_evidence(root, authority_briefs)
+    structured = _structured_current_planned_work(
+        root, git_context, authority_briefs, classified_evidence
+    )
     if structured is not None:
         return structured
-    return _line_inferred_current_planned_work(root, authority_briefs)
+    return _line_inferred_current_planned_work(root, authority_briefs, classified_evidence)
 
 
 def _structured_current_planned_work(
-    root: Path, git_context: GitContext, authority_briefs: list[AuthorityBrief]
+    root: Path,
+    git_context: GitContext,
+    authority_briefs: list[AuthorityBrief],
+    classified_evidence: list[ClassifiedPlanningEvidence],
 ) -> CurrentPlannedWork | None:
     states = _planning_state_by_path(root, authority_briefs)
     if not states:
@@ -1649,17 +1802,51 @@ def _structured_current_planned_work(
         reason_parts.append("Reconciled disagreement: " + "; ".join(disagreements[:3]) + ".")
     if use_next and current_slice:
         reason_parts.append(f"{current_slice} is predecessor context; lead with {slice_id}.")
+    selected_evidence = [
+        item for item in classified_evidence if item.slice_id == slice_id and item.evidence_class
+    ]
+    evidence_class = (
+        selected_evidence[0].evidence_class
+        if selected_evidence
+        else "reconciled_current_status_row"
+        if use_next
+        else "current_status_row"
+    )
     return CurrentPlannedWork(
         slice_id=slice_id,
         planned_slice=next_planned_slice if use_next and next_planned_slice else planned_slice,
         authority_paths=sorted(dict.fromkeys(authority_paths)),
         predecessor_slices=predecessor_slices,
         reason=" ".join(reason_parts),
+        evidence_class=evidence_class,
+        predecessor_evidence=_classified_evidence_by_class(
+            classified_evidence,
+            {"completed_work"},
+            exclude_slice=slice_id,
+        ),
+        gated_follow_ons=_classified_evidence_by_class(
+            classified_evidence,
+            {"gated_follow_on"},
+            exclude_slice=slice_id,
+        ),
+        blocker_context=_classified_evidence_by_class(
+            classified_evidence,
+            {"blocker_or_prerequisite_context"},
+            exclude_slice=slice_id,
+        ),
+        lower_priority_conflicts=_classified_evidence_by_class(
+            classified_evidence,
+            {"historical_or_superseded_context", "active_task", "unchecked_next_task"},
+            exclude_slice=slice_id,
+        ),
+        selection_reconciled=use_next or bool(disagreements),
     )
 
 
 def _line_inferred_current_planned_work(
-    root: Path, authority_briefs: list[AuthorityBrief]
+    root: Path,
+    authority_briefs: list[AuthorityBrief],
+    classified_evidence: list[ClassifiedPlanningEvidence],
 ) -> CurrentPlannedWork | None:
     for relpath in _current_work_fallback_paths(root, authority_briefs):
         path = root / relpath
@@ -1669,7 +1856,13 @@ def _line_inferred_current_planned_work(
             continue
         for line in lines:
             normalized = line.lower()
-            if any(word in normalized for word in ("historical", "completed", "done", "merged")):
+            line_class = _classify_planning_line(normalized)
+            if line_class in {
+                "blocker_or_prerequisite_context",
+                "completed_work",
+                "gated_follow_on",
+                "historical_or_superseded_context",
+            }:
                 continue
             for pattern in _CURRENT_WORK_LINE_PATTERNS:
                 match = pattern.search(line)
@@ -1684,6 +1877,27 @@ def _line_inferred_current_planned_work(
                     reason=(
                         "Conventional authority text identifies the current handoff target: "
                         f"{line.strip()}"
+                    ),
+                    evidence_class="active_task",
+                    predecessor_evidence=_classified_evidence_by_class(
+                        classified_evidence,
+                        {"completed_work"},
+                        exclude_slice=slice_id,
+                    ),
+                    gated_follow_ons=_classified_evidence_by_class(
+                        classified_evidence,
+                        {"gated_follow_on"},
+                        exclude_slice=slice_id,
+                    ),
+                    blocker_context=_classified_evidence_by_class(
+                        classified_evidence,
+                        {"blocker_or_prerequisite_context"},
+                        exclude_slice=slice_id,
+                    ),
+                    lower_priority_conflicts=_classified_evidence_by_class(
+                        classified_evidence,
+                        {"historical_or_superseded_context", "active_task", "unchecked_next_task"},
+                        exclude_slice=slice_id,
                     ),
                 )
     return None
@@ -2723,12 +2937,29 @@ def _suggestion_candidates(snapshot: BriefStateSnapshot) -> list[SuggestedAction
         predecessor_note = (
             f" Predecessor context remains visible: {predecessors}." if predecessors else ""
         )
+        gated_note = (
+            " Gated follow-ons remain behind the selected work: "
+            + ", ".join(item["slice_id"] for item in (work.gated_follow_ons or [])[:3])
+            + "."
+            if work.gated_follow_ons
+            else ""
+        )
+        blocker_note = (
+            " Blocker/prerequisite context is not the selected slice: "
+            + ", ".join(item["slice_id"] for item in (work.blocker_context or [])[:3])
+            + "."
+            if work.blocker_context
+            else ""
+        )
         planned_note = f" ({work.planned_slice})" if work.planned_slice else ""
         add(
             "high",
             "current-state",
             f"Continue {work.slice_id}{planned_note} from current planning authority",
-            f"{work.reason} Authority: {authority_paths}.{predecessor_note}",
+            (
+                f"{work.reason} Authority: {authority_paths}."
+                f"{predecessor_note}{gated_note}{blocker_note}"
+            ),
             None,
             record_id=work.slice_id,
             path=work.authority_paths[0] if work.authority_paths else None,

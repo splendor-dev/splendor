@@ -3346,6 +3346,124 @@ def test_agent_context_hocrgen_current_authority_beats_merged_pr_and_maintenance
         assert payload["maintenance_context"]["actions"][0]["category"] == "source-freshness"
 
 
+def test_agent_context_hocrgen_retry_classifies_gated_and_blocker_context(
+    tmp_path: Path, capsys
+) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `F6f1`\n"
+        "- Current planned slice: `F6 current public-beta closure`\n"
+        "- Current PR sub-slice: `F6f2`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `F6 follow-on scaleout`\n"
+        "- Next planned PR sub-slice: `F6g`\n\n"
+        "## Current Work\n\n"
+        "- [ ] F6f2: build the narrow synthetic target scale acceptance path.\n"
+        "- [ ] F6g: gated follow-on after F6f2 expands the larger batch.\n\n"
+        "## Blocker Context\n\n"
+        "- F1c is old blocker/prerequisite context for synthetic target scale, not current work.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# hocrgen\n\n"
+        "- Previous completed PR sub-slice: `F6f1`\n"
+        "- Current planned slice: `F6 current public-beta closure`\n"
+        "- Current PR sub-slice: `F6f2`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `F6 follow-on scaleout`\n"
+        "- Next planned PR sub-slice: `F6g`\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    brief_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "brief",
+            "--agent-context",
+            "--no-git",
+            "continue",
+            "the",
+            "current",
+            "hocrgen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    brief_payload = json.loads(capsys.readouterr().out)
+    suggest_exit = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "continue",
+            "the",
+            "current",
+            "hocrgen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    suggest_payload = json.loads(capsys.readouterr().out)
+
+    assert brief_exit == 0
+    assert suggest_exit == 0
+    for payload in (brief_payload, suggest_payload):
+        current = payload["current_planned_work"]
+        assert current["slice_id"] == "F6f2"
+        assert current["evidence_class"] in {"active_task", "current_status_row"}
+        assert {item["slice_id"] for item in current["gated_follow_ons"]} == {"F6g"}
+        assert {item["slice_id"] for item in current["blocker_context"]} == {"F1c"}
+        action = payload["work_context"]["actions"][0]
+        assert action["category"] == "current-state"
+        assert "F6f2" in action["title"]
+        assert "F6g" in action["reason"]
+        assert "F1c" in action["reason"]
+        assert "F1c" not in action["title"]
+
+
+def test_agent_context_hocrsyngen_retry_still_selects_s8b(tmp_path: Path, capsys) -> None:
+    initialize_workspace(tmp_path)
+    (tmp_path / ".agent-plan.md").write_text(
+        "# Agent Plan\n\n"
+        "- Previous completed PR sub-slice: `S8a`\n"
+        "- Current planned slice: `S8 production script abstraction`\n"
+        "- Current PR sub-slice: `S8b`\n"
+        "- Current PR lifecycle: `branch=in-progress; main=merged`\n"
+        "- Next planned slice: `S8 follow-on import polish`\n"
+        "- Next planned PR sub-slice: `S8c`\n\n"
+        "Current implementation work: `S8b` stabilizes the hocrsyngen handoff.\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "--root",
+            str(tmp_path),
+            "suggest-next",
+            "--no-git",
+            "continue",
+            "current",
+            "hocrsyngen",
+            "roadmap",
+            "work",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["current_planned_work"]["slice_id"] == "S8b"
+    assert payload["work_context"]["actions"][0]["category"] == "current-state"
+    assert "S8b" in payload["work_context"]["actions"][0]["title"]
+
+
 def test_agent_context_keeps_matching_open_work_thread_ahead_of_current_authority(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:

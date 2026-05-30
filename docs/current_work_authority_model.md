@@ -100,8 +100,8 @@ and lint/health drift are maintenance context. They can lead only for maintenanc
 
 ## Extraction Contract
 
-M20-P1.6 should implement classification through deterministic extraction before relevance
-scoring. The extractor should not treat every matched slice token as an equally valid candidate.
+M20-P1.6 implements classification through deterministic extraction before relevance scoring. The
+extractor should not treat every matched slice token as an equally valid candidate.
 
 ### Source Priority
 
