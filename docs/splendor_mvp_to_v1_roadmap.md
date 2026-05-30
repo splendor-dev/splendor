@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.2`
-- Current planned slice: `M20 planning roadmap view (#194)`
-- Current PR sub-slice: `M20-P4.3`
+- Previous completed PR sub-slice: `M20-P4.3`
+- Current planned slice: `M20 attention and health interpretation (#196)`
+- Current PR sub-slice: `M20-P4.4`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 attention and health interpretation`
-- Next planned PR sub-slice: `M20-P4.4`
+- Next planned slice: `M20 knowledge-map navigation`
+- Next planned PR sub-slice: `M20-P4.5`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1512,6 +1512,13 @@ kind-specific planning tables reachable for audit and debugging. The implementat
 read-only and request-time over local planning files; it does not add mutation flows, background
 jobs, databases, hosted services, broad search changes, or external APIs. Deeper attention and
 health interpretation remains the next cockpit-track follow-up in `M20-P4.4`.
+
+`M20-P4.4` (#196) adds shared read-only attention and health interpretation across the home,
+status, planning, runs, and queue web routes. The implementation promotes review-needed pages,
+source coverage gaps, failed or incomplete runs, queue records that need inspection, and blocked or
+open planning records into human explanations with evidence references and CLI hints while keeping
+the raw tables and documents available. Knowledge-map navigation from related pages, tags,
+provenance, and backlinks remains the next cockpit-track follow-up in `M20-P4.5`.
 
 ---
 
