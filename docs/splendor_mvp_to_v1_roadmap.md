@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.5`
-- Current planned slice: `M20 recent insights and log rendering (#200)`
-- Current PR sub-slice: `M20-P4.6`
+- Previous completed PR sub-slice: `M20-P4.6`
+- Current planned slice: `M20 post-cockpit follow-up selection (#202)`
+- Current PR sub-slice: `M20-P5.0`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 follow-up selection pending`
-- Next planned PR sub-slice: `TBD`
+- Next planned slice: `M20 work-footer maintenance action isolation (#161)`
+- Next planned PR sub-slice: `M20-P5.1`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1389,6 +1389,9 @@ the selected M20 implementation.
 - `M20-P4.4` Add attention and health interpretation for review, run, queue, and planning state.
 - `M20-P4.5` Add knowledge-map navigation from related pages, tags, provenance, and backlinks.
 - `M20-P4.6` Render recent insights and `wiki/log.md` as a first-class local web surface.
+- `M20-P5.0` Select the post-cockpit follow-up slice.
+- `M20-P5.1` Remove maintenance-only `wiki suggest` guidance from the work-context action footer
+  (#161).
 
 `M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
 first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
@@ -1439,6 +1442,12 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P4.0` human operator cockpit and wiki navigation design/spec contract.
 - `M20-P4.1` human-first page detail layout and deterministic project identity.
 - `M20-P4.2` first read-only cockpit home read model.
+- `M20-P4.3` planning roadmap view.
+- `M20-P4.4` attention and health interpretation.
+- `M20-P4.5` knowledge-map navigation.
+- `M20-P4.6` recent insights and log rendering.
+- `M20-P5.0` post-cockpit follow-up selection.
+- `M20-P5.1` work-footer maintenance action isolation.
 
 `M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
 while defining the narrow first mutation paths worth implementing later: accept one reviewed
@@ -1533,6 +1542,15 @@ from local filesystem state while keeping raw log and run records reachable. It 
 last-seen state, filesystem mtime ordering, mutation flows, background workers, databases, hosted
 services, and new persistent indexes. The `M20-P4` cockpit sequence is complete enough that the
 next roadmap sub-slice should be selected explicitly rather than inferred from this track.
+
+`M20-P5.0` (#202) is that explicit selection slice. The remaining open Milestone 20 polish issues
+at this selection point (#160-#163) are all bounded, but they are not equally good as the immediate
+next step. The ordering rule is to prefer the smallest fix that improves the agent handoff path
+most directly. #161 wins that filter because it is a narrow bug in `brief --agent-context`: remove
+the maintenance-only `splendor wiki suggest <source-id>` action from the work footer while
+preserving explicit maintenance guidance where it belongs. #160 remains a broader goal-sensitive
+ranking refinement, #162 is isolated no-diff `pr-summary` human-output polish, and #163 is a
+queue-clean JSON compatibility-contract cleanup.
 
 ---
 
