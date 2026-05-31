@@ -187,12 +187,12 @@ non-draft GitHub PR with labels, milestone, and a clear description.
 
 ## What Comes Next
 
-- Previous completed PR sub-slice: `M20-P4.6`
-- Current planned slice: `M20 post-cockpit follow-up selection (#202)`
-- Current PR sub-slice: `M20-P5.0`
+- Previous completed PR sub-slice: `M20-P5.0`
+- Current planned slice: `M20 work-footer maintenance action isolation (#161)`
+- Current PR sub-slice: `M20-P5.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 work-footer maintenance action isolation (#161)`
-- Next planned PR sub-slice: `M20-P5.1`
+- Next planned slice: `M20 goal-sensitive read-first ranking refinement (#160)`
+- Next planned PR sub-slice: `M20-P5.2`
 
 These planning-state lines are for contributors and agents. The detailed roadmap lives in
 [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md).

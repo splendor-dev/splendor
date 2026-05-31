@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P4.6`
-- Current planned slice: `M20 post-cockpit follow-up selection (#202)`
-- Current PR sub-slice: `M20-P5.0`
+- Previous completed PR sub-slice: `M20-P5.0`
+- Current planned slice: `M20 work-footer maintenance action isolation (#161)`
+- Current PR sub-slice: `M20-P5.1`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 work-footer maintenance action isolation (#161)`
-- Next planned PR sub-slice: `M20-P5.1`
+- Next planned slice: `M20 goal-sensitive read-first ranking refinement (#160)`
+- Next planned PR sub-slice: `M20-P5.2`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1392,6 +1392,8 @@ the selected M20 implementation.
 - `M20-P5.0` Select the post-cockpit follow-up slice.
 - `M20-P5.1` Remove maintenance-only `wiki suggest` guidance from the work-context action footer
   (#161).
+- `M20-P5.2` Refine goal-sensitive read-first ranking so authority-cited implementation paths
+  remain visible under narrow goal phrasing (#160).
 
 `M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
 first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
@@ -1448,6 +1450,7 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P4.6` recent insights and log rendering.
 - `M20-P5.0` post-cockpit follow-up selection.
 - `M20-P5.1` work-footer maintenance action isolation.
+- `M20-P5.2` goal-sensitive read-first ranking refinement.
 
 `M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
 while defining the narrow first mutation paths worth implementing later: accept one reviewed
@@ -1551,6 +1554,14 @@ the maintenance-only `splendor wiki suggest <source-id>` action from the work fo
 preserving explicit maintenance guidance where it belongs. #160 remains a broader goal-sensitive
 ranking refinement, #162 is isolated no-diff `pr-summary` human-output polish, and #163 is a
 queue-clean JSON compatibility-contract cleanup.
+
+`M20-P5.1` (#161) implements the narrow work-footer maintenance isolation fix. Agent-context
+briefs now build their trailing next-action footer from work actions instead of the combined
+work-plus-maintenance suggestion list, and the standalone missing-synthesis `wiki suggest` footer
+line is removed. Explicit maintenance context still carries `splendor wiki suggest <source-id>`
+commands and wiki-maintenance notes, so operators can find the maintenance path without presenting
+it as default work. The next smallest handoff-polish follow-up is `M20-P5.2`: issue #160's
+goal-sensitive read-first ranking refinement.
 
 ---
 
