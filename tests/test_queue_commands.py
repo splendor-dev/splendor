@@ -9,7 +9,13 @@ from splendor.cli import main
 from splendor.commands.add_source import add_source
 from splendor.commands.ingest import enqueue_ingest_job
 from splendor.commands.init import initialize_workspace
-from splendor.commands.queue import clean_queue, inspect_queue, inspect_queue_job, retry_queue_job
+from splendor.commands.queue import (
+    clean_queue,
+    inspect_queue,
+    inspect_queue_job,
+    render_queue_clean_json,
+    retry_queue_job,
+)
 from splendor.schemas import QueueItemRecord
 from splendor.state.runtime import load_queue_item, write_queue_item
 from splendor.state.source_registry import load_source_record
@@ -229,6 +235,79 @@ def test_queue_clean_previews_and_applies_orphaned_queue_records(tmp_path: Path)
 
     assert applied.applied is True
     assert not queue_path.exists()
+
+
+def test_queue_clean_json_marks_mutation_as_canonical_with_deprecated_aliases(
+    tmp_path: Path,
+) -> None:
+    initialize_workspace(tmp_path)
+    source = tmp_path / "brief.md"
+    source.write_text("# Brief\n\nhello\n", encoding="utf-8")
+    added = add_source(tmp_path, source)
+    queue_path = enqueue_ingest_job(tmp_path, added.source_id)
+    added.manifest_path.unlink()
+
+    preview = json.loads(render_queue_clean_json(tmp_path, clean_queue(tmp_path, orphaned=True)))
+
+    assert preview["selectors"] == ["orphaned"]
+    assert preview["actions"][0]["status"] == "planned"
+    assert preview["mutation"] == {
+        "mode": "preview",
+        "mutates": False,
+        "planned": [
+            {
+                "action": "delete",
+                "path": f"state/queue/ingest-{added.source_id}.json",
+                "kind": "queue_record",
+                "source_id": added.source_id,
+            }
+        ],
+        "written": [],
+    }
+    assert preview["applied"] is False
+    assert preview["mutation"]["mutates"] is False
+    assert preview["summary"]["planned"] == len(preview["mutation"]["planned"])
+    assert preview["summary"]["written"] == len(preview["mutation"]["written"])
+    assert preview["written"] == []
+    assert preview["skipped"] == []
+    assert queue_path.exists()
+
+    applied = json.loads(
+        render_queue_clean_json(tmp_path, clean_queue(tmp_path, orphaned=True, apply=True))
+    )
+
+    assert applied["mutation"] == {
+        "mode": "apply",
+        "mutates": True,
+        "planned": [],
+        "written": [
+            {
+                "action": "delete",
+                "path": f"state/queue/ingest-{added.source_id}.json",
+                "kind": "queue_record",
+                "source_id": added.source_id,
+            }
+        ],
+    }
+    assert applied["applied"] is True
+    assert applied["mutation"]["mutates"] is True
+    assert applied["summary"]["planned"] == 1
+    assert applied["summary"]["written"] == len(applied["mutation"]["written"])
+    assert [item["path"] for item in applied["written"]] == [
+        f"state/queue/ingest-{added.source_id}.json"
+    ]
+
+    no_op_apply = json.loads(
+        render_queue_clean_json(tmp_path, clean_queue(tmp_path, orphaned=True, apply=True))
+    )
+    assert no_op_apply["applied"] is True
+    assert no_op_apply["mutation"] == {
+        "mode": "apply",
+        "mutates": False,
+        "planned": [],
+        "written": [],
+    }
+    assert no_op_apply["summary"] == {"planned": 0, "written": 0, "skipped": 0}
 
 
 def test_queue_clean_selects_superseded_and_completed_records(tmp_path: Path) -> None:

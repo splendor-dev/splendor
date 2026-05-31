@@ -951,7 +951,12 @@ Current implementation:
   `ingest --pending`, `source forget`, `source reconcile`, `source refresh`,
   `source update-path`, `workspace refresh`, and `queue clean` JSON include `mutation.mode`,
   `mutation.mutates`, `mutation.planned`, and `mutation.written`; human output labels preview mode
-  as non-mutating and apply/direct mode as writing workspace state.
+  as non-mutating and apply/direct mode as writing workspace state. Queue-clean JSON keeps
+  `selectors` and `actions` as verb-specific payloads. Its legacy top-level `applied`, `summary`,
+  `written`, and `skipped` fields are deprecated v0.5.x compatibility aliases, not a second
+  mutation contract; consumers should use `mutation` for cross-verb mutation state before those
+  aliases are removed in v0.6.0. `applied` is an apply-mode signal and can be true for no-op apply
+  runs where `mutation.mutates` is false.
 - `M19-P5.1` harmonizes the legacy V04-F1 direct-write surfaces named by external reviewers:
   `ingest --pending`, `source refresh`, `source update-path`, and `workspace refresh` are
   preview-first and require explicit `--apply` for state-changing workflow maintenance.

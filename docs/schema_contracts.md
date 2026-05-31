@@ -219,7 +219,14 @@ Implemented fields:
   `done` queue records. JSON output includes `mutation.mode`, `mutation.mutates`,
   `mutation.planned`, and `mutation.written`; skipped records report invalid payloads, unsupported
   job types, active leases, queue filename/job ID mismatches, and source/job mismatches without
-  deleting them.
+  deleting them. For queue-clean JSON, `mutation.{mode,mutates,planned,written}` is the canonical
+  cross-verb mutation contract. `selectors` and `actions` are verb-specific queue-clean payloads
+  and remain supported. The legacy top-level `applied`, `summary`, `written`, and `skipped` fields
+  are deprecated v0.5.x compatibility aliases; consumers should move to `mutation` for mutation
+  state and `actions` for queue-clean action detail before the planned v0.6.0 alias removal.
+  `applied` describes whether the command ran in apply mode, while `mutation.mutates` describes
+  whether workspace state actually changed, so apply-mode no-ops can report `applied: true` and
+  `mutation.mutates: false`.
 - `splendor source reconcile <source-id|logical-id|title|path>` previews duplicate active source
   version repair for one canonical source-ref group. Without `--current`, an exact source ID keeps
   that source active; otherwise the latest active version by `(added_at, source_id)` is selected.
@@ -303,6 +310,10 @@ Implemented fields:
   deterministic planned write/delete records for preview mode, and `mutation.written` lists
   deterministic write/delete records for apply or direct-write mode. Records include `action`,
   `path`, `kind`, and `source_id` when source-scoped.
+- `queue clean --json` retains the older top-level aliases through the v0.5.x line for compatibility
+  only: `applied`, `summary`, `written`, and `skipped` duplicate or overlap data now represented by
+  canonical `mutation` state and verb-specific `actions`. New consumers should not treat those
+  aliases as a second mutation contract; they are scheduled for removal in v0.6.0.
 - `M19-P5.1` closes the V04-F1 contract debt for legacy mutating workflow commands:
   `ingest --pending`, `source refresh`, `source update-path`, and `workspace refresh` are
   preview-first surfaces with explicit `--apply`, deterministic mutation objects, and human output
