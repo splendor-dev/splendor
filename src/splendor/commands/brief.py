@@ -55,6 +55,8 @@ _MAINTENANCE_ACTION_LIMIT = 8
 _GIT_CONTEXT_LIMIT = 5
 _GIT_FILE_LIMIT = 8
 _AUTHORITY_READ_FIRST_LIMIT = 5
+# Keep authority-cited files visible without letting broad authority docs dominate read-first.
+_AUTHORITY_READ_FIRST_SURVIVAL_LIMIT = 4
 _RELATED_THREAD_FETCH_LIMIT = 5
 _GIT_COMMAND_TIMEOUT_SECONDS = 5
 _HANDOFF_COMPLETION_COMMIT_LIMIT = 12
@@ -3013,12 +3015,29 @@ def _read_first_paths(
             scored[path] = max(scored.get(path, 0), thread.relevance_score + 20)
     for path, score in authority_read_first_scores.items():
         scored[path] = max(scored.get(path, 0), score)
-    return _rank_read_first_scores(scored)
+    return _rank_read_first_scores(scored, required_paths=set(authority_read_first_scores))
 
 
-def _rank_read_first_scores(scored: dict[str, int]) -> list[str]:
+def _rank_read_first_scores(
+    scored: dict[str, int], *, required_paths: set[str] | None = None
+) -> list[str]:
     ranked = sorted(scored, key=lambda path: (-scored[path], path))
-    return ranked[:_GIT_FILE_LIMIT]
+    selected = set(ranked[:_GIT_FILE_LIMIT])
+    required_ranked = [
+        path for path in ranked if required_paths is not None and path in required_paths
+    ][:_AUTHORITY_READ_FIRST_SURVIVAL_LIMIT]
+    if not required_ranked or set(required_ranked) <= selected:
+        return ranked[:_GIT_FILE_LIMIT]
+
+    selected.update(required_ranked)
+    rank_index = {path: index for index, path in enumerate(ranked)}
+    required = set(required_ranked)
+    while len(selected) > _GIT_FILE_LIMIT:
+        removable = [path for path in selected if path not in required]
+        if not removable:
+            break
+        selected.remove(max(removable, key=lambda path: rank_index[path]))
+    return [path for path in ranked if path in selected][:_GIT_FILE_LIMIT]
 
 
 def _combined_read_first_paths(
