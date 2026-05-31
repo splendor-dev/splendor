@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P5.1`
-- Current planned slice: `M20 goal-sensitive read-first ranking refinement (#160)`
-- Current PR sub-slice: `M20-P5.2`
+- Previous completed PR sub-slice: `M20-P5.2`
+- Current planned slice: `M20 no-diff pr-summary human output polish (#162)`
+- Current PR sub-slice: `M20-P5.3`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 no-diff pr-summary human output polish (#162)`
-- Next planned PR sub-slice: `M20-P5.3`
+- Next planned slice: `M20 mutation JSON compatibility contract cleanup (#163)`
+- Next planned PR sub-slice: `M20-P5.4`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1395,6 +1395,7 @@ the selected M20 implementation.
 - `M20-P5.2` Refine goal-sensitive read-first ranking so authority-cited implementation paths
   remain visible under narrow goal phrasing (#160).
 - `M20-P5.3` Make no-diff `pr-summary --since <ref>` human output loud and compact (#162).
+- `M20-P5.4` Clarify the canonical mutation JSON contract and legacy queue-clean aliases (#163).
 
 `M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
 first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
@@ -1453,6 +1454,7 @@ workflows stay out of scope for this slice. The ordered M20 sequence is therefor
 - `M20-P5.1` work-footer maintenance action isolation.
 - `M20-P5.2` goal-sensitive read-first ranking refinement.
 - `M20-P5.3` no-diff pr-summary human output polish.
+- `M20-P5.4` mutation JSON compatibility contract cleanup.
 
 `M20-P2.1` is a proposal-first slice for issue #119. It keeps the current local web UI read-only
 while defining the narrow first mutation paths worth implementing later: accept one reviewed
@@ -1571,6 +1573,12 @@ goal-specific git context can still crowd those files out of the bounded read-fi
 slice keeps the behavior deterministic by preserving a small bounded set of the highest-ranked
 authority-cited paths when git and GitHub context are noisy. The next narrow polish follow-up is
 `M20-P5.3`: issue #162's no-diff `pr-summary --since <ref>` human-output short-circuit.
+
+`M20-P5.3` (#162) makes the human `pr-summary --since <ref>` path loud when there is no current
+diff to review. JSON keeps its existing compact committed contract, while human output
+short-circuits before empty review groups when the changed-path count is zero, including the
+common `HEAD`-equals-merge-base case. The next narrow polish follow-up is `M20-P5.4`: issue
+#163's mutation JSON compatibility contract cleanup for `queue clean --orphaned --json`.
 
 ---
 

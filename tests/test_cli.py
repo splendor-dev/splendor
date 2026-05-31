@@ -3358,6 +3358,75 @@ def test_cli_pr_summary_human_output_is_path_first(tmp_path: Path, capsys) -> No
     assert "No local lint report was found" in out
 
 
+def test_cli_pr_summary_human_output_is_loud_when_head_equals_merge_base(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    head = _git_stdout(tmp_path, ["git", "rev-parse", "--short", "HEAD"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert out.startswith(f"PR summary since main\nNo diff vs main (head {head} == merge_base).\n")
+    assert "Latest local maintenance reports" not in out
+    assert "Compact committed review:" not in out
+    assert "Review first:" not in out
+    assert "Curated sources:" not in out
+    assert "Reviewer notes:" not in out
+
+
+def test_cli_pr_summary_no_diff_labels_retained_maintenance_as_not_current_diff(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    main(["--root", str(tmp_path), "lint"])
+    _git_run(tmp_path, ["git", "add", "reports"])
+    _git_run(tmp_path, ["git", "commit", "-m", "record lint report"])
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "No diff vs main" in out
+    assert "Latest local maintenance reports (not tied to current diff):" in out
+    assert "- lint: passed path=reports/lint/" in out
+    assert "- health:" not in out
+    assert "Compact committed review:" not in out
+
+
+def test_cli_pr_summary_human_output_is_loud_when_changed_paths_are_zero(
+    tmp_path: Path, capsys
+) -> None:
+    main(["--root", str(tmp_path), "init"])
+    _git_init_main(tmp_path)
+    _git_run(tmp_path, ["git", "switch", "-c", "feature"])
+    (tmp_path / "temporary.md").write_text("# Temporary\n", encoding="utf-8")
+    _git_run(tmp_path, ["git", "add", "temporary.md"])
+    _git_run(tmp_path, ["git", "commit", "-m", "add temporary"])
+    (tmp_path / "temporary.md").unlink()
+    _git_run(tmp_path, ["git", "add", "temporary.md"])
+    _git_run(tmp_path, ["git", "commit", "-m", "remove temporary"])
+    assert _git_stdout(tmp_path, ["git", "rev-parse", "--short", "HEAD"]) != _git_stdout(
+        tmp_path, ["git", "rev-parse", "--short", "main"]
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--root", str(tmp_path), "pr-summary", "--since", "main"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert out.startswith("PR summary since main\nNo diff vs main (Changed paths: 0).\n")
+    assert "Latest local maintenance reports" not in out
+    assert "Compact committed review:" not in out
+    assert "Usually mechanical:" not in out
+    assert "Other changed paths" not in out
+
+
 def test_cli_pr_summary_uses_merge_base_when_main_advances(tmp_path: Path, capsys) -> None:
     main(["--root", str(tmp_path), "init"])
     _git_init_main(tmp_path)

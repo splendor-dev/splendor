@@ -2176,6 +2176,10 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
         print(render_pr_summary_json(summary))
         return 0
 
+    if _is_no_diff_pr_summary(summary):
+        _print_no_diff_pr_summary(summary)
+        return 0
+
     print(f"PR summary since {summary.since}")
     print(f"Merge base: {summary.merge_base}")
     if summary.head is not None:
@@ -2221,6 +2225,32 @@ def handle_pr_summary(args: argparse.Namespace) -> int:
     for note in summary.reviewer_notes:
         print(f"- {note}")
     return 0
+
+
+def _is_no_diff_pr_summary(summary) -> bool:
+    return summary.changed_path_count == 0
+
+
+def _print_no_diff_pr_summary(summary) -> None:
+    print(f"PR summary since {summary.since}")
+    if summary.head is not None and summary.merge_base.startswith(summary.head):
+        print(f"No diff vs {summary.since} (head {summary.head} == merge_base).")
+    else:
+        print(f"No diff vs {summary.since} (Changed paths: {summary.changed_path_count}).")
+    maintenance_reports = [
+        (command, summary.maintenance.get(command))
+        for command in ("lint", "health")
+        if summary.maintenance.get(command) is not None
+    ]
+    if not maintenance_reports:
+        return
+    print("Latest local maintenance reports (not tied to current diff):")
+    for command, status in maintenance_reports:
+        print(
+            f"- {command}: {status.status} path={status.path} "
+            f"issues={status.issue_count if status.issue_count is not None else '-'}"
+        )
+        print(f"  Warning: {status.warning}")
 
 
 def _print_compact_review(compact_review) -> None:
