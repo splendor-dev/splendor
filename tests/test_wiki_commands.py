@@ -2156,6 +2156,98 @@ def test_agent_context_synthbanshee_retry_bar_is_git_aware_and_work_first(
     )
 
 
+def test_agent_context_authority_cited_files_survive_goal_git_competition(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+    config = load_config(tmp_path)
+    config.reviews.contradictions.enabled = False
+    config.briefing.authority_documents = [
+        AuthorityDocumentConfig(
+            path="CLAUDE.md",
+            role="current-authority",
+            purpose="M17 ASR authority-cited implementation surface.",
+            applies_to=["M17 ASR"],
+        )
+    ]
+    write_config(tmp_path, config)
+    (tmp_path / "CLAUDE.md").write_text(
+        "# CLAUDE\n\n"
+        "Current M17 ASR authority names synthbanshee/tts/renderer.py and "
+        "tests/unit/test_effective_prosody_cap.py as the files to inspect first.\n",
+        encoding="utf-8",
+    )
+    renderer = tmp_path / "synthbanshee" / "tts" / "renderer.py"
+    renderer.parent.mkdir(parents=True)
+    renderer.write_text("def render():\n    return 'asr'\n", encoding="utf-8")
+    renderer_test = tmp_path / "tests" / "unit" / "test_effective_prosody_cap.py"
+    renderer_test.parent.mkdir(parents=True, exist_ok=True)
+    renderer_test.write_text(
+        "def test_effective_prosody_cap():\n    assert True\n", encoding="utf-8"
+    )
+    _init_git_repo(tmp_path, repo="SynthBanshee/SynthBanshee")
+    _commit_all(tmp_path, "Initial SynthBanshee authority context")
+
+    competing = tmp_path / "handoff"
+    competing.mkdir()
+    for index in range(8):
+        (competing / f"pick-up-m17-asr-work-{index}.py").write_text(
+            "def marker():\n    return 'pick up M17 ASR work'\n",
+            encoding="utf-8",
+        )
+    _commit_all(tmp_path, "pick up M17 ASR work goal-specific handoff files")
+    for index in range(8):
+        (competing / f"current-state-synthbanshee-active-milestone-{index}.py").write_text(
+            "def marker():\n    return 'current state SynthBanshee active milestone'\n",
+            encoding="utf-8",
+        )
+    _commit_all(tmp_path, "current state SynthBanshee active milestone handoff files")
+    _install_fake_gh(tmp_path, monkeypatch, issues=[], prs=[])
+    capsys.readouterr()
+
+    scenarios = [
+        (
+            ["pick", "up", "M17", "ASR", "work"],
+            "handoff/pick-up-m17-asr-work-",
+        ),
+        (
+            [
+                "what's",
+                "the",
+                "current",
+                "state",
+                "of",
+                "the",
+                "SynthBanshee",
+                "active",
+                "milestone",
+            ],
+            "handoff/current-state-synthbanshee-active-milestone-",
+        ),
+    ]
+    for goal_args, competing_prefix in scenarios:
+        exit_code = main(
+            [
+                "--root",
+                str(tmp_path),
+                "brief",
+                "--agent-context",
+                *goal_args,
+                "--json",
+            ]
+        )
+
+        assert exit_code == 0
+        payload = json.loads(capsys.readouterr().out)
+        read_first = payload["git_context"]["read_first_paths"]
+        assert "synthbanshee/tts/renderer.py" in read_first
+        assert "tests/unit/test_effective_prosody_cap.py" in read_first
+        assert len(read_first) == brief_module._GIT_FILE_LIMIT
+        assert sum(path.startswith(competing_prefix) for path in read_first) == (
+            brief_module._GIT_FILE_LIMIT - 2
+        )
+
+
 def test_agent_context_authority_cited_files_do_not_require_git(tmp_path: Path, capsys) -> None:
     initialize_workspace(tmp_path)
     config = load_config(tmp_path)
