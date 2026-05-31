@@ -672,7 +672,7 @@ def build_project_brief(
         authority_briefs=snapshot.authority_briefs,
         planning_items=snapshot.planning_items,
         warnings=snapshot.warnings,
-        suggested_actions=suggested_actions,
+        work_actions=work_actions,
     )
     return ProjectBrief(
         goal=snapshot.goal,
@@ -3137,13 +3137,13 @@ def _next_actions(
     authority_briefs: list[AuthorityBrief],
     planning_items: list[BriefPlanningItem],
     warnings: list[BriefWarning],
-    suggested_actions: list[SuggestedAction],
+    work_actions: list[SuggestedAction],
 ) -> list[str]:
     actions: list[str] = []
-    if suggested_actions:
+    if work_actions:
         actions.extend(
             f"{action.title}" + (f" (`{action.command}`)" if action.command is not None else "")
-            for action in suggested_actions[:5]
+            for action in work_actions[:5]
         )
     if status.queue_status_counts.get("pending", 0):
         actions.append(
@@ -3152,11 +3152,6 @@ def _next_actions(
         )
     if status.invalid_pages:
         actions.append("Fix invalid wiki pages before relying on synthesis or query output.")
-    if status.sources_missing_synthesis:
-        actions.append(
-            "Run `splendor wiki suggest <source-id>` for ingested sources missing "
-            "synthesis follow-up."
-        )
     if status.review_needed_synthesis_pages:
         actions.append("Review draft, stale, contested, or machine-generated synthesis pages.")
     if matches:

@@ -5109,12 +5109,23 @@ def test_implementation_handoff_keeps_maintenance_commands_below_work_context(
     assert payload["work_context"]["actions"]
     assert payload["maintenance_context"]["actions"]
     assert payload["maintenance_context"]["commands"]
+    maintenance_action_titles = {
+        action["title"] for action in payload["maintenance_context"]["actions"]
+    }
+    assert all("wiki suggest" not in action for action in payload["next_actions"])
+    assert maintenance_action_titles.isdisjoint(payload["next_actions"])
     assert all(
         action["category"] not in {"synthesis", "wiki-review", "source-freshness", "queue"}
         for action in payload["work_context"]["actions"]
     )
+    maintenance_commands = {
+        command["command"] for command in payload["maintenance_context"]["commands"]
+    }
+    assert f"splendor wiki suggest {added.source_id}" in maintenance_commands
     assert out.index("Work context:") < out.index("Splendor maintenance:")
     assert out.index("Splendor maintenance:") < out.index("Maintenance commands:")
+    next_actions_text = out.split("Next actions:", 1)[1]
+    assert "wiki suggest" not in next_actions_text
     assert "Wiki status:" not in out
 
 
