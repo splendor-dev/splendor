@@ -268,6 +268,8 @@ def render_queue_retry_json(result: QueueRetryResult) -> str:
 def render_queue_clean_json(root: Path, result: QueueCleanResult) -> str:
     mutation_records = _queue_clean_mutation_records(root, result.actions)
     written_records = _queue_clean_mutation_records(root, result.written)
+    # Queue-clean JSON keeps these legacy top-level aliases through v0.5.x for
+    # compatibility. The cross-verb mutation contract below is canonical.
     return json.dumps(
         {
             "applied": result.applied,

@@ -22,6 +22,16 @@ This release packages the M20 current-work handoff ranking fix on top of `v0.5.1
   worker, mandatory external API, web workflow, database, or persisted index state.
 - The M20 mutating web review workflow work remains proposal-only and read-only in this release.
 
+## Compatibility Notes
+
+- `splendor queue clean --orphaned|--superseded|--completed --json` treats
+  `mutation.{mode,mutates,planned,written}` as the canonical cross-verb mutation contract.
+  `selectors` and `actions` remain queue-clean-specific payloads.
+- The legacy top-level queue-clean aliases `applied`, `summary`, `written`, and `skipped` remain
+  emitted for v0.5.x compatibility only. They are deprecated and planned for removal in v0.6.0;
+  consumers should migrate to `mutation` plus `actions`. `applied` records apply mode; it is not
+  equivalent to `mutation.mutates` for no-op apply runs.
+
 ## Trial Focus
 
 The intended retry question is narrow:

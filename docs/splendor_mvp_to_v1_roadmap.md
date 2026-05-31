@@ -334,12 +334,12 @@ source-summary pages, structured source/page/run provenance in ingest artifacts,
 annotations plus linked review tasks for explicit conflicts, richer query metadata, and
 deterministic lint/health validation for those cross-links.
 
-- Previous completed PR sub-slice: `M20-P5.2`
-- Current planned slice: `M20 no-diff pr-summary human output polish (#162)`
-- Current PR sub-slice: `M20-P5.3`
+- Previous completed PR sub-slice: `M20-P5.3`
+- Current planned slice: `M20 mutation JSON compatibility contract cleanup (#163)`
+- Current PR sub-slice: `M20-P5.4`
 - Current PR lifecycle: `branch=in-progress; main=merged`
-- Next planned slice: `M20 mutation JSON compatibility contract cleanup (#163)`
-- Next planned PR sub-slice: `M20-P5.4`
+- Next planned slice: `M20 next-track selection pending`
+- Next planned PR sub-slice: `TBD`
 
 `M10-P0.1`, `M10-P0.2`, `M10-P0.3`, and `M9-P2.1` are implemented. The completed M13-P2 sequence
 responds to issue #70 by making source discovery safe, keeping source manifests curated, and
@@ -1396,6 +1396,14 @@ the selected M20 implementation.
   remain visible under narrow goal phrasing (#160).
 - `M20-P5.3` Make no-diff `pr-summary --since <ref>` human output loud and compact (#162).
 - `M20-P5.4` Clarify the canonical mutation JSON contract and legacy queue-clean aliases (#163).
+
+`M20-P5.4` closes the v0.5 SynthBanshee mutation-JSON compatibility finding without breaking the
+v0.5.x command surface. It documents and tests `mutation.{mode,mutates,planned,written}` as the
+single canonical cross-verb mutation contract for `queue clean --json`, keeps `selectors` and
+`actions` as supported queue-clean-specific payloads, and marks the redundant top-level
+`applied`, `summary`, `written`, and `skipped` fields as deprecated v0.5.x aliases planned for
+v0.6.0 removal. The regression coverage explicitly preserves the apply-mode no-op distinction:
+legacy `applied` can be true while canonical `mutation.mutates` remains false.
 
 `M20-P1.1` starts the retrieval product bet without crossing into heavyweight infrastructure. The
 first slice adds deterministic runtime acronym phrase expansion to `splendor query` and the
