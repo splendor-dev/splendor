@@ -196,3 +196,7 @@ non-draft GitHub PR with labels, milestone, and a clear description.
 
 These planning-state lines are for contributors and agents. The detailed roadmap lives in
 [docs/splendor_mvp_to_v1_roadmap.md](docs/splendor_mvp_to_v1_roadmap.md).
+
+## Credits
+
+Developed and maintained by [Shay Palachy Affek](https://shaypalachy.com/).
