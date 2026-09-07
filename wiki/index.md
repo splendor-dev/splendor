@@ -11,8 +11,8 @@ This wiki is maintained by Splendor.
 
 ## Architecture
 
+- [Repository Structure](architecture/repository-structure.md) (`architecture-repository-structure`)
 - [Splendor as an LLM Wiki Compiler](architecture/splendor-as-llm-wiki-compiler.md) (`architecture-splendor-as-llm-wiki-compiler`) status=active review=machine-generated
-
 ## Concepts
 
 - [LLM Wiki Pattern](concepts/llm-wiki-pattern.md) (`concept-llm-wiki-pattern`) status=active review=machine-generated
@@ -22,7 +22,7 @@ This wiki is maintained by Splendor.
 - [Agent Context Infrastructure](topics/agent-context-infrastructure.md) (`topic-agent-context-infrastructure`) status=active review=machine-generated
 - [LLM Wiki Tool Landscape](topics/llm-wiki-tool-landscape.md) (`topic-llm-wiki-tool-landscape`) status=active review=machine-generated
 - [LLM-Assisted Knowledge Work](topics/llm-assisted-knowledge-work.md) (`topic-llm-assisted-knowledge-work`) status=active review=machine-generated
-
+- [Repository Sources](topics/repository-sources.md) (`topic-repository-sources`)
 ## Sources
 
 - [karpathy llm wiki pattern](sources/src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac.md) (`src-51e62cdae9baf8dfd550ac791f21a7cc11cca2e372865907d35ab6eaeea31dac`) status=active review=machine-generated
