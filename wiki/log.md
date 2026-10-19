@@ -12,3 +12,4 @@
 - 2026-04-30T09:21:33+00:00 Ingested source `src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4` via run `run-src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4-20260430T092129520858Z` into `wiki/sources/src-a1af8da17b1e5f3c5616150339ba58f1832bc91fccf9a534c59063d3ca0173d4.md`.
 - 2026-04-30T09:22:07+00:00 Ingested source `src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b` via run `run-src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b-20260430T092201788872Z` into `wiki/sources/src-c2176196c8d0e5edd5f231021c55821d970230fada194b4a3d53b24abd77921b.md`.
 - 2026-04-30T09:22:14+00:00 Synthesized dogfood findings into `topic-llm-wiki-tool-landscape` and `topic-agent-context-infrastructure`.
+- Refreshed repo pages `wiki/architecture/repository-structure.md` and `wiki/topics/repository-sources.md`.
